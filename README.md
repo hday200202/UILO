@@ -1,6 +1,6 @@
-# UILO Design Overview
+# Uilo Design Overview
 
-**Project Name:** UILO (pronounced *wee-low*)  
+**Project Name:** Uilo (pronounced *wee-low*)  
 **Technology:** Built using SFML  
 **Mode:** Retained-Mode UI Framework
 
