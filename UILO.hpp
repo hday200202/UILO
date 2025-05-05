@@ -11,6 +11,8 @@
 #define UILO_HPP
 
 #include <SFML/Graphics.hpp>
+#include <vector>
+#include <string>
 #include <functional>
 
 namespace uilo {
@@ -31,22 +33,33 @@ public:
     Element(){}
     virtual ~Element() = default;
 
-    virtual void update(float dt) {}
+    virtual void update() {}
     virtual void render(sf::RenderTarget& target) const {}
+    
+    Element* onClick(std::function<void()>& func)        { return this; }
+    Element* onHover(std::function<void()>& func)        { return this; }
+    Element* onRelease(std::function<void()>& func)      { return this; }
 
-    std::function<void()> onClick = nullptr;
-    std::function<void()> onHover = nullptr;
-    std::function<void()> onRelease = nullptr;
-
-    bool fixedWidth = false;
-    bool fixedHeigt = false;
-    bool fixedSize = false;
+    Element* setPosition(float percentage)              { return this; }
+    Element* setFixedWidth(float width)                 { return this; }
+    Element* setFixedHeight(float height)               { return this; }
+    Element* setFixedSize(float width, float height)    { return this; }
 
 protected:
+    float m_aspectRatio = 1.f;
+
+    Align m_align = Align::NONE;
+
     sf::Vector2f m_position;
     sf::Vector2f m_size;
 
-    float aspectRatio = 1.f;
+    std::function<void()> m_onClick = nullptr;
+    std::function<void()> m_onHover = nullptr;
+    std::function<void()> m_onRelease = nullptr;
+
+    bool m_fixedWidth = false;
+    bool m_fixedHeight = false;
+    bool m_fixedSize = false;
 
 private:
 
@@ -54,11 +67,23 @@ private:
 
 // ---------------------------------------------------------------------------- DESIGN / LAYOUT
 class Text : public Element {
+public:
+    Text(const std::string& str = "", const std::string& fontPath = "", float size = 0.f, Align align = Align::NONE) {}
+    ~Text() {}
 
+    void update() {}
+    void render(sf::RenderTarget& target) {}
+
+private:
+    sf::Font m_font;
+    sf::Text m_text = sf::Text(m_font);
 };
 
 class Spacer : public Element {
+public:
 
+private:
+    
 };
 
 class Image : public Element {
@@ -106,12 +131,15 @@ public:
     View() = default;
 
     void add(Element* element) {}
-    void update(float dt) {}
-    void draw(sf::RenderTarget& target) const {}
-    void handleEvent(const sf::Event& event) {}
+    void add(std::vector<Element*> elements) {}
+
+    void update() {}
+    void render(sf::RenderTarget& target) const {}
 
 private:
     std::vector<Element*> m_elements;
+
+    void handleEvents() {}
 };
 
 } // !namespace uilo
