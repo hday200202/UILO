@@ -1,12 +1,11 @@
-Here's an updated version of your README that reflects the current state of the project, including your recent work on alignment, modifier-based configuration, and container behavior:
 
 ---
 
 # Uilo Design Overview
 
-**Project Name:** Uilo (pronounced *wee-low*)
-**Technology:** Built using SFML 3.0
-**Mode:** Retained-Mode UI Framework
+* **Project Name:** Uilo (pronounced *wee-low*)
+* **Technology:** Built using SFML 3.0
+* **Mode:** Retained-Mode UI Framework
 
 ---
 
