@@ -16,6 +16,7 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <algorithm>
 
 namespace uilo {
 
@@ -264,19 +265,36 @@ public:
             else topElements.push_back(e);
         }
 
-        // Place top elements
-        for (auto& e : topElements) {
+        std::reverse(bottomElements.begin(), bottomElements.end());
 
+        // Place top elements
+        float yTop = m_bounds.getPosition().y;
+        for (auto& e : topElements) {
+            e->update(m_bounds);
+            e->m_bounds.setPosition({ m_bounds.getPosition().x, yTop });
+            yTop += e->m_bounds.getSize().y;
         }
 
         // Place center elements
-        for (auto& e : topElements) {
-
+        float centerTotalHeight = 0.f;
+        for (auto& e : centerElements) {
+            e->update(m_bounds);
+            centerTotalHeight += e->m_bounds.getSize().y;
         }
 
-        // Place bottom elements
-        for (auto& e : topElements) {
+        float yCenter = m_bounds.getPosition().y + (m_bounds.getSize().y / 2.f) - (centerTotalHeight / 2.f);
+        for (auto& e : centerElements) {
+            e->m_bounds.setPosition({ m_bounds.getPosition().x, yCenter });
+            yCenter += e->m_bounds.getSize().y;
+        }
 
+        // Place bottom elements (in reverse order to stack upward)
+        float yBottom = m_bounds.getPosition().y + m_bounds.getSize().y;
+        for (auto it = bottomElements.rbegin(); it != bottomElements.rend(); ++it) {
+            Element* e = *it;
+            e->update(m_bounds);
+            yBottom -= e->m_bounds.getSize().y;
+            e->m_bounds.setPosition({ m_bounds.getPosition().x, yBottom });
         }
     }
 

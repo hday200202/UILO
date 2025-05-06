@@ -10,7 +10,7 @@ int main() {
     UILO ui ("My UI", {
         {new Page({
             {new Column(
-                Modifier().setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::LEFT), {
+                Modifier().setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::RIGHT), {
 
                 {new Row(Modifier()
                     .setColor(red).setfixedHeight(50).align(Align::TOP), {
@@ -18,12 +18,12 @@ int main() {
                 })},
 
                 {new Row(Modifier()
-                    .setColor(green).setfixedHeight(50).align(Align::TOP), {
+                    .setColor(green).setfixedHeight(50).align(Align::BOTTOM), {
                     
                 })},
 
                 {new Row(Modifier()
-                    .setColor(blue).setfixedHeight(50).align(Align::TOP), {
+                    .setColor(blue).setfixedHeight(50).align(Align::BOTTOM), {
                     
                 })},
             })}
