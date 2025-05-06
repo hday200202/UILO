@@ -1,22 +1,22 @@
 #include <SFML/Graphics.hpp>
 #include "UILO.hpp"
 
+using namespace uilo;
+
 int main() {
-    sf::RenderWindow window(sf::VideoMode({800, 600}), "Uilo Text Test");
-    window.setVerticalSyncEnabled(true);
+    sf::RenderWindow window(sf::VideoMode({800, 600}), "Uilo UI Framework");
+    window.setFramerateLimit(60);
 
-    // Create the UI view, passing the render target
-    uilo::View ui(&window);
+    View view(window, {
+            new Column(Modifier().setColor(sf::Color::White).setfixedWidth(200.f).align(Align::CENTER_X), {
+                new Element()
+            }),
 
-    // Create the text element
-    auto* helloText = new uilo::Text("Hello, UILO!", "assets/fonts/DepartureMono-Regular.otf", 36);
-    helloText->setAlignment(uilo::Align::CENTER_H | uilo::Align::CENTER_V);
-
-    // Optional: set fixed position instead of alignment if needed
-    // helloText->setPosition(400, 300);
-
-    // Add the text to the view
-    ui.add(helloText);
+            new Row(Modifier().setColor(sf::Color::Blue).setfixedHeight(200.f).align(Align::CENTER_Y), {
+                new Element()
+            })
+        }
+    );
 
     while (window.isOpen()) {
         while (const auto event = window.pollEvent()) {
@@ -24,12 +24,12 @@ int main() {
                 window.close();
         }
 
-        ui.update();           // Apply fixed pixel view and update layout
-        window.clear();
-        ui.render();           // Render all UI elements
+        view.update(window);
+
+        window.clear(sf::Color::Black);
+        view.render(window);
         window.display();
     }
 
-    delete helloText; // Cleanup for now (or switch to smart pointers later)
     return 0;
 }
