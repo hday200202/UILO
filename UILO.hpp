@@ -11,6 +11,7 @@
 #define UILO_HPP
 
 #include <SFML/Graphics.hpp>
+#include <iostream>
 #include <vector>
 #include <string>
 #include <functional>
@@ -86,9 +87,93 @@ const Modifier default_mod;
 class Element 
 {
 public:
+    sf::RectangleShape m_bounds;
+    Modifier m_modifier;
+
+    virtual ~Element() = default;
+    virtual void update(sf::RectangleShape& parentBounds) {}
+    virtual void render(sf::RenderTarget& target) {}
 
 protected:
-    
+    void alignResize(sf::RectangleShape& parent)
+    {
+        m_bounds.setSize(parent.getSize());
+        m_bounds.setPosition(parent.getPosition());
+
+        // Resize X
+        if (m_modifier.getFixedWidth() != 0)
+            m_bounds.setSize
+            ({
+                m_modifier.getFixedWidth(), 
+                m_bounds.getSize().y
+            });
+        else
+            m_bounds.setSize
+            ({
+                m_bounds.getSize().x * m_modifier.getWidth(), 
+                m_bounds.getSize().y * m_modifier.getHeight()
+            });
+
+        // Resize Y
+        if (m_modifier.getFixedHeight() != 0)
+            m_bounds.setSize
+            ({
+                m_bounds.getSize().x,
+                m_modifier.getFixedHeight()
+            });
+        else
+            m_bounds.setSize
+            ({
+                m_bounds.getSize().x * m_modifier.getWidth(),
+                m_bounds.getSize().y * m_modifier.getHeight()
+            });
+
+        // Align X
+        if (hasAlign(m_modifier.getAlignment(), Align::CENTER_X))
+            m_bounds.setPosition
+            ({
+                parent.getPosition().x + (parent.getSize().x / 2) - (m_bounds.getSize().x / 2),
+                m_bounds.getPosition().y
+            });
+        else if (hasAlign(m_modifier.getAlignment(), Align::LEFT))
+            m_bounds.setPosition
+            ({
+                parent.getPosition().x, 
+                parent.getPosition().y
+            });
+        else if (hasAlign(m_modifier.getAlignment(), Align::RIGHT))
+            m_bounds.setPosition
+            ({
+                parent.getPosition().x + parent.getSize().x - m_bounds.getSize().x,
+                parent.getPosition().y
+            });
+        
+        // Align Y
+        if (hasAlign(m_modifier.getAlignment(), Align::CENTER_Y))
+            m_bounds.setPosition
+            ({
+                m_bounds.getPosition().x,
+                parent.getPosition().y + (parent.getSize().y / 2) - (m_bounds.getSize().y / 2)
+            });
+        else if (hasAlign(m_modifier.getAlignment(), Align::TOP))
+            m_bounds.setPosition
+            ({
+                m_bounds.getPosition().x,
+                parent.getPosition().y
+            });
+        else if (hasAlign(m_modifier.getAlignment(), Align::BOTTOM))
+            m_bounds.setPosition
+            ({
+                m_bounds.getPosition().x,
+                parent.getPosition().y + parent.getSize().y - m_bounds.getSize().y
+            });
+        
+    }
+
+    void applyModifiers()
+    {
+        m_bounds.setFillColor(m_modifier.getColor());
+    }
 };
 // ---------------------------------------------------------------------------- //
 
@@ -98,8 +183,28 @@ protected:
 class Container : public Element 
 {
 public:
+    Container(std::initializer_list<Element*> elements = {})
+    {        
+        for (auto& e : elements)
+            m_elements.push_back(e);
+    }
+
+    Container(Modifier modifier = default_mod, std::initializer_list<Element*> elements = {})
+    {
+        m_modifier = modifier;
+
+        for (auto& e : elements)
+            m_elements.push_back(e);
+    }
+
+    ~Container()
+    {
+        for (auto& e : m_elements)
+            delete e;
+    }
 
 protected:
+    std::vector<Element*> m_elements;
     
 };
 
@@ -108,6 +213,28 @@ protected:
 class Row : public Container 
 {
 public:
+    using Container::Container;
+
+    void update(sf::RectangleShape& parentBounds) override
+    {
+        // Align and resize self, apply visual modifiers
+        alignResize(parentBounds);
+        applyModifiers();
+
+        // Update elements
+        for (auto& e : m_elements)
+            e->update(m_bounds);
+    }
+
+    void render(sf::RenderTarget& target) override
+    {
+        // Render self
+        target.draw(m_bounds);
+        
+        // Render elements
+        for (auto& e : m_elements)
+            e->render(target);
+    }
     
 };
 
@@ -116,6 +243,52 @@ public:
 class Column : public Container 
 {
 public:
+    using Container::Container;
+
+    void update(sf::RectangleShape& parentBounds) override
+    {
+        alignResize(parentBounds);
+        applyModifiers();
+
+        std::vector<Element*> topElements;
+        std::vector<Element*> centerElements;
+        std::vector<Element*> bottomElements;
+
+        // Categorize elements
+        for (auto& e : m_elements) {
+            auto align = e->m_modifier.getAlignment();
+
+            if (hasAlign(align, Align::TOP)) topElements.push_back(e);
+            else if (hasAlign(align, Align::BOTTOM)) bottomElements.push_back(e);
+            else if (hasAlign(align, Align::CENTER_Y)) centerElements.push_back(e);
+            else topElements.push_back(e);
+        }
+
+        // Place top elements
+        for (auto& e : topElements) {
+
+        }
+
+        // Place center elements
+        for (auto& e : topElements) {
+
+        }
+
+        // Place bottom elements
+        for (auto& e : topElements) {
+
+        }
+    }
+
+    void render(sf::RenderTarget& target) override
+    {
+        // Render self
+        target.draw(m_bounds);
+
+        // Render elements
+        for (auto& e : m_elements)
+            e->render(target);
+    }
     
 };
 // ---------------------------------------------------------------------------- //
@@ -134,33 +307,171 @@ private:
 
 
 // ---------------------------------------------------------------------------- View
-class Page {
+class Page 
+{
 public:
+    Page() = default;
+    Page(std::initializer_list<Container*> containers = {})
+    {
+        m_bounds.setFillColor(sf::Color::Transparent);
+        for (const auto& c : containers)
+            m_containers.push_back(c);
+    }
+
+    void update(const sf::RectangleShape& parentBounds)
+    {
+        // Page bounds are the same as window bounds
+        m_bounds = parentBounds;
+
+        // Update Containers
+        for (auto& c : m_containers)
+            c->update(m_bounds);
+    }
+
+    void render(sf::RenderTarget& target) 
+    {
+        // Draw self
+        target.draw(m_bounds);
+
+        // Draw elements
+        for (auto& c : m_containers)
+            c->render(target);
+    }
 
 private:
-    
+    std::vector<Container*> m_containers;
+    sf::RectangleShape m_bounds;
 };
 // ---------------------------------------------------------------------------- //
 
 
 
 // ---------------------------------------------------------------------------- UILO
-class UILO {
+class UILO 
+{
 public:
-    UILO() = default;
-    UILO(std::initializer_list<std::pair<std::string, Page*>> pages) {}
-    ~UILO() {};
+    UILO() 
+    {
+        m_defScreenRes = sf::VideoMode::getDesktopMode();
+        m_defScreenRes.size.x /= 2;
+        m_defScreenRes.size.y /= 2;
 
-    void update();
-    void render();
-    bool isRunning();
+        m_defaultView.setSize
+        ({
+            (float)m_defScreenRes.size.x, 
+            (float)m_defScreenRes.size.y
+        });
 
-    void addPage(std::pair<std::string, Page*>& newPage) {}
+        m_window.create
+        (
+            m_defScreenRes, m_windowTitle, 
+            sf::Style::Resize | sf::Style::Close
+        );
+
+        m_window.setVerticalSyncEnabled(true);
+        m_window.setView(m_defaultView);
+
+        if (m_window.isOpen()) m_running = true;
+        m_bounds.setFillColor(sf::Color::Transparent);
+    }
+
+    UILO(const std::string& windowTitle = "", std::initializer_list<std::pair<Page*, std::string>> pages = {})
+    : m_windowTitle(windowTitle)
+    {
+        m_defScreenRes = sf::VideoMode::getDesktopMode();
+        m_defScreenRes.size.x /= 2;
+        m_defScreenRes.size.y /= 2;
+
+        m_defaultView.setSize
+        ({
+            (float)m_defScreenRes.size.x, 
+            (float)m_defScreenRes.size.y
+        });
+
+        m_window.create
+        (
+            m_defScreenRes, m_windowTitle, 
+            sf::Style::Resize | sf::Style::Close
+        );
+
+        m_window.setVerticalSyncEnabled(true);
+        m_window.setView(m_defaultView);
+
+        if (m_window.isOpen()) m_running = true;
+
+        for (const auto& [page, name] : pages)
+        {
+            m_pages[name] = page;
+            if (!m_currentPage) m_currentPage = page;
+        }
+
+        m_bounds.setFillColor(sf::Color::Transparent);
+    }
+
+    ~UILO() 
+    {
+        for (auto& [name, page] : m_pages)
+            delete page;
+    }
+
+    void update() 
+    {
+        pollEvents();
+
+        m_defaultView.setSize
+        ({
+            (float)m_window.getSize().x, 
+            (float)m_window.getSize().y
+        });
+
+        m_bounds.setSize(m_defaultView.getSize());
+        m_bounds.setPosition
+        ({
+            m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2), 
+            m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)
+        });
+        
+        m_currentPage->update(m_bounds);
+        m_window.setView(m_defaultView);
+    }
+
+    void render() 
+    {
+        m_window.clear(sf::Color::Black);
+        m_currentPage->render(m_window);
+        m_window.display();
+    }
+
+    void setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
+    bool isRunning() const { return m_running; }
+
+    void addPage(const std::pair<Page*, std::string>& newPage) {}
 
 private:
     sf::RenderWindow m_window;
+    sf::VideoMode m_defScreenRes;
+    sf::View m_defaultView;
+    sf::RectangleShape m_bounds;
+
+    std::string m_windowTitle = "";
     std::unordered_map<std::string, Page*> m_pages;
     Page* m_currentPage = nullptr;
+
+    bool m_running = false;
+    const unsigned int m_minWindowWidth = 800;
+    const unsigned int m_minWindowHeight = 600;
+
+    void pollEvents() 
+    {
+        while (const auto event = m_window.pollEvent()) 
+        {
+            if (event->is<sf::Event::Closed>()) 
+            {
+                m_window.close();
+                m_running = false;
+            }
+        }
+    }
 };
 // ---------------------------------------------------------------------------- //
 
