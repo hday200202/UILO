@@ -6,10 +6,10 @@ INCLUDE = ../
 
 all:
 
-text:
+containers:
 	clear
-	@echo "building text.cpp..."
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE) -o bin/text text.cpp $(LDFLAGS)
-	./bin/text
+	@echo "building containers.cpp..."
+	$(CXX) $(CXXFLAGS) -I$(INCLUDE) -o bin/containers containers.cpp $(LDFLAGS)
+	./bin/containers
 
 clean:
