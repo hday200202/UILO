@@ -198,5 +198,3 @@ Column                  Row
 * ⏳ Basic interactive elements and event routing
 
 ---
-
-Let me know if you'd like me to format this into a `.md` file for GitHub or help generate badges (e.g. `build`, `license`, `SFML 3.0 compatible`).
