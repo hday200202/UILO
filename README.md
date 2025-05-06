@@ -40,7 +40,7 @@ uilo::UILO ui("My UI", {
         {new uilo::Column(
             Modifier().setfixedWidth(100).align(Align::LEFT), {
             // Add Rows/Columns/Other elements here
-            
+
             {new uilo::Row(
                 Modifier().setfixedHeight(50).align(Align::TOP), {
                   // Add Rows/Columns/Other elements here
@@ -55,6 +55,11 @@ uilo::UILO ui("My UI", {
         })}
     }), "main"}
 });
+
+while (ui.isRunning()) {
+    ui.update();
+    ui.render();
+}
 ```
 
 ---
