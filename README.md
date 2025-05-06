@@ -1,73 +1,114 @@
+Here's an updated version of your README that reflects the current state of the project, including your recent work on alignment, modifier-based configuration, and container behavior:
+
+---
+
 # Uilo Design Overview
 
-**Project Name:** Uilo (pronounced *wee-low*)  
-**Technology:** Built using SFML  
+**Project Name:** Uilo (pronounced *wee-low*)
+**Technology:** Built using SFML 3.0
 **Mode:** Retained-Mode UI Framework
 
 ---
 
 ## Core Principles
-- Lightweight and modular
-- Retained-mode architecture
-- Object-based UI elements
-- Designed for reusability and layout composability
-- Fluent, chainable configuration for ergonomic code
+
+* Lightweight and modular
+* Retained-mode architecture
+* Object-based UI elements
+* Designed for reusability and layout composability
+* Fluent, chainable configuration using `Modifier` objects
+* Manual memory model (raw pointers managed via destructors)
 
 ---
 
 ## Layout System
-- Based on `Column` and `Row` containers
-- Supports nested layout composition
-- Elements are added to layout containers using `addElement()`
-  - Accepts single elements or `std::initializer_list`
-  - Enables syntax like:
+
+* Based on `Column` and `Row` containers
+* All layout is handled via container logic; elements do not self-align
+* Alignment handled per-axis:
+
+  * `Column` handles vertical alignment (`TOP`, `CENTER_Y`, `BOTTOM`)
+  * `Row` will handle horizontal alignment (`LEFT`, `CENTER_X`, `RIGHT`)
+* Nested containers supported, with full propagation of bounds
+
+### Example Layout Code
 
 ```cpp
-myColumn.addElement({
-    myTextfield,
-    mySpacer,
-    myRow
+uilo::UILO ui("My UI", {
+    {new uilo::Page({
+        {new uilo::Column(
+            Modifier().setfixedWidth(100).align(Align::LEFT), {
+            
+            {new uilo::Row(
+                Modifier().setfixedHeight(50).align(Align::TOP), {}
+            )},
+
+            {new uilo::Row(
+                Modifier().setfixedHeight(50).align(Align::BOTTOM), {}
+            )}
+        })}
+    }), "main"}
 });
 ```
 
 ---
 
-## Fluent Interface
-- Many layout-altering and configuration methods return `*this`
-- Enables expressive, chainable syntax like:
+## Modifier System
+
+All layout and visual configuration is done via `Modifier`, a lightweight chainable struct.
+
+### Supported Modifier Settings:
+
+* `.setWidth(float pct)` / `.setfixedWidth(float px)`
+* `.setHeight(float pct)` / `.setfixedHeight(float px)`
+* `.align(Align::...)` — bitmask enum for layout alignment
+* `.setColor(sf::Color)` — fill color for background
+
+### Example:
 
 ```cpp
-myColumn.alignLeft().alignTop().fillMaxWidth();
+Modifier()
+    .setfixedWidth(100)
+    .setfixedHeight(50)
+    .align(Align::TOP | Align::CENTER_X)
+    .setColor(sf::Color::Red);
 ```
-
-- Methods like `alignTop()`, `alignLeft()`, `fillMaxWidth()`, etc., return a reference to the object for chaining
 
 ---
 
 ## Alignment
-- Alignment flags for both horizontal and vertical alignment:
-  - Horizontal: `left_align`, `center_align`, `right_align`
-  - Vertical: `top_align`, `middle_align`, `bottom_align`
-- Combined using bitwise operators
-- Nested alignment supported within parent containers
+
+* Bitmask enum `Align` controls element placement
+* Supported flags:
+
+  * `TOP`, `BOTTOM`, `CENTER_Y`
+  * `LEFT`, `RIGHT`, `CENTER_X`
+* Containers organize children by their vertical/horizontal alignment
+* Each alignment group is laid out independently and sequentially:
+
+  * `TOP`: stacked from top down
+  * `BOTTOM`: stacked from bottom up (preserving insertion order)
+  * `CENTER_Y`: centered as a block
 
 ---
 
 ## Sizing
-- Supports both fixed and percentage-based sizing
-- Percentage sizing uses values between 0.0 and 1.0
-- Allows for responsive UI that adapts to container dimensions
+
+* Fixed size overrides percentage-based size
+* Default sizing is full (100%) width/height of parent if unspecified
+* All sizing is handled relative to parent bounds in containers
 
 ---
 
 ## Element Structure
-- All UI elements inherit from a base class (e.g. `Element`)
-- Each element can have:
-  - Position
-  - Size (fixed or percentage)
-  - Alignment flags
-  - Event handling (click, hover, release)
-  - Aspect ratio (optional)
+
+All UI components derive from `Element`, which contains:
+
+* `sf::RectangleShape m_bounds` — current size and position
+* `Modifier m_modifier` — layout metadata
+* `virtual update()` / `render()` methods
+
+Containers inherit from `Element` and manage child elements.
 
 ---
 
@@ -76,68 +117,76 @@ myColumn.alignLeft().alignTop().fillMaxWidth();
 ```
                Element (abstract base class)
                       |
-    ┌─────────────────┴────────────────────┐
-    |                |                    |
-  Container        Control             Spacer
-    |                |
-    |        ┌───────┴─────────┐
-    |     Label            Button
-    |
-┌───┴───────────────┐
-|                   |
-Row               Column
+         ┌────────────┴────────────┐
+         |                         |
+     Container                  Control (planned)
+         |
+  ┌──────┴───────────────┐
+  |                      |
+Column                  Row
 ```
 
-### Descriptions
-- **Element**: Base for all components; holds position, size, alignment, etc.
-- **Container**: Can hold and lay out children (Row, Column)
-- **Control**: Interactive elements like buttons or labels
-- **Spacer**: Invisible element for spacing
-- **Row/Column**: Layout children horizontally or vertically
-- **Label/Button**: Basic UI controls
+### Descriptions:
+
+* **Element**: Base class with bounds and modifiers
+* **Container**: Composite layout elements that manage children
+* **Column/Row**: Vertical and horizontal layout respectively
+* **Control** (planned): Interactive elements like Label, Button
 
 ---
 
-## UI Elements (Planned)
-- Label
-- Button
-- Panel (for grouping elements)
-- Spacer
-- Row / Column
-- More can be added modularly
+## UI Elements (Current & Planned)
+
+* ✅ Column
+* ✅ Row
+* ⏳ Text (in progress)
+* ⏳ Spacer
+* ⏳ Label
+* ⏳ Button
+* ⏳ Panel
 
 ---
 
-## Styling/Theming
-- Global or per-element theme struct (colors, padding, font, etc.) is planned
-- Lightweight theming system to control visuals uniformly
+## Styling/Theming (Planned)
+
+* Per-element color already supported via `.setColor()`
+* Planned support for fonts, padding, margins via `Modifier` or theme object
 
 ---
 
-## Focus and Input
-- Event propagation planned through layout hierarchy
-- Focus handling for keyboard interaction may be supported in future
+## Event Handling (Planned)
+
+* Event queue (`uilo::Events`) exists for user-defined interaction
+* Window events handled internally
+* Focused input, hover, and clicks will be routed top-down
 
 ---
 
 ## Intended Use Case
-- Primarily for SFML-based applications and games
-- Designed to be developer-friendly and easy to integrate
+
+* UI system for SFML-based apps, tools, or games
+* Emphasis on simple integration and explicit control over layout
+* Encourages clean, declarative UI construction
 
 ---
 
 ## Long-Term Goals
-- Clean, consistent API
-- Minimal dependencies beyond SFML
-- Support for animated transitions or hover/click effects (later phase)
+
+* Simple, clean retained-mode UI with minimal dependencies
+* Extensible layout and rendering primitives
+* Support for animation, transitions, and hover states (future)
+* Optional tooling for layout preview/testing
 
 ---
 
 ## Current Development Focus
-- Establishing architecture and layout logic
-- Prioritizing basic containers and alignment
-- No immediate-mode features; strictly retained-mode
 
-**Developer Note:**  
-This project is in early planning. Code structure and interfaces will follow once the overall design is finalized.  
-Designed with future extensibility in mind, while keeping the core simple.
+* ✅ Vertical layout with alignment logic
+* ✅ Sizing system with fixed and percent support
+* ✅ Internal window management via `UILO`
+* ⏳ Row layout and horizontal alignment
+* ⏳ Basic interactive elements and event routing
+
+---
+
+Let me know if you'd like me to format this into a `.md` file for GitHub or help generate badges (e.g. `build`, `license`, `SFML 3.0 compatible`).
