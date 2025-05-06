@@ -222,6 +222,30 @@ public:
         alignResize(parentBounds);
         applyModifiers();
 
+        std::vector<Element*> leftElements;
+        std::vector<Element*> centerElements;
+        std::vector<Element*> rightElements;
+
+        // Categorize elements
+        for (auto& e : m_elements) {
+            auto align = e->m_modifier.getAlignment();
+
+            if (hasAlign(align, Align::LEFT)) leftElements.push_back(e);
+            else if (hasAlign(align, Align::RIGHT)) rightElements.push_back(e);
+            else if (hasAlign(align, Align::CENTER_X)) centerElements.push_back(e);
+            else leftElements.push_back(e);
+        }
+
+        std::reverse(rightElements.begin(), rightElements.end());
+
+        // Place top elements
+        float xLeft = m_bounds.getPosition().x;
+        for (auto& e : leftElements) {
+            e->update(m_bounds);
+            e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y });
+            xLeft += e->m_bounds.getSize().x;
+        }
+
         // Update elements
         for (auto& e : m_elements)
             e->update(m_bounds);
@@ -476,6 +500,7 @@ private:
     Page* m_currentPage = nullptr;
 
     bool m_running = false;
+    // bool m_shouldUpdate = true;
     const unsigned int m_minWindowWidth = 800;
     const unsigned int m_minWindowHeight = 600;
 
