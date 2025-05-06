@@ -36,15 +36,21 @@ Here's an updated version of your README that reflects the current state of the 
 ```cpp
 uilo::UILO ui("My UI", {
     {new uilo::Page({
+        // Base Container
         {new uilo::Column(
             Modifier().setfixedWidth(100).align(Align::LEFT), {
+            // Add Rows/Columns/Other elements here
             
             {new uilo::Row(
-                Modifier().setfixedHeight(50).align(Align::TOP), {}
+                Modifier().setfixedHeight(50).align(Align::TOP), {
+                  // Add Rows/Columns/Other elements here
+                }
             )},
 
             {new uilo::Row(
-                Modifier().setfixedHeight(50).align(Align::BOTTOM), {}
+                Modifier().setfixedHeight(50).align(Align::BOTTOM), {
+                  // Add Rows/Columns/Other elements here
+                }
             )}
         })}
     }), "main"}
