@@ -28,6 +28,8 @@ static std::unordered_set<const void*> uilo_owned_pages;
 static std::unordered_set<const void*> uilo_owned_elements;
 static bool time_to_delete = false;
 
+
+
 // ---------------------------------------------------------------------------- //
 // Alignment Enum
 // ---------------------------------------------------------------------------- //
@@ -53,6 +55,8 @@ inline bool hasAlign(Align value, Align flag) {
     return static_cast<uint8_t>(value & flag) != 0;
 }
 
+
+
 // ---------------------------------------------------------------------------- //
 // Forward Declarations
 // ---------------------------------------------------------------------------- //
@@ -62,6 +66,8 @@ class Row;
 class Column;
 class Page;
 class UILO;
+
+
 
 // ---------------------------------------------------------------------------- //
 // Modifier
