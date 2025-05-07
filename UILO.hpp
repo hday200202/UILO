@@ -62,6 +62,8 @@ public:
     Modifier& setfixedHeight(float height) { m_fixedHeight = height; return *this; }
     Modifier& align(Align alignment) { m_alignment = alignment; return *this; }
     Modifier& setColor(sf::Color color) { m_color = color; return *this; }
+    Modifier& onClick(std::function<void()> callback) { m_onClick = std::move(callback); return *this; }
+    Modifier& setVisible(bool visibility) { m_isVisible = visibility; return *this; }
 
     float getWidth() const { return m_widthPct; }
     float getHeight() const { return m_heightPct; }
@@ -69,6 +71,8 @@ public:
     float getFixedHeight() const { return m_fixedHeight; }
     Align getAlignment() const { return m_alignment; }
     sf::Color getColor() const { return m_color; }
+    const std::function<void()>& getOnClick() const { return m_onClick; }
+    bool isVisible() const { return m_isVisible; }
 
 private:
     float m_widthPct = 1.f;
@@ -77,6 +81,8 @@ private:
     sf::Color m_color = sf::Color::Transparent;
     float m_fixedWidth = 0.f;
     float m_fixedHeight = 0.f;
+    std::function<void()> m_onClick = nullptr;
+    bool m_isVisible = true;
 };
 
 const Modifier default_mod;
@@ -85,6 +91,14 @@ const Modifier default_mod;
 
 
 // ---------------------------------------------------------------------------- Base
+enum class EType {
+    Element,
+    Row,
+    Column,
+    Text,
+    // ...
+};
+
 class Element 
 {
 public:
@@ -94,6 +108,29 @@ public:
     virtual ~Element() = default;
     virtual void update(sf::RectangleShape& parentBounds) {}
     virtual void render(sf::RenderTarget& target) {}
+
+    virtual void handleEvent(const sf::Event& event) {
+        if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
+            if (mousePressed->button == sf::Mouse::Button::Left) {
+                sf::Vector2f mousePos(mousePressed->position); // already window-local
+                if (m_bounds.getGlobalBounds().contains(mousePos)) {
+                    if (m_modifier.getOnClick())
+                        m_modifier.getOnClick()();
+                }
+            }
+        }
+    }
+
+    virtual void checkClick(const sf::Vector2f& pos) {
+        if (m_bounds.getGlobalBounds().contains(pos)) {
+            if (m_modifier.getOnClick())
+                m_modifier.getOnClick()();
+        }
+    }
+
+    void setModifier(const Modifier& modifier) { m_modifier = modifier; }
+
+    virtual EType getType() const { return EType::Element; }
 
 protected:
     void alignResize(sf::RectangleShape& parent)
@@ -129,46 +166,45 @@ protected:
                 m_bounds.getSize().y * m_modifier.getHeight()
             });
 
-        // Align X
-        if (hasAlign(m_modifier.getAlignment(), Align::CENTER_X))
-            m_bounds.setPosition
-            ({
-                parent.getPosition().x + (parent.getSize().x / 2) - (m_bounds.getSize().x / 2),
-                m_bounds.getPosition().y
-            });
-        else if (hasAlign(m_modifier.getAlignment(), Align::LEFT))
-            m_bounds.setPosition
-            ({
-                parent.getPosition().x, 
-                parent.getPosition().y
-            });
-        else if (hasAlign(m_modifier.getAlignment(), Align::RIGHT))
-            m_bounds.setPosition
-            ({
-                parent.getPosition().x + parent.getSize().x - m_bounds.getSize().x,
-                parent.getPosition().y
-            });
+        // // Align X
+        // if (hasAlign(m_modifier.getAlignment(), Align::CENTER_X))
+        //     m_bounds.setPosition
+        //     ({
+        //         parent.getPosition().x + (parent.getSize().x / 2) - (m_bounds.getSize().x / 2),
+        //         m_bounds.getPosition().y
+        //     });
+        // else if (hasAlign(m_modifier.getAlignment(), Align::LEFT))
+        //     m_bounds.setPosition
+        //     ({
+        //         parent.getPosition().x, 
+        //         parent.getPosition().y
+        //     });
+        // else if (hasAlign(m_modifier.getAlignment(), Align::RIGHT))
+        //     m_bounds.setPosition
+        //     ({
+        //         parent.getPosition().x + parent.getSize().x - m_bounds.getSize().x,
+        //         parent.getPosition().y
+        //     });
         
-        // Align Y
-        if (hasAlign(m_modifier.getAlignment(), Align::CENTER_Y))
-            m_bounds.setPosition
-            ({
-                m_bounds.getPosition().x,
-                parent.getPosition().y + (parent.getSize().y / 2) - (m_bounds.getSize().y / 2)
-            });
-        else if (hasAlign(m_modifier.getAlignment(), Align::TOP))
-            m_bounds.setPosition
-            ({
-                m_bounds.getPosition().x,
-                parent.getPosition().y
-            });
-        else if (hasAlign(m_modifier.getAlignment(), Align::BOTTOM))
-            m_bounds.setPosition
-            ({
-                m_bounds.getPosition().x,
-                parent.getPosition().y + parent.getSize().y - m_bounds.getSize().y
-            });
-        
+        // // Align Y
+        // if (hasAlign(m_modifier.getAlignment(), Align::CENTER_Y))
+        //     m_bounds.setPosition
+        //     ({
+        //         m_bounds.getPosition().x,
+        //         parent.getPosition().y + (parent.getSize().y / 2) - (m_bounds.getSize().y / 2)
+        //     });
+        // else if (hasAlign(m_modifier.getAlignment(), Align::TOP))
+        //     m_bounds.setPosition
+        //     ({
+        //         m_bounds.getPosition().x,
+        //         parent.getPosition().y
+        //     });
+        // else if (hasAlign(m_modifier.getAlignment(), Align::BOTTOM))
+        //     m_bounds.setPosition
+        //     ({
+        //         m_bounds.getPosition().x,
+        //         parent.getPosition().y + parent.getSize().y - m_bounds.getSize().y
+        //     });
     }
 
     void applyModifiers()
@@ -204,6 +240,20 @@ public:
             delete e;
     }
 
+    void addElement(Element* element) { m_elements.push_back(element); }
+    void addElements(std::initializer_list<Element*> elements) 
+    {
+        for (auto& e : elements)
+            m_elements.push_back(e);
+    }
+
+    virtual void handleEvent(const sf::Event& event) override {
+        for (auto& e : m_elements)
+            e->handleEvent(event);
+
+        Element::handleEvent(event);
+    }
+    
 protected:
     std::vector<Element*> m_elements;
     
@@ -218,7 +268,6 @@ public:
 
     void update(sf::RectangleShape& parentBounds) override
     {
-        // Align and resize self, apply visual modifiers
         alignResize(parentBounds);
         applyModifiers();
 
@@ -233,23 +282,50 @@ public:
             if (hasAlign(align, Align::LEFT)) leftElements.push_back(e);
             else if (hasAlign(align, Align::RIGHT)) rightElements.push_back(e);
             else if (hasAlign(align, Align::CENTER_X)) centerElements.push_back(e);
-            else leftElements.push_back(e);
+            else leftElements.push_back(e); // default to left
         }
 
-        std::reverse(rightElements.begin(), rightElements.end());
+        // std::reverse(rightElements.begin(), rightElements.end());
 
-        // Place top elements
         float xLeft = m_bounds.getPosition().x;
         for (auto& e : leftElements) {
-            e->update(m_bounds);
-            e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y });
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ xLeft, m_bounds.getPosition().y });
+            subBounds.setSize({ m_bounds.getSize().x - (xLeft - m_bounds.getPosition().x), m_bounds.getSize().y });
+
+            e->update(subBounds); // update with bounds starting at xLeft
+            e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y }); // position explicitly
             xLeft += e->m_bounds.getSize().x;
         }
 
-        // Update elements
-        for (auto& e : m_elements)
+        // Place center elements
+        float centerTotalWidth = 0.f;
+        for (auto& e : centerElements) {
             e->update(m_bounds);
+            centerTotalWidth += e->m_bounds.getSize().x;
+        }
+
+        float xCenter = m_bounds.getPosition().x + (m_bounds.getSize().x / 2.f) - (centerTotalWidth / 2.f);
+        for (auto& e : centerElements) {
+            e->m_bounds.setPosition({ xCenter, m_bounds.getPosition().y });
+            xCenter += e->m_bounds.getSize().x;
+        }
+
+        float xRight = m_bounds.getPosition().x + m_bounds.getSize().x;
+        for (auto& e : rightElements) {
+            float maxWidth = xRight - m_bounds.getPosition().x;
+
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ m_bounds.getPosition().x, m_bounds.getPosition().y });
+            subBounds.setSize({ maxWidth, m_bounds.getSize().y });
+
+            e->update(subBounds); // element chooses size within available space
+            xRight -= e->m_bounds.getSize().x;
+
+            e->m_bounds.setPosition({ xRight, m_bounds.getPosition().y });
+        }
     }
+
 
     void render(sf::RenderTarget& target) override
     {
@@ -258,8 +334,29 @@ public:
         
         // Render elements
         for (auto& e : m_elements)
-            e->render(target);
+        {
+            if (e->m_modifier.isVisible())
+                e->render(target);
+        }
     }
+
+    virtual void handleEvent(const sf::Event& event) override 
+    {
+        for (auto& e : m_elements)
+            e->handleEvent(event);
+
+        Element::handleEvent(event);
+    }
+
+    void checkClick(const sf::Vector2f& pos) override 
+    {
+        for (auto& e : m_elements)
+            e->checkClick(pos);
+    
+        Element::checkClick(pos);
+    }
+
+    virtual EType getType() const override { return EType::Row; }
     
 };
 
@@ -286,15 +383,17 @@ public:
             if (hasAlign(align, Align::TOP)) topElements.push_back(e);
             else if (hasAlign(align, Align::BOTTOM)) bottomElements.push_back(e);
             else if (hasAlign(align, Align::CENTER_Y)) centerElements.push_back(e);
-            else topElements.push_back(e);
+            else topElements.push_back(e); // default to top
         }
-
-        std::reverse(bottomElements.begin(), bottomElements.end());
 
         // Place top elements
         float yTop = m_bounds.getPosition().y;
         for (auto& e : topElements) {
-            e->update(m_bounds);
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ m_bounds.getPosition().x, yTop });
+            subBounds.setSize({ m_bounds.getSize().x, m_bounds.getSize().y - (yTop - m_bounds.getPosition().y) });
+
+            e->update(subBounds);
             e->m_bounds.setPosition({ m_bounds.getPosition().x, yTop });
             yTop += e->m_bounds.getSize().y;
         }
@@ -312,15 +411,21 @@ public:
             yCenter += e->m_bounds.getSize().y;
         }
 
-        // Place bottom elements (in reverse order to stack upward)
+        // Place bottom elements
         float yBottom = m_bounds.getPosition().y + m_bounds.getSize().y;
-        for (auto it = bottomElements.rbegin(); it != bottomElements.rend(); ++it) {
-            Element* e = *it;
-            e->update(m_bounds);
+        for (auto& e : bottomElements) {
+            float maxHeight = yBottom - m_bounds.getPosition().y;
+
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ m_bounds.getPosition().x, m_bounds.getPosition().y });
+            subBounds.setSize({ m_bounds.getSize().x, maxHeight });
+
+            e->update(subBounds);
             yBottom -= e->m_bounds.getSize().y;
             e->m_bounds.setPosition({ m_bounds.getPosition().x, yBottom });
         }
     }
+
 
     void render(sf::RenderTarget& target) override
     {
@@ -329,8 +434,29 @@ public:
 
         // Render elements
         for (auto& e : m_elements)
-            e->render(target);
+        {
+            if (e->m_modifier.isVisible())
+                e->render(target);
+        }
     }
+
+    virtual void handleEvent(const sf::Event& event) override 
+    {
+        for (auto& e : m_elements)
+            e->handleEvent(event);
+
+        Element::handleEvent(event);
+    }
+
+    void checkClick(const sf::Vector2f& pos) override 
+    {
+        for (auto& e : m_elements)
+            e->checkClick(pos);
+    
+        Element::checkClick(pos);
+    }
+
+    virtual EType getType() const override { return EType::Column; }
     
 };
 // ---------------------------------------------------------------------------- //
@@ -376,8 +502,21 @@ public:
         target.draw(m_bounds);
 
         // Draw elements
+        for (auto& c : m_containers) 
+        {
+            if (c->m_modifier.isVisible())
+                c->render(target);
+        }
+    }
+
+    void handleEvent(const sf::Event& event) {
         for (auto& c : m_containers)
-            c->render(target);
+            c->handleEvent(event);
+    }
+
+    void dispatchClick(const sf::Vector2f& pos) {
+        for (auto& c : m_containers)
+            c->checkClick(pos);
     }
 
 private:
@@ -460,21 +599,27 @@ public:
     {
         pollEvents();
 
-        m_defaultView.setSize
-        ({
-            (float)m_window.getSize().x, 
-            (float)m_window.getSize().y
-        });
+        sf::Vector2u currentSize = m_window.getSize();
+        if (currentSize != m_lastWindowSize) {
+            m_defaultView.setSize({ (float)currentSize.x, (float)currentSize.y });
 
-        m_bounds.setSize(m_defaultView.getSize());
-        m_bounds.setPosition
-        ({
-            m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2), 
-            m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)
-        });
+            m_bounds.setSize(m_defaultView.getSize());
+            m_bounds.setPosition({
+                m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2),
+                m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)
+            });
+
+            m_window.setView(m_defaultView);
+            m_currentPage->update(m_bounds);
+
+            m_lastWindowSize = currentSize;
+        }
+
+        if (m_clickPosition) {
+            m_currentPage->dispatchClick(*m_clickPosition);
+            m_clickPosition.reset();
+        }
         
-        m_currentPage->update(m_bounds);
-        m_window.setView(m_defaultView);
     }
 
     void render() 
@@ -487,7 +632,30 @@ public:
     void setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
     bool isRunning() const { return m_running; }
 
-    void addPage(const std::pair<Page*, std::string>& newPage) {}
+    void addPage(std::pair<Page*, std::string> newPage) 
+    {
+        const auto& [page, name] = newPage;
+        m_pages[name] = page;
+    }
+
+    void addPages(std::initializer_list<std::pair<Page*, std::string>> pages) 
+    {
+        for (const auto& [page, name] : pages)
+        {
+            m_pages[name] = page;
+            if (!m_currentPage) m_currentPage = page;
+        }
+    }
+
+    void switchToPage(const std::string& pageName) {
+        auto it = m_pages.find(pageName);
+        if (it != m_pages.end())
+            m_currentPage = it->second;
+        else
+            std::cerr << "[UILO] Page \"" << pageName << "\" not found.\n";
+
+        m_currentPage->update(m_bounds);
+    }
 
 private:
     sf::RenderWindow m_window;
@@ -500,9 +668,10 @@ private:
     Page* m_currentPage = nullptr;
 
     bool m_running = false;
-    // bool m_shouldUpdate = true;
     const unsigned int m_minWindowWidth = 800;
     const unsigned int m_minWindowHeight = 600;
+    sf::Vector2u m_lastWindowSize;
+    std::optional<sf::Vector2f> m_clickPosition;
 
     void pollEvents() 
     {
@@ -512,6 +681,12 @@ private:
             {
                 m_window.close();
                 m_running = false;
+            }
+
+            if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) 
+            {
+                if (mousePressed->button == sf::Mouse::Button::Left)
+                    m_clickPosition = m_window.mapPixelToCoords(mousePressed->position);
             }
         }
     }
