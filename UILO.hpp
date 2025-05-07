@@ -600,7 +600,7 @@ public:
         pollEvents();
 
         sf::Vector2u currentSize = m_window.getSize();
-        if (currentSize != m_lastWindowSize) {
+        if (m_shouldUpdate) {
             m_defaultView.setSize({ (float)currentSize.x, (float)currentSize.y });
 
             m_bounds.setSize(m_defaultView.getSize());
@@ -624,9 +624,14 @@ public:
 
     void render() 
     {
-        m_window.clear(sf::Color::Black);
-        m_currentPage->render(m_window);
-        m_window.display();
+        if (m_shouldUpdate)
+        {
+            m_window.clear(sf::Color::Black);
+            m_currentPage->render(m_window);
+            m_window.display();
+
+            m_shouldUpdate = false;
+        }
     }
 
     void setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
@@ -668,6 +673,7 @@ private:
     Page* m_currentPage = nullptr;
 
     bool m_running = false;
+    bool m_shouldUpdate = false;
     const unsigned int m_minWindowWidth = 800;
     const unsigned int m_minWindowHeight = 600;
     sf::Vector2u m_lastWindowSize;
@@ -687,6 +693,13 @@ private:
             {
                 if (mousePressed->button == sf::Mouse::Button::Left)
                     m_clickPosition = m_window.mapPixelToCoords(mousePressed->position);
+
+                m_shouldUpdate = true;
+            }
+
+            if (event->is<sf::Event::Resized>()) 
+            {
+                m_shouldUpdate = true;
             }
         }
     }
