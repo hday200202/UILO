@@ -168,7 +168,7 @@ int main() {
         }), "myPage"}
     });
 
-    Page* myPage = new Page({
+    Page* myPage2 = new Page({
         new Row(Modifier(), {
 
             new Column(Modifier()
@@ -230,7 +230,10 @@ int main() {
         }),
     });
 
-    ui.addPage({myPage, "myPage2"});
+    ui.addPage({myPage2, "myPage2"});
+
+    // delete myRow;
+    // delete myPage2;
 
     while (ui.isRunning()) {
         ui.update();
