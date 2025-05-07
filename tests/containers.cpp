@@ -19,43 +19,53 @@ void testBlackRow() { std::cout << "Black Row" << std::endl; }
 
 int main() {
 
-    Row* myRow = new Row(Modifier()
+    Row* myRow = new Row
+    (
+        Modifier()
         .align(Align::TOP)
         .setfixedHeight(100)
         .setColor(sf::Color(25, 25, 45, 255)), 
     {
         
-        new Column(Modifier()
-        .setColor(red)
-        .align(Align::CENTER_X)
-        .setfixedWidth(100)
-        .onClick(testRedColumn), 
+        new Column
+        (
+            Modifier()
+            .setColor(red)
+            .align(Align::CENTER_X)
+            .setfixedWidth(100)
+            .onClick(testRedColumn), 
         {
             // Column Contents
             // ...
         }),
         
-        new Column(Modifier()
-        .setColor(green)
-        .align(Align::CENTER_X)
-        .setfixedWidth(100)
-        .onClick(testGreenColumn), 
+        new Column
+        (
+            Modifier()
+            .setColor(green)
+            .align(Align::CENTER_X)
+            .setfixedWidth(100)
+            .onClick(testGreenColumn), 
         {
             // Column Contents
             // ...
         }),
 
-        new Column(Modifier()
-        .setColor(blue)
-        .align(Align::CENTER_X)
-        .setfixedWidth(100)
-        .onClick(testBlueColumn), 
+        new Column
+        (
+            Modifier()
+            .setColor(blue)
+            .align(Align::CENTER_X)
+            .setfixedWidth(100)
+            .onClick(testBlueColumn), 
         {
             // Column Contents
             // ...
         }),
 
-        new Column(Modifier()
+        new Column
+        (
+            Modifier()
             .setColor(white)
             .align(Align::CENTER_X)
             .setfixedWidth(100)
@@ -68,15 +78,23 @@ int main() {
 
     UILO ui ("My UI", {{
         new Page ({
-            new Row(Modifier().setColor(sf::Color(25, 25, 45, 255)), {
+            new Row
+            (
+                Modifier()
+                .setColor(sf::Color(25, 25, 45, 255)), 
+            {
 
-                new Column(Modifier()
+                new Column
+                (
+                    Modifier()
                     .setColor(sf::Color(25, 25, 45, 255))
                     .setfixedWidth(100)
                     .align(Align::LEFT), 
                 {
 
-                    new Row(Modifier()
+                    new Row
+                    (
+                        Modifier()
                         .setColor(sf::Color::Black)
                         .align(Align::TOP)
                         .setfixedHeight(100)
@@ -86,7 +104,9 @@ int main() {
                         // ...
                     }),
 
-                    new Row(Modifier()
+                    new Row
+                    (
+                        Modifier()
                         .setColor(red)
                         .setfixedHeight(100)
                         .align(Align::CENTER_Y)
@@ -96,7 +116,9 @@ int main() {
                         // ...
                     }),
 
-                    new Row(Modifier()
+                    new Row
+                    (
+                        Modifier()
                         .setColor(green)
                         .setfixedHeight(100)
                         .align(Align::CENTER_Y)
@@ -106,7 +128,9 @@ int main() {
                         // ...
                     }),
 
-                    new Row(Modifier()
+                    new Row
+                    (
+                        Modifier()
                         .setColor(blue)
                         .setfixedHeight(100)
                         .align(Align::CENTER_Y)
@@ -116,7 +140,9 @@ int main() {
                         // ...
                     }),
 
-                    new Row(Modifier()
+                    new Row
+                    (
+                        Modifier()
                         .setColor(white)
                         .setfixedHeight(100)
                         .align(Align::CENTER_Y)
@@ -127,7 +153,9 @@ int main() {
                     }),
                 }),
 
-                new Column(Modifier()
+                new Column
+                (
+                    Modifier()
                     .setfixedWidth(4)
                     .setColor(sf::Color(40, 40, 60, 255)), 
                 {

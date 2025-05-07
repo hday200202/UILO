@@ -1,4 +1,3 @@
-
 ---
 
 # UILO Design Overview
@@ -11,47 +10,83 @@
 
 ## Core Principles
 
-* Lightweight and modular
-* Retained-mode architecture
-* Object-based UI elements
-* Designed for reusability and layout composability
-* Fluent, chainable configuration using `Modifier` objects
-* Manual memory model (raw pointers managed via destructors)
+* Lightweight and modular retained-mode architecture
+* Declarative layout via `Row` and `Column` containers
+* All UI components are `Element`-derived objects
+* Memory is manually managed, ownership enforced via tracking sets
+* Fluent, chainable configuration using `Modifier`
 
 ---
 
 ## Layout System
 
-* Based on `Column` and `Row` containers
-* All layout is handled via container logic; elements do not self-align
-* Alignment handled per-axis:
+* UI is composed of nested `Row` and `Column` containers
+* All layout decisions (alignment, sizing) are made by containers
+* Alignment is explicit via the `Align` enum:
 
-  * `Column` handles vertical alignment (`TOP`, `CENTER_Y`, `BOTTOM`)
-  * `Row` will handle horizontal alignment (`LEFT`, `CENTER_X`, `RIGHT`)
-* Nested containers supported, with full propagation of bounds
+  * `Row`: aligns children left, center, or right horizontally
+  * `Column`: aligns children top, center, or bottom vertically
+* Each alignment group is laid out independently and sequentially
+* Nested containers propagate layout bounds downward
 
 ### Example Layout Code
 
 ```cpp
-uilo::UILO ui("My UI", {
-    {new uilo::Page({
-        // Base Container
-        {new uilo::Column(
-            Modifier().setfixedWidth(100).align(Align::LEFT), {
-            // Add Rows/Columns/Other elements here
+UILO ui("My UI", {{
+    new Page({
+        
+        // Page Containers
+        // ...
 
-            {new uilo::Row(
-                Modifier().setfixedHeight(50).align(Align::TOP), {
-                  // Add Rows/Columns/Other elements here
-                }
-            )},
+        new Row
+        (
+            Modifier()
+            .setColor(sf::Color(30, 30, 30)), 
+        {
+            // Row Elements
+            // ...
 
-            {new uilo::Row(
-                Modifier().setfixedHeight(50).align(Align::BOTTOM), {
-                  // Add Rows/Columns/Other elements here
-                }
-            )}
-        })}
+            new Column
+            (
+                Modifier()
+                .setfixedWidth(100)
+                .align(Align::LEFT)
+                .setColor(sf::Color::Red), 
+            {
+
+                new Row
+                (
+                    Modifier()
+                    .setfixedHeight(100)
+                    .align(Align::TOP)
+                    .onClick([](){ std::cout << "Clicked top"; }),
+                {
+                    // Row Elements
+                    // ...
+                }),
+
+                new Row
+                (
+                    Modifier()
+                    .setfixedHeight(100)
+                    .align(Align::CENTER_Y),
+                {
+                    // Row Elements
+                    // ...
+                })
+            }),
+
+            new Column
+            (
+                Modifier()
+                .setfixedWidth(100)
+                .align(Align::CENTER_X)
+                .setColor(sf::Color::Green), 
+            {
+                // Column Elements
+                // ...
+            })
+        })
     }), "main"}
 });
 
@@ -65,136 +100,80 @@ while (ui.isRunning()) {
 
 ## Modifier System
 
-All layout and visual configuration is done via `Modifier`, a lightweight chainable struct.
+All configuration of an element's layout, appearance, and behavior is done through a `Modifier`.
 
-### Supported Modifier Settings:
+### Modifier Options:
 
 * `.setWidth(float pct)` / `.setfixedWidth(float px)`
 * `.setHeight(float pct)` / `.setfixedHeight(float px)`
-* `.align(Align::...)` — bitmask enum for layout alignment
-* `.setColor(sf::Color)` — fill color for background
+* `.align(Align::...)` — alignment enum (bitmask)
+* `.setColor(sf::Color)` — background fill
+* `.onClick(func)` — lambda or callback function
+* `.setVisible(bool)` — toggles element visibility
 
 ### Example:
 
 ```cpp
 Modifier()
-    .setfixedWidth(100)
-    .setfixedHeight(50)
-    .align(Align::TOP | Align::CENTER_X)
-    .setColor(sf::Color::Red);
+.setfixedWidth(100)
+.setfixedHeight(50)
+.align(Align::TOP | Align::CENTER_X)
+.setColor(sf::Color::Red)
+.onClick([]() { std::cout << "Clicked!"; });
 ```
 
 ---
 
-## Alignment
+## Event Handling
 
-* Bitmask enum `Align` controls element placement
-* Supported flags:
-
-  * `TOP`, `BOTTOM`, `CENTER_Y`
-  * `LEFT`, `RIGHT`, `CENTER_X`
-* Containers organize children by their vertical/horizontal alignment
-* Each alignment group is laid out independently and sequentially:
-
-  * `TOP`: stacked from top down
-  * `BOTTOM`: stacked from bottom up (preserving insertion order)
-  * `CENTER_Y`: centered as a block
+* Events are handled internally by `UILO`
+* Clicks are routed top-down to visible elements
+* If an element's bounds contain the click, it triggers its `.onClick()`
+* Pages and containers relay events to children
 
 ---
 
-## Sizing
+## Sizing Behavior
 
-* Fixed size overrides percentage-based size
-* Default sizing is full (100%) width/height of parent if unspecified
-* All sizing is handled relative to parent bounds in containers
+* Default size: 100% of parent bounds
+* Fixed size overrides percentage
+* Containers pass their bounds to children during layout
 
 ---
 
-## Element Structure
+## Alignment Rules
 
-All UI components derive from `Element`, which contains:
+`Align` is a bitmask enum specifying layout placement:
 
-* `sf::RectangleShape m_bounds` — current size and position
-* `Modifier m_modifier` — layout metadata
-* `virtual update()` / `render()` methods
+* Vertical: `TOP`, `CENTER_Y`, `BOTTOM`
+* Horizontal: `LEFT`, `CENTER_X`, `RIGHT`
 
-Containers inherit from `Element` and manage child elements.
+Examples:
+
+* `Align::TOP | Align::CENTER_X` = centered horizontally at the top
+* `Align::BOTTOM` = bottom-aligned, default horizontal stack order
+
+---
+
+## Memory and Ownership
+
+* Elements and pages are created with `new` and passed to `UILO`
+* Ownership is transferred and tracked via internal sets
+* Double deletion or reuse is detected and aborts the program
+* Pointers passed to `UILO::addPage()` are nulled out after transfer
 
 ---
 
 ## Class Hierarchy
 
 ```
-               Element (abstract base class)
-                      |
-         ┌────────────┴────────────┐
-         |                         |
-     Container                  Control (planned)
-         |
-  ┌──────┴───────────────┐
-  |                      |
-Column                  Row
+       Element (abstract base class)
+                 |
+       +---------+---------+
+       |                   |
+   Container            Control (planned)
+       |
+   +---+---+
+   |       |
+Column    Row
 ```
-
-### Descriptions:
-
-* **Element**: Base class with bounds and modifiers
-* **Container**: Composite layout elements that manage children
-* **Column/Row**: Vertical and horizontal layout respectively
-* **Control** (planned): Interactive elements like Label, Button
-
----
-
-## UI Elements (Current & Planned)
-
-* ✅ Column
-* ✅ Row
-* ⏳ Text (in progress)
-* ⏳ Spacer
-* ⏳ Label
-* ⏳ Button
-* ⏳ Panel
-
----
-
-## Styling/Theming (Planned)
-
-* Per-element color already supported via `.setColor()`
-* Planned support for fonts, padding, margins via `Modifier` or theme object
-
----
-
-## Event Handling (Planned)
-
-* Event queue (`uilo::Events`) exists for user-defined interaction
-* Window events handled internally
-* Focused input, hover, and clicks will be routed top-down
-
----
-
-## Intended Use Case
-
-* UI system for SFML-based apps, tools, or games
-* Emphasis on simple integration and explicit control over layout
-* Encourages clean, declarative UI construction
-
----
-
-## Long-Term Goals
-
-* Simple, clean retained-mode UI with minimal dependencies
-* Extensible layout and rendering primitives
-* Support for animation, transitions, and hover states (future)
-* Optional tooling for layout preview/testing
-
----
-
-## Current Development Focus
-
-* ✅ Vertical layout with alignment logic
-* ✅ Sizing system with fixed and percent support
-* ✅ Internal window management via `UILO`
-* ⏳ Row layout and horizontal alignment
-* ⏳ Basic interactive elements and event routing
-
----
