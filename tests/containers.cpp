@@ -20,124 +20,189 @@ void testBlackRow() { std::cout << "Black Row" << std::endl; }
 int main() {
 
     Row* myRow = new Row(Modifier()
-        .align(Align::TOP).setfixedHeight(100).setColor(sf::Color(25, 25, 45, 255)), {
+        .align(Align::TOP)
+        .setfixedHeight(100)
+        .setColor(sf::Color(25, 25, 45, 255)), 
+    {
+        
+        new Column(Modifier()
+        .setColor(red)
+        .align(Align::CENTER_X)
+        .setfixedWidth(100)
+        .onClick(testRedColumn), 
+        {
+            // Column Contents
+            // ...
+        }),
+        
+        new Column(Modifier()
+        .setColor(green)
+        .align(Align::CENTER_X)
+        .setfixedWidth(100)
+        .onClick(testGreenColumn), 
+        {
+            // Column Contents
+            // ...
+        }),
 
-        {new Column(Modifier()
-            .setColor(red).align(Align::CENTER_X).setfixedWidth(100).onClick(testRedColumn), {
+        new Column(Modifier()
+        .setColor(blue)
+        .align(Align::CENTER_X)
+        .setfixedWidth(100)
+        .onClick(testBlueColumn), 
+        {
+            // Column Contents
+            // ...
+        }),
 
-        })},
-
-        {new Column(Modifier()
-            .setColor(green).align(Align::CENTER_X).setfixedWidth(100).onClick(testGreenColumn), {
-
-        })},
-
-        {new Column(Modifier()
-            .setColor(blue).align(Align::CENTER_X).setfixedWidth(100).onClick(testBlueColumn), {
-
-        })},
-
-        {new Column(Modifier()
-            .setColor(white).align(Align::CENTER_X).setfixedWidth(100).onClick(testWhiteColumn), {
-
-        })},
+        new Column(Modifier()
+            .setColor(white)
+            .align(Align::CENTER_X)
+            .setfixedWidth(100)
+            .onClick(testWhiteColumn), 
+        {
+            // Column Contents
+            // ...
+        }),
     });
 
-    UILO ui ("My UI", {
-        {new Page({
-            {new Row(Modifier().setColor(sf::Color(25, 25, 45, 255)), {
+    UILO ui ("My UI", {{
+        new Page ({
+            new Row(Modifier().setColor(sf::Color(25, 25, 45, 255)), {
 
-                {new Column(Modifier()
-                    .setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::LEFT), {
+                new Column(Modifier()
+                    .setColor(sf::Color(25, 25, 45, 255))
+                    .setfixedWidth(100)
+                    .align(Align::LEFT), 
+                {
 
-                    {new Row(Modifier()
-                        .setColor(sf::Color::Black).align(Align::TOP).setfixedHeight(100).onClick([&]() {myRow->m_modifier.setVisible(!myRow->m_modifier.isVisible());}), {
+                    new Row(Modifier()
+                        .setColor(sf::Color::Black)
+                        .align(Align::TOP)
+                        .setfixedHeight(100)
+                        .onClick([&](){ui.switchToPage("myPage2");}), 
+                    {
+                        // Row Contents
+                        // ...
+                    }),
 
-                    })},
+                    new Row(Modifier()
+                        .setColor(red)
+                        .setfixedHeight(100)
+                        .align(Align::CENTER_Y)
+                        .onClick(testRedRow), 
+                    {
+                        // Row Contents
+                        // ...
+                    }),
 
-                    {new Row(Modifier()
-                        .setColor(red).setfixedHeight(100).align(Align::CENTER_Y).onClick(testRedRow), {
-                        
-                    })},
+                    new Row(Modifier()
+                        .setColor(green)
+                        .setfixedHeight(100)
+                        .align(Align::CENTER_Y)
+                        .onClick(testGreenRow), 
+                    {
+                        // Row Contents
+                        // ...
+                    }),
 
-                    {new Row(Modifier()
-                        .setColor(green).setfixedHeight(100).align(Align::CENTER_Y).onClick(testGreenRow), {
-                        
-                    })},
+                    new Row(Modifier()
+                        .setColor(blue)
+                        .setfixedHeight(100)
+                        .align(Align::CENTER_Y)
+                        .onClick(testBlueRow), 
+                    {
+                        // Row Contents
+                        // ...
+                    }),
 
-                    {new Row(Modifier()
-                        .setColor(blue).setfixedHeight(100).align(Align::CENTER_Y).onClick(testBlueRow), {
-                        
-                    })},
+                    new Row(Modifier()
+                        .setColor(white)
+                        .setfixedHeight(100)
+                        .align(Align::CENTER_Y)
+                        .onClick(testWhiteRow), 
+                    {
+                        // Row Contents
+                        // ...
+                    }),
+                }),
 
-                    {new Row(Modifier()
-                        .setColor(white).setfixedHeight(100).align(Align::CENTER_Y).onClick(testWhiteRow), {
-                        
-                    })},
-                })},
-
-                {new Column(Modifier().setfixedWidth(4).setColor(sf::Color(40, 40, 60, 255)), {})},
+                new Column(Modifier()
+                    .setfixedWidth(4)
+                    .setColor(sf::Color(40, 40, 60, 255)), 
+                {
+                    // Column Contents
+                    // ...
+                }),
 
                 myRow,
-            })}
+            })
         }), "myPage"}
     });
 
     Page* myPage = new Page({
-        {new Row(Modifier(), {
+        new Row(Modifier(), {
 
-            {new Column(Modifier()
-                .setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::LEFT), {
+            new Column(Modifier()
+                .setColor(sf::Color(25, 25, 45, 255))
+                .setfixedWidth(100)
+                .align(Align::LEFT), 
+                {
 
-                {new Row(Modifier()
-                    .setColor(sf::Color::Black).align(Align::TOP).setfixedHeight(100).onClick([&]() { ui.switchToPage("myPage"); }), {
+                new Row(Modifier()
+                    .setColor(sf::Color::Black)
+                    .align(Align::TOP)
+                    .setfixedHeight(100)
+                    .onClick([&]() { ui.switchToPage("myPage"); }), 
+                {
+                    // Row Contents
+                    // ...
+                }),
 
-                })},
+                new Row(Modifier()
+                    .setColor(red)
+                    .setfixedHeight(100)
+                    .align(Align::CENTER_Y)
+                    .onClick(testRedRow), 
+                {
+                    // Row Contents
+                    // ...
+                }),
 
-                {new Row(Modifier()
-                    .setColor(red).setfixedHeight(100).align(Align::CENTER_Y).onClick(testRedRow), {
-                    
-                })},
+                new Row(Modifier()
+                    .setColor(green)
+                    .setfixedHeight(100)
+                    .align(Align::CENTER_Y)
+                    .onClick(testGreenRow), 
+                {
+                    // Row Contents
+                    // ...
+                }),
 
-                {new Row(Modifier()
-                    .setColor(green).setfixedHeight(100).align(Align::CENTER_Y).onClick(testGreenRow), {
-                    
-                })},
+                new Row(Modifier()
+                    .setColor(blue)
+                    .setfixedHeight(100)
+                    .align(Align::CENTER_Y)
+                    .onClick(testBlueRow), 
+                {
+                    // Row Contents
+                    // ...
+                }),
 
-                {new Row(Modifier()
-                    .setColor(blue).setfixedHeight(100).align(Align::CENTER_Y).onClick(testBlueRow), {
-                    
-                })},
-
-                {new Row(Modifier()
-                    .setColor(white).setfixedHeight(100).align(Align::CENTER_Y).onClick(testWhiteRow), {
-                    
-                })},
-            })},
-        })},
+                new Row(Modifier()
+                    .setColor(white)
+                    .setfixedHeight(100)
+                    .align(Align::CENTER_Y)
+                    .onClick(testWhiteRow), 
+                {
+                    // Row Contents
+                    // ...
+                }),
+            }),
+        }),
     });
 
     ui.addPage({myPage, "myPage2"});
-
-    // UILO ui("MY UI", {
-    //     {new Page({
-    //         {new Row(Modifier().setColor(sf::Color::Cyan), {
-    //             {new Column(Modifier().setColor(sf::Color::Red).setfixedWidth(100).align(Align::RIGHT), {
-
-    //             })},
-
-    //             {new Column(Modifier().setColor(sf::Color::Blue).setfixedWidth(100).align(Align::RIGHT), {
-
-    //             })},
-
-    //             {new Row(Modifier().setColor(green).align(Align::RIGHT), {
-    //                 {new Column(Modifier().setColor(white).setfixedWidth(100).align(Align::RIGHT), {
-
-    //                 })},
-    //             })}
-    //         })}
-    //     }), "My Page"}
-    // });
 
     while (ui.isRunning()) {
         ui.update();

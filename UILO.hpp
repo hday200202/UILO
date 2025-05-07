@@ -17,8 +17,12 @@
 #include <functional>
 #include <memory>
 #include <algorithm>
+#include <unordered_set>
 
 namespace uilo {
+
+static std::unordered_set<const void*> uilo_owned_pages;
+static std::unordered_set<const void*> uilo_owned_elements;
 
 // ---------------------------------------------------------------------------- Alignment
 enum class Align : uint8_t 
@@ -105,15 +109,27 @@ public:
     sf::RectangleShape m_bounds;
     Modifier m_modifier;
 
-    virtual ~Element() = default;
+    virtual ~Element() 
+    {
+        if (uilo_owned_elements.find(this) != uilo_owned_elements.end()) 
+        {
+            std::cerr << "[UILO] Error: Element already owned! Double-deletion or reuse detected.\n";
+            std::abort();
+        }
+    }    
+    
     virtual void update(sf::RectangleShape& parentBounds) {}
     virtual void render(sf::RenderTarget& target) {}
 
-    virtual void handleEvent(const sf::Event& event) {
-        if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
-            if (mousePressed->button == sf::Mouse::Button::Left) {
+    virtual void handleEvent(const sf::Event& event) 
+    {
+        if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) 
+        {
+            if (mousePressed->button == sf::Mouse::Button::Left) 
+            {
                 sf::Vector2f mousePos(mousePressed->position); // already window-local
-                if (m_bounds.getGlobalBounds().contains(mousePos)) {
+                if (m_bounds.getGlobalBounds().contains(mousePos)) 
+                {
                     if (m_modifier.getOnClick())
                         m_modifier.getOnClick()();
                 }
@@ -121,8 +137,10 @@ public:
         }
     }
 
-    virtual void checkClick(const sf::Vector2f& pos) {
-        if (m_bounds.getGlobalBounds().contains(pos)) {
+    virtual void checkClick(const sf::Vector2f& pos) 
+    {
+        if (m_bounds.getGlobalBounds().contains(pos)) 
+        {
             if (m_modifier.getOnClick())
                 m_modifier.getOnClick()();
         }
@@ -234,11 +252,27 @@ public:
             m_elements.push_back(e);
     }
 
-    ~Container()
+    ~Container() 
     {
-        for (auto& e : m_elements)
+        // If this container is owned by UILO, we should NOT be manually deleting it.
+        if (uilo_owned_elements.find(this) != uilo_owned_elements.end()) 
+        {
+            std::cerr << "[UILO] Error: Element already owned! Double-deletion or reuse detected.\n";
+            std::abort();
+        }
+    
+        // Check if children are owned before deleting them
+        for (auto& e : m_elements) 
+        {
+            if (uilo_owned_elements.find(e) != uilo_owned_elements.end()) 
+            {
+                std::cerr << "[UILO] Error: Element already owned! Double-deletion or reuse detected.\n";
+                std::abort();
+            }
+    
             delete e;
-    }
+        }
+    }    
 
     void addElement(Element* element) { m_elements.push_back(element); }
     void addElements(std::initializer_list<Element*> elements) 
@@ -247,12 +281,15 @@ public:
             m_elements.push_back(e);
     }
 
-    virtual void handleEvent(const sf::Event& event) override {
+    virtual void handleEvent(const sf::Event& event) override 
+    {
         for (auto& e : m_elements)
             e->handleEvent(event);
 
         Element::handleEvent(event);
     }
+
+    const std::vector<Element*>& getElements() const { return m_elements; }
     
 protected:
     std::vector<Element*> m_elements;
@@ -482,9 +519,38 @@ public:
     Page(std::initializer_list<Container*> containers = {})
     {
         m_bounds.setFillColor(sf::Color::Transparent);
-        for (const auto& c : containers)
+
+        for (const auto& c : containers) 
+        {
+            if (uilo_owned_elements.find(c) != uilo_owned_elements.end()) {
+                std::cerr << "[UILO] Error: Element already owned! Double-deletion or reuse detected.\n";
+                std::abort();
+            }
+            uilo_owned_elements.insert(c);
             m_containers.push_back(c);
+
+            // Register children of container
+            const auto& elements = c->getElements(); // you'll need to expose this
+            for (auto* e : elements) {
+                if (uilo_owned_elements.find(e) != uilo_owned_elements.end()) {
+                    std::cerr << "[UILO] Error: Element already owned! Double-deletion or reuse detected.\n";
+                    std::abort();
+                }
+                uilo_owned_elements.insert(e);
+            }
+        }
     }
+
+
+    ~Page() 
+    {
+        for (auto& c : m_containers) 
+        {
+            delete c;
+            uilo_owned_elements.erase(c);
+        }  
+    }
+    
 
     void update(const sf::RectangleShape& parentBounds)
     {
@@ -580,8 +646,13 @@ public:
 
         if (m_window.isOpen()) m_running = true;
 
-        for (const auto& [page, name] : pages)
+        for (auto& [page, name] : pages)
         {
+            if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+                std::cerr << "[UILO] Error: Page already owned! Double-deletion or reuse detected.\n";
+                std::abort();
+            }
+            uilo_owned_pages.insert(page);
             m_pages[name] = page;
             if (!m_currentPage) m_currentPage = page;
         }
@@ -591,8 +662,10 @@ public:
 
     ~UILO() 
     {
-        for (auto& [name, page] : m_pages)
+        for (auto& [name, page] : m_pages) {
             delete page;
+            uilo_owned_pages.erase(page);
+        }
     }
 
     void update() 
@@ -637,18 +710,36 @@ public:
     void setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
     bool isRunning() const { return m_running; }
 
-    void addPage(std::pair<Page*, std::string> newPage) 
+    void addPage(std::pair<Page*&, std::string> newPage)
     {
-        const auto& [page, name] = newPage;
+        Page*& page = newPage.first;
+        const std::string& name = newPage.second;
+
+        if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+            std::cerr << "[UILO] Error: Page already owned! Double-deletion or reuse detected.\n";
+            std::abort();
+        }
+        uilo_owned_pages.insert(page);
         m_pages[name] = page;
+        if (!m_currentPage) m_currentPage = page;
+
+        // Null the user's pointer to enforce transfer
+        page = nullptr;
     }
 
-    void addPages(std::initializer_list<std::pair<Page*, std::string>> pages) 
+    void addPages(std::initializer_list<std::pair<Page*&, std::string>> pages)
     {
         for (const auto& [page, name] : pages)
         {
+            if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+                std::cerr << "[UILO] Error: Page already owned! Double-deletion or reuse detected.\n";
+                std::abort();
+            }
+            uilo_owned_pages.insert(page);
             m_pages[name] = page;
             if (!m_currentPage) m_currentPage = page;
+
+            page = nullptr;
         }
     }
 
@@ -667,15 +758,14 @@ private:
     sf::VideoMode m_defScreenRes;
     sf::View m_defaultView;
     sf::RectangleShape m_bounds;
-
     std::string m_windowTitle = "";
+
     std::unordered_map<std::string, Page*> m_pages;
     Page* m_currentPage = nullptr;
 
     bool m_running = false;
     bool m_shouldUpdate = false;
-    const unsigned int m_minWindowWidth = 800;
-    const unsigned int m_minWindowHeight = 600;
+
     sf::Vector2u m_lastWindowSize;
     std::optional<sf::Vector2f> m_clickPosition;
 
@@ -697,10 +787,8 @@ private:
                 m_shouldUpdate = true;
             }
 
-            if (event->is<sf::Event::Resized>()) 
-            {
+            if (event->is<sf::Event::Resized>())
                 m_shouldUpdate = true;
-            }
         }
     }
 };
