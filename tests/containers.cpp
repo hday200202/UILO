@@ -45,7 +45,7 @@ int main() {
 
     UILO ui ("My UI", {
         {new Page({
-            {new Row(Modifier(), {
+            {new Row(Modifier().setColor(sf::Color(25, 25, 45, 255)), {
 
                 {new Column(Modifier()
                     .setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::LEFT), {
@@ -76,6 +76,8 @@ int main() {
                     })},
                 })},
 
+                {new Column(Modifier().setfixedWidth(4).setColor(sf::Color(40, 40, 60, 255)), {})},
+
                 myRow,
             })}
         }), "myPage"}
@@ -88,7 +90,7 @@ int main() {
                 .setColor(sf::Color(25, 25, 45, 255)).setfixedWidth(100).align(Align::LEFT), {
 
                 {new Row(Modifier()
-                    .setColor(sf::Color::Black).align(Align::TOP).setfixedHeight(100).onClick([&ui]() { ui.switchToPage("myPage"); }), {
+                    .setColor(sf::Color::Black).align(Align::TOP).setfixedHeight(100).onClick([&]() { ui.switchToPage("myPage"); }), {
 
                 })},
 
