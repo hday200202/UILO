@@ -1,5 +1,3 @@
----
-
 # UILO Design Overview
 
 * **Project Name:** UILO (pronounced *wee-low*)
@@ -34,10 +32,10 @@
 ```cpp
 UILO ui("My UI", {{
     new Page({
-        
+
         // Page Containers
         // ...
-
+        
         new Row
         (
             Modifier()
