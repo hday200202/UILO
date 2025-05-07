@@ -1,3 +1,4 @@
 /.vscode
 UILO_OLD.hpp
 /tests/bin
+tests/valgrind.txt

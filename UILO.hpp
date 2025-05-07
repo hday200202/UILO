@@ -22,15 +22,6 @@
 namespace uilo {
 
 // ---------------------------------------------------------------------------- //
-// Global Ownership Sets
-// ---------------------------------------------------------------------------- //
-static std::unordered_set<const void*> uilo_owned_pages;
-static std::unordered_set<const void*> uilo_owned_elements;
-static bool time_to_delete = false;
-
-
-
-// ---------------------------------------------------------------------------- //
 // Alignment Enum
 // ---------------------------------------------------------------------------- //
 enum class Align : uint8_t {
@@ -66,6 +57,14 @@ class Row;
 class Column;
 class Page;
 class UILO;
+
+
+// ---------------------------------------------------------------------------- //
+// Global Ownership Sets
+// ---------------------------------------------------------------------------- //
+static std::unordered_set<Page*> uilo_owned_pages;
+static std::unordered_set<Element*> uilo_owned_elements;
+static bool time_to_delete = false;
 
 
 
@@ -705,6 +704,7 @@ private:
             if (event->is<sf::Event::Closed>()) {
                 m_window.close();
                 m_running = false;
+                shutdown();
             }
 
             if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) {
@@ -718,6 +718,26 @@ private:
                 m_shouldUpdate = true;
         }
     }
+
+    void shutdown() {
+        time_to_delete = true;
+    
+        for (auto& [name, page] : m_pages) {
+            if (uilo_owned_pages.count(page)) {
+                delete page;
+                uilo_owned_pages.erase(page);
+            }
+        }
+    
+        m_pages.clear();
+    
+        for (auto* e : uilo_owned_elements) {
+            delete e;
+        }
+    
+        uilo_owned_elements.clear();
+        time_to_delete = false;
+    }    
 };
 
 } // !namespace uilo
