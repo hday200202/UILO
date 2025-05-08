@@ -129,6 +129,10 @@ public:
     sf::RectangleShape m_bounds;
     Modifier m_modifier;
 
+    Element() {
+        uilo_owned_elements.insert(this);
+    }
+
     virtual ~Element() {
         if (uilo_owned_elements.find(this) != uilo_owned_elements.end() && !time_to_delete) {
             std::cerr << "[UILO] Error: Attempted to delete a UILO-owned element directly.\n";
@@ -213,12 +217,16 @@ public:
     Container(std::initializer_list<Element*> elements = {}) {
         for (auto& e : elements)
             m_elements.push_back(e);
+
+        uilo_owned_elements.insert(this);
     }
 
     Container(Modifier modifier = default_mod, std::initializer_list<Element*> elements = {}) {
         m_modifier = modifier;
         for (auto& e : elements)
             m_elements.push_back(e);
+
+        uilo_owned_elements.insert(this);
     }
 
     ~Container() {
@@ -226,16 +234,7 @@ public:
             std::cerr << "[UILO] Error: Attempted to delete a UILO-owned container directly.\n";
             std::abort();
         }
-
-        for (auto& e : m_elements) {
-            if (uilo_owned_elements.find(e) != uilo_owned_elements.end())
-                uilo_owned_elements.erase(e);
-    
-            delete e;
-        }
-
-        uilo_owned_elements.erase(this);
-    }    
+    }
 
     void addElement(Element* element) {
         m_elements.push_back(element);
@@ -268,6 +267,13 @@ protected:
 class Row : public Container {
 public:
     using Container::Container;
+
+    ~Row() {
+        if (uilo_owned_elements.find(this) != uilo_owned_elements.end() && !time_to_delete) {
+            std::cerr << "[UILO] Error: Attempted to delete a UILO-owned row directly.\n";
+            std::abort();
+        }
+    }
 
     void update(sf::RectangleShape& parentBounds) override {
         alignResize(parentBounds);
@@ -358,6 +364,13 @@ public:
 class Column : public Container {
 public:
     using Container::Container;
+
+    ~Column() {
+        if (uilo_owned_elements.find(this) != uilo_owned_elements.end() && !time_to_delete) {
+            std::cerr << "[UILO] Error: Attempted to delete a UILO-owned column directly.\n";
+            std::abort();
+        }
+    }
 
     void update(sf::RectangleShape& parentBounds) override {
         alignResize(parentBounds);
@@ -456,6 +469,30 @@ private:
 
 
 // ---------------------------------------------------------------------------- //
+// Spacer Element (WIP / Placeholder)
+// ---------------------------------------------------------------------------- //
+class Spacer : public Element {
+public:
+    Spacer(Modifier& modifier) { m_modifier = modifier; uilo_owned_elements.insert(this); }
+
+    ~Spacer() override {
+        if (uilo_owned_elements.find(this) != uilo_owned_elements.end() && !time_to_delete) {
+            std::cerr << "[UILO] Error: Attempted to delete a UILO-owned spacer directly.\n";
+            std::abort();
+        }
+    }
+    
+    void update(sf::RectangleShape& parentBounds) override {
+        m_bounds.setFillColor(sf::Color::Transparent);
+
+        alignResize(parentBounds);
+        applyModifiers();
+    }
+};
+
+
+
+// ---------------------------------------------------------------------------- //
 // Page View
 // ---------------------------------------------------------------------------- //
 class Page {
@@ -465,23 +502,10 @@ public:
     Page(std::initializer_list<Container*> containers = {}) {
         m_bounds.setFillColor(sf::Color::Transparent);
 
-        for (const auto& c : containers) {
-            if (uilo_owned_elements.find(c) != uilo_owned_elements.end()) {
-                std::cerr << "[UILO] Error: Element already owned! Reuse detected.\n";
-                std::abort();
-            }
-            uilo_owned_elements.insert(c);
+        for (const auto& c : containers) 
             m_containers.push_back(c);
 
-            const auto& elements = c->getElements();
-            for (auto* e : elements) {
-                if (uilo_owned_elements.find(e) != uilo_owned_elements.end()) {
-                    std::cerr << "[UILO] Error: Element already owned! Reuse detected.\n";
-                    std::abort();
-                }
-                uilo_owned_elements.insert(e);
-            }
-        }
+        uilo_owned_pages.insert(this);
     }
 
     ~Page() {
@@ -489,15 +513,6 @@ public:
             std::cerr << "[UILO] Error: Attempted to delete a UILO-owned page directly.\n";
             std::abort();
         }
-    
-        for (auto& c : m_containers) {
-            if (uilo_owned_elements.find(c) != uilo_owned_elements.end())
-                uilo_owned_elements.erase(c);
-
-            delete c;
-        }
-
-        uilo_owned_pages.erase(this);
     }
 
     void update(const sf::RectangleShape& parentBounds) {
@@ -586,10 +601,8 @@ public:
 
         for (auto& [page, name] : pages) {
             if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
-                std::cerr << "[UILO] Error: Page already owned! Reuse detected.\n";
-                std::abort();
+                uilo_owned_pages.insert(page);
             }
-            uilo_owned_pages.insert(page);
             m_pages[name] = page;
             if (!m_currentPage) m_currentPage = page;
         }
@@ -652,22 +665,18 @@ public:
         Page*& page = newPage.first;
         const std::string& name = newPage.second;
 
-        if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
-            std::cerr << "[UILO] Error: Page already owned! Reuse detected.\n";
-            std::abort();
+        if (uilo_owned_pages.find(page) == uilo_owned_pages.end()) {
+            uilo_owned_pages.insert(page);
         }
-        uilo_owned_pages.insert(page);
         m_pages[name] = page;
         if (!m_currentPage) m_currentPage = page;
     }
 
     void addPages(std::initializer_list<std::pair<Page*&, std::string>> pages) {
         for (const auto& [page, name] : pages) {
-            if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
-                std::cerr << "[UILO] Error: Page already owned! Reuse detected.\n";
-                std::abort();
+            if (uilo_owned_pages.find(page) == uilo_owned_pages.end()) {
+                uilo_owned_pages.insert(page);
             }
-            uilo_owned_pages.insert(page);
             m_pages[name] = page;
             if (!m_currentPage) m_currentPage = page;
         }
@@ -721,7 +730,9 @@ private:
 
     void shutdown() {
         time_to_delete = true;
-    
+        for (auto& e : uilo_owned_elements) {
+            delete e;
+        }
         for (auto& [name, page] : m_pages) {
             if (uilo_owned_pages.count(page)) {
                 delete page;
@@ -731,9 +742,9 @@ private:
     
         m_pages.clear();
     
-        for (auto* e : uilo_owned_elements) {
-            delete e;
-        }
+        // for (auto* e : uilo_owned_elements) {
+        //     delete e;
+        // }
     
         uilo_owned_elements.clear();
         time_to_delete = false;

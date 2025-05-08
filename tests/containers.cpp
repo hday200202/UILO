@@ -19,6 +19,9 @@ void testBlackRow() { std::cout << "Black Row" << std::endl; }
 
 int main() {
 
+    Spacer* myRowSpacer = new Spacer(Modifier().align(Align::CENTER_X).setfixedWidth(100));
+    Spacer* myColumnSpacer = new Spacer(Modifier().align(Align::CENTER_Y).setfixedHeight(100));
+
     Row* myRow = new Row
     (
         Modifier()
@@ -38,6 +41,8 @@ int main() {
             // Column Contents
             // ...
         }),
+
+        myRowSpacer,
         
         new Column
         (
@@ -51,6 +56,8 @@ int main() {
             // ...
         }),
 
+        myRowSpacer,
+
         new Column
         (
             Modifier()
@@ -62,6 +69,8 @@ int main() {
             // Column Contents
             // ...
         }),
+
+        myRowSpacer,
 
         new Column
         (
@@ -116,6 +125,8 @@ int main() {
                         // ...
                     }),
 
+                    myColumnSpacer,
+
                     new Row
                     (
                         Modifier()
@@ -128,6 +139,8 @@ int main() {
                         // ...
                     }),
 
+                    myColumnSpacer,
+
                     new Row
                     (
                         Modifier()
@@ -139,6 +152,8 @@ int main() {
                         // Row Contents
                         // ...
                     }),
+
+                    myColumnSpacer,
 
                     new Row
                     (
@@ -234,6 +249,8 @@ int main() {
 
     // delete myRow;
     // delete myPage2;
+    // delete myRowSpacer;
+    // delete myColumnSpacer;
 
     while (ui.isRunning()) {
         ui.update();
