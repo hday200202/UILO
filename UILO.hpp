@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <thread>
+#include <future>
 
 namespace uilo {
 
@@ -278,54 +279,56 @@ public:
     void update(sf::RectangleShape& parentBounds) override {
         alignResize(parentBounds);
         applyModifiers();
-
+    
         std::vector<Element*> leftElements;
         std::vector<Element*> centerElements;
         std::vector<Element*> rightElements;
-
+    
         for (auto& e : m_elements) {
             auto align = e->m_modifier.getAlignment();
             if      (hasAlign(align, Align::LEFT))      leftElements.push_back(e);
             else if (hasAlign(align, Align::RIGHT))     rightElements.push_back(e);
             else if (hasAlign(align, Align::CENTER_X))  centerElements.push_back(e);
-            else                                        leftElements.push_back(e); // default
+            else                                        leftElements.push_back(e);
         }
-
+    
+        auto asyncUpdate = [](std::vector<Element*>& group, sf::RectangleShape& bounds) {
+            std::vector<std::future<void>> futures;
+            for (auto* e : group) {
+                futures.emplace_back(std::async(std::launch::async, [e, &bounds]() {
+                    e->update(bounds);
+                }));
+            }
+            for (auto& f : futures) f.get();
+        };
+        
+        auto futLeft   = std::async(std::launch::async, asyncUpdate, std::ref(leftElements), std::ref(m_bounds));
+        auto futCenter = std::async(std::launch::async, asyncUpdate, std::ref(centerElements), std::ref(m_bounds));
+        auto futRight  = std::async(std::launch::async, asyncUpdate, std::ref(rightElements), std::ref(m_bounds));        
+        
+    
+        futLeft.get();
+        futCenter.get();
+        futRight.get();
+    
         float xLeft = m_bounds.getPosition().x;
         for (auto& e : leftElements) {
-            sf::RectangleShape subBounds;
-            subBounds.setPosition({ xLeft, m_bounds.getPosition().y });
-            subBounds.setSize({
-                m_bounds.getSize().x - (xLeft - m_bounds.getPosition().x),
-                m_bounds.getSize().y
-            });
-
-            e->update(subBounds);
             e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y });
             xLeft += e->m_bounds.getSize().x;
         }
-
+    
         float centerTotalWidth = 0.f;
-        for (auto& e : centerElements) {
-            e->update(m_bounds);
+        for (auto& e : centerElements)
             centerTotalWidth += e->m_bounds.getSize().x;
-        }
-
+    
         float xCenter = m_bounds.getPosition().x + (m_bounds.getSize().x / 2.f) - (centerTotalWidth / 2.f);
         for (auto& e : centerElements) {
             e->m_bounds.setPosition({ xCenter, m_bounds.getPosition().y });
             xCenter += e->m_bounds.getSize().x;
         }
-
+    
         float xRight = m_bounds.getPosition().x + m_bounds.getSize().x;
         for (auto& e : rightElements) {
-            float maxWidth = xRight - m_bounds.getPosition().x;
-
-            sf::RectangleShape subBounds;
-            subBounds.setPosition({ m_bounds.getPosition().x, m_bounds.getPosition().y });
-            subBounds.setSize({ maxWidth, m_bounds.getSize().y });
-
-            e->update(subBounds);
             xRight -= e->m_bounds.getSize().x;
             e->m_bounds.setPosition({ xRight, m_bounds.getPosition().y });
         }
@@ -388,25 +391,33 @@ public:
             else                                          topElements.push_back(e); // default
         }
 
+        auto asyncUpdate = [](std::vector<Element*>& group, sf::RectangleShape& bounds) {
+            std::vector<std::future<void>> futures;
+            for (auto* e : group) {
+                futures.emplace_back(std::async(std::launch::async, [e, &bounds]() {
+                    e->update(bounds);
+                }));
+            }
+            for (auto& f : futures) f.get();
+        };
+
+        auto futTop    = std::async(std::launch::async, asyncUpdate, std::ref(topElements), std::ref(m_bounds));
+        auto futCenter = std::async(std::launch::async, asyncUpdate, std::ref(centerElements), std::ref(m_bounds));
+        auto futBottom = std::async(std::launch::async, asyncUpdate, std::ref(bottomElements), std::ref(m_bounds));
+
+        futTop.get();
+        futCenter.get();
+        futBottom.get();
+
         float yTop = m_bounds.getPosition().y;
         for (auto& e : topElements) {
-            sf::RectangleShape subBounds;
-            subBounds.setPosition({ m_bounds.getPosition().x, yTop });
-            subBounds.setSize({
-                m_bounds.getSize().x,
-                m_bounds.getSize().y - (yTop - m_bounds.getPosition().y)
-            });
-
-            e->update(subBounds);
             e->m_bounds.setPosition({ m_bounds.getPosition().x, yTop });
             yTop += e->m_bounds.getSize().y;
         }
 
         float centerTotalHeight = 0.f;
-        for (auto& e : centerElements) {
-            e->update(m_bounds);
+        for (auto& e : centerElements)
             centerTotalHeight += e->m_bounds.getSize().y;
-        }
 
         float yCenter = m_bounds.getPosition().y + (m_bounds.getSize().y / 2.f) - (centerTotalHeight / 2.f);
         for (auto& e : centerElements) {
@@ -416,17 +427,11 @@ public:
 
         float yBottom = m_bounds.getPosition().y + m_bounds.getSize().y;
         for (auto& e : bottomElements) {
-            float maxHeight = yBottom - m_bounds.getPosition().y;
-
-            sf::RectangleShape subBounds;
-            subBounds.setPosition({ m_bounds.getPosition().x, m_bounds.getPosition().y });
-            subBounds.setSize({ m_bounds.getSize().x, maxHeight });
-
-            e->update(subBounds);
             yBottom -= e->m_bounds.getSize().y;
             e->m_bounds.setPosition({ m_bounds.getPosition().x, yBottom });
         }
     }
+
 
     void render(sf::RenderTarget& target) override {
         target.draw(m_bounds);
@@ -517,9 +522,17 @@ public:
 
     void update(const sf::RectangleShape& parentBounds) {
         m_bounds = parentBounds;
-
-        for (auto& c : m_containers)
-            c->update(m_bounds);
+    
+        std::vector<std::future<void>> futures;
+    
+        for (auto& c : m_containers) {
+            futures.emplace_back(std::async(std::launch::async, [c, this]() {
+                c->update(m_bounds);
+            }));
+        }
+    
+        for (auto& f : futures)
+            f.get();
     }
 
     void render(sf::RenderTarget& target) {
