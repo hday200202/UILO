@@ -25,8 +25,8 @@ int main() {
     // window.create(sf::VideoMode({800, 600}), "Test User Window", sf::Style::Titlebar | sf::Style::Close | sf::Style::Resize);
     // window.setView(windowView);
 
-    Spacer* myRowSpacer = new Spacer(Modifier().align(Align::CENTER_X).setfixedWidth(100));
-    Spacer* myColumnSpacer = new Spacer(Modifier().align(Align::CENTER_Y).setfixedHeight(100));
+    Spacer* myRowSpacer = new Spacer(Modifier().align(Align::CENTER_X).setfixedWidth(25));
+    Spacer* myColumnSpacer = new Spacer(Modifier().align(Align::CENTER_Y).setfixedHeight(25));
 
     Row* myRow = new Row
     (
