@@ -40,7 +40,7 @@ int main() {
         (
             Modifier()
             .setColor(red)
-            .align(Align::CENTER_X)
+            .align(Align::LEFT)
             .setfixedWidth(100)
             .onClick(testRedColumn), 
         {
