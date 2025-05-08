@@ -15,9 +15,9 @@
 #include <vector>
 #include <string>
 #include <functional>
-#include <memory>
-#include <algorithm>
 #include <unordered_set>
+#include <chrono>
+#include <thread>
 
 namespace uilo {
 
@@ -636,6 +636,9 @@ public:
             m_currentPage->update(m_bounds);
 
             m_lastWindowSize = currentSize;
+        }
+        else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
         if (m_clickPosition) {
