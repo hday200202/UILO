@@ -18,6 +18,12 @@ void testWhiteRow() { std::cout << "White Row" << std::endl; }
 void testBlackRow() { std::cout << "Black Row" << std::endl; }
 
 int main() {
+    // sf::RenderWindow window;
+    // sf::View windowView;
+
+    // windowView.setSize({800, 600});
+    // window.create(sf::VideoMode({800, 600}), "Test User Window", sf::Style::Titlebar | sf::Style::Close | sf::Style::Resize);
+    // window.setView(windowView);
 
     Spacer* myRowSpacer = new Spacer(Modifier().align(Align::CENTER_X).setfixedWidth(100));
     Spacer* myColumnSpacer = new Spacer(Modifier().align(Align::CENTER_Y).setfixedHeight(100));
@@ -85,7 +91,7 @@ int main() {
         }),
     });
 
-    UILO ui ("My UI", {{
+    UILO ui (/*window, windowView*/"TEST", {{
         new Page ({
             new Row
             (

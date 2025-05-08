@@ -567,14 +567,7 @@ private:
 class UILO {
 public:
     UILO() {
-        m_defScreenRes = sf::VideoMode::getDesktopMode();
-        m_defScreenRes.size.x /= 2;
-        m_defScreenRes.size.y /= 2;
-
-        m_defaultView.setSize({
-            (float)m_defScreenRes.size.x,
-            (float)m_defScreenRes.size.y
-        });
+        initDefaultView();
 
         m_window.create(
             m_defScreenRes, m_windowTitle,
@@ -589,18 +582,9 @@ public:
         m_bounds.setFillColor(sf::Color::Transparent);
     }
 
-    UILO(const std::string& windowTitle = "",
-            std::initializer_list<std::pair<Page*, std::string>> pages = {})
-    : m_windowTitle(windowTitle)
-    {
-        m_defScreenRes = sf::VideoMode::getDesktopMode();
-        m_defScreenRes.size.x /= 2;
-        m_defScreenRes.size.y /= 2;
-
-        m_defaultView.setSize({
-            (float)m_defScreenRes.size.x,
-            (float)m_defScreenRes.size.y
-        });
+    UILO(const std::string& windowTitle = "", std::initializer_list<std::pair<Page*, std::string>> pages = {})
+    : m_windowTitle(windowTitle) {
+        initDefaultView();
 
         m_window.create(
             m_defScreenRes, m_windowTitle,
@@ -611,6 +595,27 @@ public:
         m_window.setView(m_defaultView);
 
         if (m_window.isOpen()) m_running = true;
+
+        for (auto& [page, name] : pages) {
+            if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+                uilo_owned_pages.insert(page);
+            }
+            m_pages[name] = page;
+            if (!m_currentPage) m_currentPage = page;
+        }
+
+        m_bounds.setFillColor(sf::Color::Transparent);
+    }
+
+    UILO(sf::RenderWindow& userWindow, sf::View& windowView, std::initializer_list<std::pair<Page*, std::string>> pages = {}) {
+        m_defaultView = windowView;
+        m_userWindow = &userWindow;
+        m_userWindow->setView(m_defaultView);
+
+        if (m_userWindow->isOpen()) {
+            m_running = true;
+            m_windowOwned = false;
+        }
 
         for (auto& [page, name] : pages) {
             if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
@@ -635,6 +640,9 @@ public:
     void update() {
         pollEvents();
 
+        if (!m_windowOwned)
+            return;
+
         sf::Vector2u currentSize = m_window.getSize();
         if (m_shouldUpdate) {
             m_defaultView.setSize({ (float)currentSize.x, (float)currentSize.y });
@@ -647,12 +655,39 @@ public:
 
             m_window.setView(m_defaultView);
             m_currentPage->update(m_bounds);
-
             m_lastWindowSize = currentSize;
         }
-        else {
+        else
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        if (m_clickPosition) {
+            m_currentPage->dispatchClick(*m_clickPosition);
+            m_clickPosition.reset();
         }
+    }
+
+    void update(sf::View& windowView) {
+        pollEvents();
+
+        if (m_windowOwned)
+            return;
+
+        sf::Vector2u currentSize = m_userWindow->getSize();
+        if (m_shouldUpdate) {
+            windowView.setSize({ (float)currentSize.x, (float)currentSize.y });
+
+            m_bounds.setSize(windowView.getSize());
+            m_bounds.setPosition({
+                windowView.getCenter().x - (windowView.getSize().x / 2),
+                windowView.getCenter().y - (windowView.getSize().y / 2)
+            });
+
+            m_userWindow->setView(windowView);
+            m_currentPage->update(m_bounds);
+            m_lastWindowSize = currentSize;
+        }
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
         if (m_clickPosition) {
             m_currentPage->dispatchClick(*m_clickPosition);
@@ -661,12 +696,17 @@ public:
     }
 
     void render() {
-        if (m_shouldUpdate) {
-            m_window.clear(sf::Color::Black);
-            m_currentPage->render(m_window);
-            m_window.display();
-            m_shouldUpdate = false;
+        if (m_windowOwned) {
+            if (m_shouldUpdate) {
+                m_window.clear(sf::Color::Black);
+                m_currentPage->render(m_window);
+                m_window.display();
+            }
         }
+        else
+            m_currentPage->render(*m_userWindow);
+
+        m_shouldUpdate = false;
     }
 
     void setTitle(const std::string& newTitle) {
@@ -710,6 +750,8 @@ public:
 
 private:
     sf::RenderWindow m_window;
+    sf::RenderWindow* m_userWindow = nullptr;
+    bool m_windowOwned = true;
     sf::VideoMode m_defScreenRes;
     sf::View m_defaultView;
     sf::RectangleShape m_bounds;
@@ -725,16 +767,22 @@ private:
     std::optional<sf::Vector2f> m_clickPosition;
 
     void pollEvents() {
-        while (const auto event = m_window.pollEvent()) {
+        while (const auto event = (m_windowOwned) ?  m_window.pollEvent() : m_userWindow->pollEvent()) {
+            if (!m_windowOwned && !m_userWindow)
+                return;
+
             if (event->is<sf::Event::Closed>()) {
-                m_window.close();
+                if (m_windowOwned) m_window.close();
+                else m_userWindow->close();
                 m_running = false;
                 shutdown();
             }
 
             if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) {
-                if (mousePressed->button == sf::Mouse::Button::Left)
-                    m_clickPosition = m_window.mapPixelToCoords(mousePressed->position);
+                if (mousePressed->button == sf::Mouse::Button::Left) {
+                    if (m_windowOwned) m_clickPosition = m_window.mapPixelToCoords(mousePressed->position);
+                    else m_clickPosition = m_userWindow->mapPixelToCoords(mousePressed->position);
+                }
 
                 m_shouldUpdate = true;
             }
@@ -742,6 +790,23 @@ private:
             if (event->is<sf::Event::Resized>())
                 m_shouldUpdate = true;
         }
+    }
+
+    void initDefaultView() {
+        m_defScreenRes = sf::VideoMode::getDesktopMode();
+        m_defScreenRes.size.x /= 2;
+        m_defScreenRes.size.y /= 2;
+    
+        m_defaultView.setSize({
+            (float)m_defScreenRes.size.x,
+            (float)m_defScreenRes.size.y
+        });
+    }
+
+    void setView(const sf::View& view) {
+        m_defaultView = view;
+        if (!m_windowOwned)
+            m_userWindow->setView(m_defaultView);
     }
 
     void shutdown() {
@@ -757,11 +822,6 @@ private:
         }
     
         m_pages.clear();
-    
-        // for (auto* e : uilo_owned_elements) {
-        //     delete e;
-        // }
-    
         uilo_owned_elements.clear();
         time_to_delete = false;
     }    
