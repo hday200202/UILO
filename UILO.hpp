@@ -279,56 +279,54 @@ public:
     void update(sf::RectangleShape& parentBounds) override {
         alignResize(parentBounds);
         applyModifiers();
-    
+
         std::vector<Element*> leftElements;
         std::vector<Element*> centerElements;
         std::vector<Element*> rightElements;
-    
+
         for (auto& e : m_elements) {
             auto align = e->m_modifier.getAlignment();
             if      (hasAlign(align, Align::LEFT))      leftElements.push_back(e);
             else if (hasAlign(align, Align::RIGHT))     rightElements.push_back(e);
             else if (hasAlign(align, Align::CENTER_X))  centerElements.push_back(e);
-            else                                        leftElements.push_back(e);
+            else                                        leftElements.push_back(e); // default
         }
-    
-        auto asyncUpdate = [](std::vector<Element*>& group, sf::RectangleShape& bounds) {
-            std::vector<std::future<void>> futures;
-            for (auto* e : group) {
-                futures.emplace_back(std::async(std::launch::async, [e, &bounds]() {
-                    e->update(bounds);
-                }));
-            }
-            for (auto& f : futures) f.get();
-        };
-        
-        auto futLeft   = std::async(std::launch::async, asyncUpdate, std::ref(leftElements), std::ref(m_bounds));
-        auto futCenter = std::async(std::launch::async, asyncUpdate, std::ref(centerElements), std::ref(m_bounds));
-        auto futRight  = std::async(std::launch::async, asyncUpdate, std::ref(rightElements), std::ref(m_bounds));        
-        
-    
-        futLeft.get();
-        futCenter.get();
-        futRight.get();
-    
+
         float xLeft = m_bounds.getPosition().x;
         for (auto& e : leftElements) {
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ xLeft, m_bounds.getPosition().y });
+            subBounds.setSize({
+                m_bounds.getSize().x - (xLeft - m_bounds.getPosition().x),
+                m_bounds.getSize().y
+            });
+
+            e->update(subBounds);
             e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y });
             xLeft += e->m_bounds.getSize().x;
         }
-    
+
         float centerTotalWidth = 0.f;
-        for (auto& e : centerElements)
+        for (auto& e : centerElements) {
+            e->update(m_bounds);
             centerTotalWidth += e->m_bounds.getSize().x;
-    
+        }
+
         float xCenter = m_bounds.getPosition().x + (m_bounds.getSize().x / 2.f) - (centerTotalWidth / 2.f);
         for (auto& e : centerElements) {
             e->m_bounds.setPosition({ xCenter, m_bounds.getPosition().y });
             xCenter += e->m_bounds.getSize().x;
         }
-    
+
         float xRight = m_bounds.getPosition().x + m_bounds.getSize().x;
         for (auto& e : rightElements) {
+            float maxWidth = xRight - m_bounds.getPosition().x;
+
+            sf::RectangleShape subBounds;
+            subBounds.setPosition({ m_bounds.getPosition().x, m_bounds.getPosition().y });
+            subBounds.setSize({ maxWidth, m_bounds.getSize().y });
+
+            e->update(subBounds);
             xRight -= e->m_bounds.getSize().x;
             e->m_bounds.setPosition({ xRight, m_bounds.getPosition().y });
         }
