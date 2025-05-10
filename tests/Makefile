@@ -12,4 +12,10 @@ containers:
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE) -O3 -o bin/containers containers.cpp $(LDFLAGS)
 	./bin/containers
 
+buttons:
+	clear
+	@echo "building buttons.cpp..."
+	$(CXX) $(CXXFLAGS) -I$(INCLUDE) -O3 -o bin/buttons buttons.cpp $(LDFLAGS)
+	./bin/buttons
+
 clean:
