@@ -1,12 +1,25 @@
 #include "UILO.hpp"
 using namespace uilo;
 
+sf::Color sideBarColor = sf::Color(57, 62, 70, 255);
+sf::Color bottomBarColor = sf::Color(34, 40, 49, 255);
+sf::Color backGroundColor = sf::Color(34, 40, 49, 255);
+sf::Color buttonColor = sf::Color(148, 137, 121, 255);
+
 int main() {
     auto makeCYSpacer = []() {
         return spacer(
             Modifier()
                 .setfixedHeight(12.5f)
                 .align(Align::CENTER_Y)
+        );
+    };
+
+    auto makeCXSpacer = []() {
+        return spacer(
+            Modifier()
+                .setfixedWidth(12.5f)
+                .align(Align::CENTER_X)
         );
     };
 
@@ -39,13 +52,13 @@ int main() {
                     Modifier()
                         .align(Align::RIGHT)
                         .setWidth(1.f)  // ✅ FIXED WIDTH REQUIRED for Align::RIGHT
-                        .setColor(sf::Color(240, 240, 240)),
+                        .setColor(backGroundColor),
                 contains{
 
                     row(
                         Modifier()
                             .align(Align::BOTTOM)
-                            .setColor(sf::Color(220, 220, 220))
+                            .setColor(bottomBarColor)
                             .setfixedHeight(100),
                     contains{
 
@@ -54,47 +67,55 @@ int main() {
                                 .align(Align::CENTER_X | Align::CENTER_Y)
                                 .setfixedWidth(75)
                                 .setfixedHeight(75)
-                                .setColor(sf::Color::Red)
+                                .setColor(buttonColor)
                                 .onClick([](){ std::cout << "Red\n"; }),
                             ButtonStyle::Pill
                         ),
 
+                        makeCXSpacer(),
+
                         button(
                             Modifier()
                                 .align(Align::CENTER_X | Align::CENTER_Y)
                                 .setfixedWidth(75)
                                 .setfixedHeight(75)
-                                .setColor(sf::Color::Green)
+                                .setColor(buttonColor)
                                 .onClick([](){ std::cout << "Green\n"; }),
                             ButtonStyle::Pill
                         ),
 
+                        makeCXSpacer(),
+
                         button(
                             Modifier()
                                 .align(Align::CENTER_X | Align::CENTER_Y)
                                 .setfixedWidth(75)
                                 .setfixedHeight(75)
-                                .setColor(sf::Color::Blue)
+                                .setColor(buttonColor)
                                 .onClick([](){ std::cout << "Blue\n"; }),
                             ButtonStyle::Pill
                         ),
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(sf::Color::Black)
-                                .onClick([](){ std::cout << "Black\n"; }),
-                            ButtonStyle::Pill
-                        ),
+                        makeCXSpacer(),
 
                         button(
                             Modifier()
                                 .align(Align::CENTER_X | Align::CENTER_Y)
                                 .setfixedWidth(75)
                                 .setfixedHeight(75)
-                                .setColor(sf::Color::White)
+                                .setColor(buttonColor)
+                                .onClick([](){ std::cout << "Black\n"; }),
+                            ButtonStyle::Pill
+                        ),
+
+                        makeCXSpacer(),
+
+                        button(
+                            Modifier()
+                                .align(Align::CENTER_X | Align::CENTER_Y)
+                                .setfixedWidth(75)
+                                .setfixedHeight(75)
+                                .setColor(buttonColor)
                                 .onClick([](){ std::cout << "White\n"; }),
                             ButtonStyle::Pill
                         )
@@ -106,54 +127,41 @@ int main() {
                     Modifier()
                         .align(Align::LEFT)
                         .setfixedWidth(100)
-                        .setColor(sf::Color::White),
+                        .setColor(sideBarColor),
                 contains{
 
                     makeTSpacer(),
 
                     button(
                         Modifier()
-                            .align(Align::CENTER_X | Align::CENTER_Y)
+                            .align(Align::CENTER_X | Align::TOP)
                             .setfixedWidth(75)
                             .setfixedHeight(75)
-                            .setColor(sf::Color::Red),
+                            .setColor(buttonColor),
                         ButtonStyle::Pill
                     ),
 
-                    makeCYSpacer(),
+                    makeTSpacer(),
 
                     button(
                         Modifier()
-                            .align(Align::CENTER_X | Align::CENTER_Y)
+                            .align(Align::CENTER_X | Align::TOP)
                             .setfixedWidth(75)
                             .setfixedHeight(75)
-                            .setColor(sf::Color::Red),
+                            .setColor(buttonColor),
                         ButtonStyle::Pill
                     ),
 
-                    makeCYSpacer(),
+                    makeTSpacer(),
 
                     button(
                         Modifier()
-                            .align(Align::CENTER_X | Align::CENTER_Y)
+                            .align(Align::CENTER_X | Align::TOP)
                             .setfixedWidth(75)
                             .setfixedHeight(75)
-                            .setColor(sf::Color::Red),
+                            .setColor(buttonColor),
                         ButtonStyle::Pill
                     ),
-
-                    makeBSpacer(),
-
-                    button(
-                        Modifier()
-                            .align(Align::CENTER_X | Align::BOTTOM)
-                            .setfixedWidth(75)
-                            .setfixedHeight(75)
-                            .setColor(sf::Color::Red),
-                        ButtonStyle::Pill
-                    ),
-
-                    makeBSpacer()
                 }),
             })
         }), "test" }
