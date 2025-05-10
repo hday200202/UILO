@@ -148,7 +148,7 @@ public:
     }
 
     virtual ~Element() {
-        std::cout << "Deleting Element\n";
+
     }
 
     virtual void update(sf::RectangleShape& parentBounds) {}
@@ -239,7 +239,7 @@ public:
     }
 
     ~Container() {
-        std::cout << "Deleting Container\n";
+
     }
 
     void addElement(Element* element) {
@@ -278,7 +278,7 @@ public:
     using Container::Container;
 
     ~Row() {
-        std::cout << "Deleting Row\n";
+
     }
 
     void update(sf::RectangleShape& parentBounds) override {
@@ -428,7 +428,7 @@ public:
     using Container::Container;
 
     ~Column() {
-        std::cout << "Deleting Column\n";
+
     }
 
     void update(sf::RectangleShape& parentBounds) override {
@@ -597,7 +597,7 @@ public:
 
 public:
     ~Spacer() override {
-        std::cout << "Deleting Spacer\n";
+
     }
     
     void update(sf::RectangleShape& parentBounds) override {
@@ -641,7 +641,7 @@ public:
 
 public:
     ~Button() override {
-        std::cout << "Deleting Button\n";
+
     }
 
     void update(sf::RectangleShape& parentBounds) override {
@@ -736,8 +736,6 @@ public:
             std::cerr << "[UILO] Error: Attempted to delete a UILO-owned page directly.\n";
             std::abort();
         }
-
-        std::cout << "Deleting Page\n";
     }
 
     void update(const sf::RectangleShape& parentBounds) {
