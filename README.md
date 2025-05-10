@@ -1,7 +1,7 @@
 # UILO Design Overview
 
 **Project Name:** UILO (pronounced *wee-low*)  
-**Technology:** C++17, SFML 3.0  
+**Technology:** C++20, SFML 3.0.1
 **Framework Type:** Retained-Mode UI Framework  
 **Design Goals:** Declarative, minimal setup, explicit ownership, layout-first design
 
