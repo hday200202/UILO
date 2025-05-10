@@ -7,27 +7,11 @@ sf::Color backGroundColor = sf::Color(34, 40, 49, 255);
 sf::Color buttonColor = sf::Color(148, 137, 121, 255);
 
 int main() {
-    auto makeCYSpacer = []() {
-        return spacer(
-            Modifier()
-                .setfixedHeight(12.5f)
-                .align(Align::CENTER_Y)
-        );
-    };
-
     auto makeCXSpacer = []() {
         return spacer(
             Modifier()
                 .setfixedWidth(12.5f)
                 .align(Align::CENTER_X)
-        );
-    };
-
-    auto makeBSpacer = []() {
-        return spacer(
-            Modifier()
-                .setfixedHeight(12.5f)
-                .align(Align::BOTTOM)
         );
     };
 
@@ -45,13 +29,12 @@ int main() {
                 Modifier()
                     .setColor(sf::Color::Transparent)
                     .setHeight(1.f)
-                    .setWidth(1.f),  // Make row full width
+                    .setWidth(1.f),
             contains{
-                // RIGHT COLUMN
                 column(
                     Modifier()
                         .align(Align::RIGHT)
-                        .setWidth(1.f)  // ✅ FIXED WIDTH REQUIRED for Align::RIGHT
+                        .setWidth(1.f)
                         .setColor(backGroundColor),
                 contains{
 
@@ -122,7 +105,6 @@ int main() {
                     })
                 }),
 
-                // LEFT COLUMN
                 column(
                     Modifier()
                         .align(Align::LEFT)

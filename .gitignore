@@ -1,5 +1,6 @@
 /.vscode
 UILO_OLD.hpp
-/tests/bin
+/tests/bin/containers
+/tests/bin/buttons
 tests/valgrind.txt
-checklist.md
+checklist.txt
