@@ -1,177 +1,204 @@
 # UILO Design Overview
 
-* **Project Name:** UILO (pronounced *wee-low*)
-* **Technology:** Built using SFML 3.0
-* **Mode:** Retained-Mode UI Framework
+**Project Name:** UILO (pronounced *wee-low*)  
+**Technology:** C++17, SFML 3.0  
+**Framework Type:** Retained-Mode UI Framework  
+**Design Goals:** Declarative, minimal setup, explicit ownership, layout-first design
 
 ---
 
-## Core Principles
+## Core Features
 
-* Lightweight and modular retained-mode architecture
-* Declarative layout via `Row` and `Column` containers
-* All UI components are `Element`-derived objects
-* Memory is manually managed, ownership enforced via tracking sets
-* Fluent, chainable configuration using `Modifier`
+- Retained-mode hierarchy using `Row` and `Column` containers
+- Memory-safe: UI objects are heap-allocated and tracked with `std::unique_ptr`
+- Layout and interaction defined via fluent `Modifier` API
+- Optional support for user-supplied SFML windows (`sf::RenderWindow`)
+- Built-in widgets like `Button`, `Spacer`, and (WIP) `Text`
+- Strict click handling with top-down delegation and visibility checks
+- Page-based view switching with `UILO::switchToPage`
 
 ---
 
-## Layout System
+## Element System
 
-* UI is composed of nested `Row` and `Column` containers
-* All layout decisions (alignment, sizing) are made by containers
-* Alignment is explicit via the `Align` enum:
-
-  * `Row`: aligns children left, center, or right horizontally
-  * `Column`: aligns children top, center, or bottom vertically
-* Each alignment group is laid out independently and sequentially
-* Nested containers propagate layout bounds downward
-
-### Example Layout Code
+Every UI component derives from `Element`. Layout logic and rendering are handled recursively.
 
 ```cpp
-UILO ui("My UI", {{
-    new Page({
-
-        // Page Containers
-        // ...
-        
-        new Row
-        (
-            Modifier()
-            .setColor(sf::Color(30, 30, 30)), 
-        {
-            // Row Elements
-            // ...
-
-            new Column
-            (
-                Modifier()
+uilo::Row* myRow = uilo::row(
+    uilo::Modifier().setfixedHeight(50).setColor(sf::Color::Red),
+    {
+        uilo::button(
+            uilo::Modifier()
                 .setfixedWidth(100)
-                .align(Align::LEFT)
-                .setColor(sf::Color::Red), 
-            {
-
-                new Row
-                (
-                    Modifier()
-                    .setfixedHeight(100)
-                    .align(Align::TOP)
-                    .onClick([](){ std::cout << "Clicked top"; }),
-                {
-                    // Row Elements
-                    // ...
-                }),
-
-                new Row
-                (
-                    Modifier()
-                    .setfixedHeight(100)
-                    .align(Align::CENTER_Y),
-                {
-                    // Row Elements
-                    // ...
-                })
-            }),
-
-            new Column
-            (
-                Modifier()
-                .setfixedWidth(100)
-                .align(Align::CENTER_X)
-                .setColor(sf::Color::Green), 
-            {
-                // Column Elements
-                // ...
-            })
-        })
-    }), "main"}
-});
-
-while (ui.isRunning()) {
-    ui.update();
-    ui.render();
-}
+                .align(uilo::Align::CENTER_Y)
+                .onClick([]() { std::cout << "Clicked!\n"; }),
+            uilo::ButtonStyle::Pill,
+            "OK"
+        )
+    }
+);
 ```
 
 ---
 
-## Modifier System
+## Containers
 
-All configuration of an element's layout, appearance, and behavior is done through a `Modifier`.
+### `Row` and `Column`
 
-### Modifier Options:
+- `Row` arranges children left to right
+- `Column` arranges children top to bottom
+- Children can align using `Align` bitmask (`LEFT`, `CENTER_X`, `RIGHT`, etc.)
+- Each alignment group is measured and laid out independently
+- Containers can be nested arbitrarily
 
-* `.setWidth(float pct)` / `.setfixedWidth(float px)`
-* `.setHeight(float pct)` / `.setfixedHeight(float px)`
-* `.align(Align::...)` — alignment enum (bitmask)
-* `.setColor(sf::Color)` — background fill
-* `.onClick(func)` — lambda or callback function
-* `.setVisible(bool)` — toggles element visibility
+---
 
-### Example:
+## Modifier API
+
+Used to declaratively configure layout, visuals, and interactivity:
+
+### Fluent Interface
 
 ```cpp
-Modifier()
-.setfixedWidth(100)
-.setfixedHeight(50)
-.align(Align::TOP | Align::CENTER_X)
-.setColor(sf::Color::Red)
-.onClick([]() { std::cout << "Clicked!"; });
+uilo::Modifier()
+    .setfixedWidth(120)
+    .setfixedHeight(40)
+    .align(uilo::Align::CENTER_X | uilo::Align::TOP)
+    .setColor(sf::Color::Blue)
+    .onClick([]() { std::cout << "Button pressed\n"; });
+```
+
+### Supported Options
+
+| Modifier Method         | Description                        |
+|-------------------------|------------------------------------|
+| `.setWidth(pct)`        | Set width as % of parent           |
+| `.setfixedWidth(px)`    | Set fixed pixel width              |
+| `.setHeight(pct)`       | Set height as % of parent          |
+| `.setfixedHeight(px)`   | Set fixed pixel height             |
+| `.align(Align)`         | Bitmask-based alignment            |
+| `.setColor(color)`      | Background fill color              |
+| `.onClick(callback)`    | Click handler                      |
+| `.setVisible(bool)`     | Show/hide element                  |
+
+---
+
+## Built-in Elements
+
+| Element     | Description                                |
+|-------------|--------------------------------------------|
+| `Button`    | Interactive rectangle or pill-style button |
+| `Spacer`    | Empty space-filler for layout              |
+| `Text`      | Placeholder for future text support        |
+
+---
+
+## Window Management
+
+### Self-Managed Window
+
+```cpp
+uilo::UILO ui("Demo", {{
+    uilo::page({ uilo::row(/*...*/) }), "main"
+}});
+```
+
+### User-Managed Window
+
+```cpp
+sf::RenderWindow myWindow(...);
+sf::View myView(...);
+
+uilo::UILO ui(myWindow, myView, {{
+    uilo::page({ uilo::column(/*...*/) }), "main"
+}});
+```
+
+UILO will render to either your own window or manage one itself. Layout resizes automatically.
+
+---
+
+## Pages and Navigation
+
+UILO supports multiple pages and switching between them by name:
+
+```cpp
+auto mainPage = uilo::page({ uilo::row(/*...*/) });
+auto settingsPage = uilo::page({ uilo::column(/*...*/) });
+
+ui.addPages({ {mainPage, "main"}, {settingsPage, "settings"} });
+ui.switchToPage("settings");
 ```
 
 ---
 
-## Event Handling
+## Memory Management
 
-* Events are handled internally by `UILO`
-* Clicks are routed top-down to visible elements
-* If an element's bounds contain the click, it triggers its `.onClick()`
-* Pages and containers relay events to children
-
----
-
-## Sizing Behavior
-
-* Default size: 100% of parent bounds
-* Fixed size overrides percentage
-* Containers pass their bounds to children during layout
+- All UI elements are created using the `uilo::obj()` factory, wrapped in `std::unique_ptr`
+- Ownership is automatically handled and cleared on destruction
+- Pages are also tracked internally with unique pointers
+- Manual deletion of tracked objects is prevented and will abort with an error
 
 ---
 
-## Alignment Rules
+## Event and Click Handling
 
-`Align` is a bitmask enum specifying layout placement:
-
-* Vertical: `TOP`, `CENTER_Y`, `BOTTOM`
-* Horizontal: `LEFT`, `CENTER_X`, `RIGHT`
-
-Examples:
-
-* `Align::TOP | Align::CENTER_X` = centered horizontally at the top
-* `Align::BOTTOM` = bottom-aligned, default horizontal stack order
-
----
-
-## Memory and Ownership
-
-* Elements and pages are created with `new` and passed to `UILO`
-* Ownership is transferred and tracked via internal sets
-* Double deletion or reuse is detected and aborts the program
-* Pointers passed to `UILO::addPage()` are nulled out after transfer
+- Events are polled internally in `update()`
+- Mouse clicks are mapped to the view and passed to the current page
+- Clicks are routed top-down to the most deeply nested visible element
 
 ---
 
 ## Class Hierarchy
 
 ```
-       Element (abstract base class)
-                 |
-       +---------+---------+
-       |                   |
-   Container            Control (planned)
-       |
-   +---+---+
-   |       |
-Column    Row
+       Element
+          |
+    +-----+--------+
+    |              |
+ Container       Button
+    |
+ +--+---+
+ |      |
+Row   Column
+
+Spacer, Text (WIP) also extend Element
 ```
+
+---
+
+## Getting Started
+
+### Basic Usage:
+
+```cpp
+uilo::UILO ui("Example", {{
+    uilo::page({
+        uilo::column(
+            uilo::Modifier().setColor(sf::Color(40, 40, 40)),
+            {
+                uilo::button(
+                    uilo::Modifier()
+                        .setfixedWidth(150)
+                        .setfixedHeight(40)
+                        .align(uilo::Align::CENTER_X)
+                        .onClick([](){ std::cout << "Hi\n"; }),
+                    uilo::ButtonStyle::Rect,
+                    "Click Me"
+                )
+            }
+        )
+    }), "main"
+}});
+
+while (ui.isRunning()) {
+    ui.update();
+    ui.render();
+}
+```
+---
+# Screen shots of current progress
+
+<img src="images/containers-and-buttons.png" alt="containers and buttons test" width="512"/>
+
+---

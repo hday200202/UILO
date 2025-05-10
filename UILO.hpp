@@ -182,7 +182,7 @@ public:
     }
 
 protected:
-    void alignResize(sf::RectangleShape& parent) {
+    void resize(sf::RectangleShape& parent) {
         // m_bounds.setSize(parent.getSize());
         // m_bounds.setPosition(parent.getPosition());
 
@@ -282,7 +282,7 @@ public:
     }
 
     void update(sf::RectangleShape& parentBounds) override {
-        alignResize(parentBounds);
+        resize(parentBounds);
         applyModifiers();
     
         std::vector<Element*> left, center, right;
@@ -432,7 +432,7 @@ public:
     }
 
     void update(sf::RectangleShape& parentBounds) override {
-        alignResize(parentBounds);
+        resize(parentBounds);
         applyModifiers();
     
         std::vector<Element*> top, center, bottom;
@@ -603,7 +603,7 @@ public:
     void update(sf::RectangleShape& parentBounds) override {
         m_bounds.setFillColor(sf::Color::Transparent);
 
-        alignResize(parentBounds);
+        resize(parentBounds);
         applyModifiers();
     }
 };
