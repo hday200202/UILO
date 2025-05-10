@@ -786,10 +786,14 @@ class UILO {
 public:
     UILO() {
         initDefaultView();
+        sf::ContextSettings settings;
+        settings.antiAliasingLevel = 16;
 
         m_window.create(
             m_defScreenRes, m_windowTitle,
-            sf::Style::Resize | sf::Style::Close
+            sf::Style::Resize | sf::Style::Close,
+            sf::State::Windowed,
+            settings
         );
 
         m_window.setVerticalSyncEnabled(true);
