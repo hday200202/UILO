@@ -197,7 +197,7 @@ while (ui.isRunning()) {
 }
 ```
 ---
-# Screen shots of current progress
+# Screenshots of current progress
 
 <img src="images/containers-and-buttons.png" alt="containers and buttons test" width="512"/>
 
