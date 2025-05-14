@@ -217,9 +217,17 @@ private:
 // ---------------------------------------------------------------------------- //
 class Text : public Element {
 public:
+    Text(Modifier modifier = default_mod, const std::string& str = "", sf::Font font = sf::Font());
+    Text(Modifier modifier = default_mod, const std::string& str = "", const std::string& fontPath = "");
+    void update(sf::RectangleShape& parentBounds) override;
+    void render(sf::RenderTarget& target) override;
+
+    void setString(const std::string& newStr);
 
 private:
-
+    std::string m_string = "";
+    sf::Font m_font;
+    std::optional<sf::Text> m_text;
 };
 
 
@@ -230,8 +238,6 @@ private:
 class Spacer : public Element {
 public:
     Spacer(Modifier& modifier);
-
-public:
     void update(sf::RectangleShape& parentBounds) override;
 };
 
@@ -242,19 +248,28 @@ public:
 // ---------------------------------------------------------------------------- //
 class Button : public Element {
 public:
-    Button(Modifier modifier = default_mod, ButtonStyle buttonStyle = ButtonStyle::Default, const std::string& buttonText = "");
+    Button(
+        Modifier modifier = default_mod,
+        ButtonStyle buttonStyle = ButtonStyle::Default,
+        const std::string& buttonText = "",
+        const std::string& textFont = "",
+        sf::Color textColor = sf::Color::White
+    );
 
     void update(sf::RectangleShape& parentBounds) override;
     void render (sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos) override;
 
+    void setText(const std::string& newStr);
+
 private:
-    std::string m_buttonText = "";
     ButtonStyle m_buttonStyle = ButtonStyle::Default;
 
     sf::RectangleShape m_bodyRect;
     sf::CircleShape m_leftCircle;
     sf::CircleShape m_rightCircle;
+
+    Text* m_text;
 };
 
 
@@ -727,7 +742,55 @@ inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShap
 // ---------------------------------------------------------------------------- //
 // Text Implementation
 // ---------------------------------------------------------------------------- //
-// TODO
+inline Text::Text(Modifier modifier, const std::string& str, sf::Font font) 
+: m_string(str), m_font(font) {
+    m_modifier = modifier;
+}
+
+inline Text::Text(Modifier modifier, const std::string& str, const std::string& fontPath)
+: m_string(str) {
+    m_modifier = modifier;
+
+    if (!fontPath.empty())
+        if (!m_font.openFromFile(fontPath))
+            std::cerr << "Text Error: couldn't load font \"" << fontPath << "\".\n";
+}
+
+inline void Text::update(sf::RectangleShape& parentBounds) {
+    resize(parentBounds);
+    m_bounds.setPosition(parentBounds.getPosition());  // ← 🔧 This is the key fix
+
+    float fontSize = m_modifier.getFixedHeight() > 0
+        ? m_modifier.getFixedHeight()
+        : m_bounds.getSize().y;
+
+    m_text.emplace(m_font, m_string);
+    m_text->setCharacterSize(static_cast<unsigned>(fontSize));
+    m_text->setFillColor(m_modifier.getColor());
+
+    sf::FloatRect textBounds = m_text->getLocalBounds();
+
+    // Resize m_bounds width based on text
+    m_bounds.setSize({ textBounds.size.x + textBounds.position.x, m_bounds.getSize().y });
+}
+
+inline void Text::render(sf::RenderTarget& target) {
+    if (!m_text) return;
+
+    sf::FloatRect bounds = m_text->getLocalBounds();
+    m_text->setOrigin({bounds.position.x + bounds.size.x / 2.f, bounds.position.y + bounds.size.y / 2.f});
+
+    m_text->setPosition(
+        {m_bounds.getPosition().x + m_bounds.getSize().x / 2.f,
+        m_bounds.getPosition().y + m_bounds.getSize().y / 2.f}
+    );
+
+    target.draw(*m_text);
+}
+
+inline void Text::setString(const std::string& newStr) {
+    m_text->setString(newStr);
+}
 
 
 
@@ -750,14 +813,30 @@ inline void Spacer::update(sf::RectangleShape& parentBounds) {
 // ---------------------------------------------------------------------------- //
 // Button Implementation
 // ---------------------------------------------------------------------------- //
-inline Button::Button(Modifier modifier, ButtonStyle buttonStyle, const std::string& buttonText) {
+inline Button::Button(
+    Modifier modifier, 
+    ButtonStyle buttonStyle, 
+    const std::string& buttonText,
+    const std::string& textFont,
+    sf::Color textColor
+) {
     m_modifier = modifier;
     m_buttonStyle = buttonStyle;
-    m_buttonText = buttonText;
 
     m_bodyRect.setFillColor(m_modifier.getColor());
     m_leftCircle.setFillColor(m_modifier.getColor());
     m_rightCircle.setFillColor(m_modifier.getColor());
+
+    if (!textFont.empty()) {
+        m_text = new Text(
+            Modifier()
+            .setHeight(0.4f)
+            .setColor(textColor)
+            .align(Align::CENTER_X | Align::CENTER_Y), 
+            buttonText, 
+            textFont
+        );
+    }
 }
 
 inline void Button::update(sf::RectangleShape& parentBounds) {
@@ -766,6 +845,16 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
         m_modifier.getFixedWidth() ? m_modifier.getFixedWidth() : parentBounds.getSize().x * m_modifier.getWidth(),
         m_modifier.getFixedHeight() ? m_modifier.getFixedHeight() : parentBounds.getSize().y * m_modifier.getHeight()
     });
+
+    // m_bounds.setPosition(parentBounds.getPosition());
+
+    if (m_text) {
+        m_text->update(m_bounds);
+        m_text->m_bounds.setPosition({
+            m_bounds.getPosition().x + (m_bounds.getSize().x / 2.f) - (m_text->m_bounds.getSize().x / 2.f),
+            m_bounds.getPosition().y + (m_bounds.getSize().y / 2.f) - (m_text->m_bounds.getSize().y / 2.f)
+        });
+    }
 }
 
 inline void Button::render (sf::RenderTarget& target) {
@@ -802,12 +891,22 @@ inline void Button::render (sf::RenderTarget& target) {
             target.draw(m_bodyRect);
         }
     }
+    
+    if (m_text) {
+        m_text->render(target);
+    }
 }
 
 inline void Button::checkClick(const sf::Vector2f& pos) {
     if (m_bounds.getGlobalBounds().contains(pos)) {
         if (m_modifier.getOnClick()) m_modifier.getOnClick()();
     }
+}
+
+
+inline void Button::setText(const std::string& newStr) {
+    if (m_text)
+        m_text->setString(newStr);
 }
 
 
@@ -839,7 +938,9 @@ inline Button* button(auto&&... args) {
     return obj<Button>(std::forward<decltype(args)>(args)...);
 }
 
-
+inline Text* text(auto&&... args) {
+    return obj<Text>(std::forward<decltype(args)>(args)...);
+}
 
 // ---------------------------------------------------------------------------- //
 // Page Implementation
@@ -1046,7 +1147,7 @@ inline void UILO::update(sf::View& windowView) {
 
 inline void UILO::render() {
     if (m_windowOwned) {
-        if (m_pollCount == 0) {
+        if (m_pollCount == 1) {
             m_window.clear(sf::Color::Black);
             m_currentPage->render(m_window);
             m_window.display();

@@ -7,6 +7,8 @@ sf::Color backGroundColor = sf::Color(34, 40, 49, 255);
 sf::Color buttonColor = sf::Color(148, 137, 121, 255);
 
 int main() {
+    std::string relativePath = "assets/fonts/BebasNeue-Regular.ttf";
+
     auto makeCXSpacer = []() {
         return spacer(
             Modifier()
@@ -20,6 +22,21 @@ int main() {
             Modifier()
                 .setfixedHeight(12.5f)
                 .align(Align::TOP)
+        );
+    };
+
+    auto myButton = [&]() {
+        return button(
+            Modifier()
+                .align(Align::CENTER_X | Align::CENTER_Y)
+                .setfixedWidth(75)
+                .setfixedHeight(75)
+                .setColor(buttonColor)
+                .onClick([](){ std::cout << "Blue\n"; }),
+            ButtonStyle::Pill,
+            "OFF",
+            "assets/fonts/BebasNeue-Regular.ttf",
+            sf::Color::White
         );
     };
 
@@ -45,63 +62,23 @@ int main() {
                             .setfixedHeight(100),
                     contains{
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(buttonColor)
-                                .onClick([](){ std::cout << "Red\n"; }),
-                            ButtonStyle::Pill
-                        ),
+                        myButton(),
 
                         makeCXSpacer(),
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(buttonColor)
-                                .onClick([](){ std::cout << "Green\n"; }),
-                            ButtonStyle::Pill
-                        ),
+                        myButton(),
 
                         makeCXSpacer(),
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(buttonColor)
-                                .onClick([](){ std::cout << "Blue\n"; }),
-                            ButtonStyle::Pill
-                        ),
+                        myButton(),
 
                         makeCXSpacer(),
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(buttonColor)
-                                .onClick([](){ std::cout << "Black\n"; }),
-                            ButtonStyle::Pill
-                        ),
+                        myButton(),
 
                         makeCXSpacer(),
 
-                        button(
-                            Modifier()
-                                .align(Align::CENTER_X | Align::CENTER_Y)
-                                .setfixedWidth(75)
-                                .setfixedHeight(75)
-                                .setColor(buttonColor)
-                                .onClick([](){ std::cout << "White\n"; }),
-                            ButtonStyle::Pill
-                        )
+                        myButton(),
                     })
                 }),
 
