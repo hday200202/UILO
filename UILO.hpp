@@ -303,6 +303,10 @@ public:
     void checkScroll(const sf::Vector2f& pos, const float delta) override {}
     virtual EType getType() const override;
     void setPosition(sf::Vector2f pos);
+    sf::Vector2f getPosition() const;
+    sf::Vector2f getSize() const;
+    sf::Vector2f getCenter() const;
+    sf::FloatRect getBounds() const;
     void show() { m_modifier.setVisible(true); }
     void hide() { m_modifier.setVisible(false); }
 };
@@ -482,6 +486,7 @@ private:
     sf::Vector2u m_lastWindowSize;
     std::optional<sf::Vector2f> m_clickPosition;
     std::optional<sf::Vector2f> m_scrollPosition;
+    sf::Vector2f m_mousePos;
     float m_scrollDelta = 0.f;
 
     std::vector<std::unique_ptr<Page>> m_ownedPages;
@@ -707,6 +712,12 @@ inline void cleanupMarkedElements() {
 // Row Implementation
 // ---------------------------------------------------------------------------- //
 inline void Row::update(sf::RectangleShape& parentBounds) {
+    // Dirty check for Column itself
+    // m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
+    // m_pastBounds.setPosition(m_bounds.getPosition());
+    // m_pastBounds.setSize(m_bounds.getSize());
+    // if (!m_isDirty) return;
+
     resize(parentBounds);
     applyModifiers();
 
@@ -801,10 +812,6 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
             pos.y = m_bounds.getPosition().y + m_bounds.getSize().y - e->m_bounds.getSize().y;
         e->m_bounds.setPosition(pos);
     }
-    // Dirty check for Row itself
-    m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
 }    
 
 inline void Row::render(sf::RenderTarget& target) {
@@ -880,6 +887,12 @@ inline EType ScrollableRow::getType() const {
 // Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
+    // Dirty check for Column itself
+    // m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
+    // m_pastBounds.setPosition(m_bounds.getPosition());
+    // m_pastBounds.setSize(m_bounds.getSize());
+    // if (!m_isDirty) return;
+
     resize(parentBounds);
     applyModifiers();
 
@@ -977,10 +990,6 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 
         e->m_bounds.setPosition(pos);
     }
-    // Dirty check for Column itself
-    m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
 }    
 
 inline void Column::render(sf::RenderTarget& target) {
@@ -1055,8 +1064,11 @@ inline EType ScrollableColumn::getType() const {
 // Scrollable Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
-    Column::update(parentBounds);
-    // m_bounds.setPosition(m_customPosition);
+    sf::RectangleShape newParentBounds({0, 0});
+    newParentBounds.setPosition(m_customPosition);
+    newParentBounds.setSize(m_bounds.getSize());
+    Column::update(newParentBounds);
+    m_bounds.setPosition(m_customPosition);
 }
 
 inline EType FreeColumn::getType() const {
@@ -1065,7 +1077,26 @@ inline EType FreeColumn::getType() const {
 
 inline void FreeColumn::setPosition(sf::Vector2f pos) {
     m_customPosition = pos;
-    m_bounds.setPosition(pos);
+}
+
+inline sf::Vector2f FreeColumn::getPosition() const {
+    return m_customPosition;
+}
+
+inline sf::Vector2f FreeColumn::getSize() const {
+    return m_bounds.getSize();
+}
+
+inline sf::Vector2f FreeColumn::getCenter() const {
+    return 
+    {
+        m_customPosition.x + (m_bounds.getSize().x / 2),
+        m_customPosition.y + (m_bounds.getSize().y / 2)
+    };
+}
+
+inline sf::FloatRect FreeColumn::getBounds() const {
+    return sf::FloatRect(m_customPosition, m_bounds.getSize());
 }
 
 
@@ -1353,6 +1384,7 @@ T* obj(Args&&... args) {
     auto ptr = std::make_unique<T>(std::forward<Args>(args)...);
     T* raw = ptr.get();
     uilo_owned_elements.emplace_back(std::move(ptr));
+    // raw->m_isDirty = true;
     return raw;
 }
 
@@ -1647,9 +1679,10 @@ inline void UILO::update() {
         return;
 
     sf::Vector2u currentSize = m_window.getSize();
-    if (currentSize != m_lastWindowSize || m_clickPosition) {
+    bool windowResized = (currentSize != m_lastWindowSize);
+
+    if (windowResized || m_clickPosition || m_scrollPosition) {
         m_shouldUpdate = true;
-        m_pollCount = uilo_owned_elements.size();
     }
 
     if (m_shouldUpdate) {
@@ -1657,16 +1690,20 @@ inline void UILO::update() {
 
         m_bounds.setSize(m_defaultView.getSize());
         m_bounds.setPosition({
-            m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2),
-            m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)
+            m_defaultView.getCenter().x - m_defaultView.getSize().x * 0.5f,
+            m_defaultView.getCenter().y - m_defaultView.getSize().y * 0.5f
         });
 
         m_window.setView(m_defaultView);
-        m_currentPage->update(m_bounds);
+
+        for (int i = 0; i < 20; i++)
+            m_currentPage->update(m_bounds);
+
         m_lastWindowSize = currentSize;
+
         render();
-    } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        m_shouldUpdate = false;
     }
 
     if (m_clickPosition) {
@@ -1678,7 +1715,7 @@ inline void UILO::update() {
         m_currentPage->dispatchScroll(*m_scrollPosition, m_scrollDelta);
         m_scrollPosition.reset();
     }
-}    
+}
 
 inline void UILO::update(sf::View& windowView) {
     pollEvents();
@@ -1700,8 +1737,6 @@ inline void UILO::update(sf::View& windowView) {
         m_currentPage->update(m_bounds);
         m_lastWindowSize = currentSize;
     }
-    else
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     if (m_clickPosition) {
         m_currentPage->dispatchClick(*m_clickPosition);
@@ -1715,17 +1750,13 @@ inline void UILO::update(sf::View& windowView) {
 }
 
 inline void UILO::render() {
-    if (m_windowOwned) {
-        if (m_pollCount == 1) {
-            m_window.clear(sf::Color::Black);
-            m_currentPage->render(m_window);
-            m_window.display();
-        }
+    if (m_windowOwned && m_shouldUpdate) {
+        m_window.clear(sf::Color::Black);
+        m_currentPage->render(m_window);
+        m_window.display();
     }
-    else
+    else if (m_shouldUpdate)
         m_currentPage->render(*m_userWindow);
-
-    m_shouldUpdate = false;
 }
 
 inline void UILO::setTitle(const std::string& newTitle) {
@@ -1763,6 +1794,7 @@ inline void UILO::switchToPage(const std::string& pageName) {
     auto it = m_pages.find(pageName);
     if (it != m_pages.end()) {
         m_currentPage = it->second;
+        m_shouldUpdate = true;
         m_currentPage->update(m_bounds);
     } else {
         std::cerr << "[UILO] Page \"" << pageName << "\" not found.\n";
@@ -1771,7 +1803,7 @@ inline void UILO::switchToPage(const std::string& pageName) {
 
 inline void UILO::forceUpdate() {
     m_shouldUpdate = true;
-    m_pollCount = uilo_owned_elements.size();
+    update();
 }
 
 inline void UILO::setScale(float scale) {
@@ -1785,10 +1817,8 @@ inline void UILO::setScale(float scale) {
 }
 
 inline sf::Vector2f UILO::getMousePosition() const {
-    return {
-        static_cast<float>(sf::Mouse::getPosition(m_window).x), 
-        static_cast<float>(sf::Mouse::getPosition(m_window).y)
-    };
+    // std::cout << (m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2)) << ", " << (m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)) << std::endl;
+    return m_mousePos;
 }
 
 inline void UILO::pollEvents() {
@@ -1812,6 +1842,9 @@ inline void UILO::pollEvents() {
             m_shouldUpdate = true;
         }
 
+        if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>())
+            m_mousePos = m_window.mapPixelToCoords(mouseMoved->position);
+
         if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
             if (m_windowOwned) m_scrollPosition = m_clickPosition = m_window.mapPixelToCoords(mouseScrolled->position);
             else m_scrollPosition = m_clickPosition = m_userWindow->mapPixelToCoords(mouseScrolled->position);
@@ -1822,12 +1855,6 @@ inline void UILO::pollEvents() {
         if (const auto* mouseReleased = event->getIf<sf::Event::MouseButtonReleased>()) {
             m_mouseDragging = false;
         }
-    }
-
-    // Let's the ui update 10 times at start
-    if (m_pollCount != 0) {
-        m_shouldUpdate = true;
-        m_pollCount--;
     }
 }
 
