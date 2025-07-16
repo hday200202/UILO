@@ -81,7 +81,10 @@ inline bool hasAlign(Align value, Align flag);
 enum class EType {
     Element,
     Row,
+    ScrollableRow,
     Column,
+    ScrollableColumn,
+    FreeColumn,
     Text,
     Button,
 };
@@ -162,6 +165,7 @@ public:
     virtual void render(sf::RenderTarget& target);
     virtual void handleEvent(const sf::Event& event);
     virtual void checkClick(const sf::Vector2f& pos);
+    virtual void checkScroll(const sf::Vector2f& pos, const float delta) {}
     void setModifier(const Modifier& modifier);
     virtual EType getType() const;
 
@@ -175,7 +179,6 @@ protected:
 // ---------------------------------------------------------------------------- //
 // Container Base Class
 // ---------------------------------------------------------------------------- //
-
 class Container : public Element {
 public:
     Container(std::initializer_list<Element*> elements = {}, const std::string& name = "");
@@ -186,6 +189,7 @@ public:
     void addElements(std::initializer_list<Element*> elements);
     virtual void handleEvent(const sf::Event& event) override;
     const std::vector<Element*>& getElements() const;
+    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override {};
     void clear();
 
 protected:
@@ -205,9 +209,36 @@ public:
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
+    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override 
+    { for (auto& e : m_elements) e->checkScroll(pos, delta); }
 
 private:
     inline void applyVerticalAlignment(Element* e, const sf::RectangleShape& parentBounds);
+};
+
+
+
+// ---------------------------------------------------------------------------- //
+// Scrollable Row Container
+// ---------------------------------------------------------------------------- //
+class ScrollableRow : public Row {
+public:
+    using Row::Row;
+    using Row::render;
+    using Row::checkClick;
+
+    void update(sf::RectangleShape& parentBounds) override;
+    void checkScroll(const sf::Vector2f& pos, const float delta) override;
+    virtual EType getType() const override;
+
+    void setScrollSpeed(float speed) { m_scrollSpeed = speed; }
+    void setOffset(float offset) { m_offset = offset; }
+    float getOffset() const { return m_offset; }
+    float getScrollSpeed() const { return m_scrollSpeed; }
+
+private:
+    float m_offset = 0.f;
+    float m_scrollSpeed = 10.f;
 };
 
 
@@ -223,11 +254,58 @@ public:
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
+    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override
+    { for (auto& e : m_elements) e->checkScroll(pos, delta); }
 
 private:
     inline void applyHorizontalAlignment(Element* e, const sf::RectangleShape& parentBounds);
 };
-    
+
+
+
+// ---------------------------------------------------------------------------- //
+// Scrollable Column Container
+// ---------------------------------------------------------------------------- //
+class ScrollableColumn : public Column {
+public:
+    using Column::Column;
+    using Column::render;
+    using Column::checkClick;
+
+    void update(sf::RectangleShape& parentBounds) override;
+    void checkScroll(const sf::Vector2f& pos, const float delta) override;
+    virtual EType getType() const override;
+
+    void setScrollSpeed(float speed) { m_scrollSpeed = speed; }
+    void setOffset(float offset) { m_offset = offset; }
+    float getOffset() const { return m_offset; }
+    float getScrollSpeed() const { return m_scrollSpeed; }
+
+private:
+    float m_offset = 0.f;
+    float m_scrollSpeed = 10.f;
+};
+
+
+
+// ---------------------------------------------------------------------------- //
+// Free Column Container
+// ---------------------------------------------------------------------------- //
+class FreeColumn : public Column {
+public:
+    sf::Vector2f m_customPosition;
+
+    using Column::Column;
+    using Column::render;
+    using Column::checkClick;
+
+    void update(sf::RectangleShape& parentBounds) override;
+    void checkScroll(const sf::Vector2f& pos, const float delta) override {}
+    virtual EType getType() const override;
+    void setPosition(sf::Vector2f pos);
+    void show() { m_modifier.setVisible(true); }
+    void hide() { m_modifier.setVisible(false); }
+};
 
 
 
@@ -351,6 +429,7 @@ public:
     void render(sf::RenderTarget& target);
     void handleEvent(const sf::Event& event);
     void dispatchClick(const sf::Vector2f& pos);
+    void dispatchScroll(const sf::Vector2f& pos, const float delta);
     void clear();
 
 private:
@@ -380,6 +459,7 @@ public:
     void switchToPage(const std::string& pageName);
     void forceUpdate();
     void setScale(float scale = 1.5f);
+    sf::Vector2f getMousePosition() const;
 
 private:
     sf::RenderWindow m_window;
@@ -401,6 +481,8 @@ private:
 
     sf::Vector2u m_lastWindowSize;
     std::optional<sf::Vector2f> m_clickPosition;
+    std::optional<sf::Vector2f> m_scrollPosition;
+    float m_scrollDelta = 0.f;
 
     std::vector<std::unique_ptr<Page>> m_ownedPages;
 
@@ -758,6 +840,43 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 
 
 // ---------------------------------------------------------------------------- //
+// Scrollable Row Implementation
+// ---------------------------------------------------------------------------- //
+inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
+    resize(parentBounds);
+    applyModifiers();
+
+    Row::update(parentBounds);
+
+    if (m_elements.size() > 0) {
+        for (auto& e : m_elements) {
+            sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
+            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible()) {
+                e->m_bounds.setPosition({ e->m_bounds.getPosition().x + m_offset, e->m_bounds.getPosition().y});
+            }
+        }
+
+        if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().x <= m_bounds.getPosition().x)
+            m_offset += m_bounds.getPosition().x - m_elements[m_elements.size() - 1]->m_bounds.getPosition().x;
+        else if (m_elements[0]->m_bounds.getPosition().x >= m_bounds.getPosition().x)
+            m_offset -= m_elements[0]->m_bounds.getPosition().x - m_bounds.getPosition().x;
+    }
+}
+
+inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float delta) {
+    if (delta < 0)
+        m_offset -= m_scrollSpeed;
+    else if (delta > 0)
+        m_offset += m_scrollSpeed;
+}
+
+inline EType ScrollableRow::getType() const {
+    return EType::ScrollableRow;
+}
+
+
+
+// ---------------------------------------------------------------------------- //
 // Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
@@ -892,6 +1011,61 @@ inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShap
         pos.x = parentBounds.getPosition().x + parentBounds.getSize().x - e->m_bounds.getSize().x;
 
     e->m_bounds.setPosition(pos);
+}
+
+
+
+// ---------------------------------------------------------------------------- //
+// Scrollable Column Implementation
+// ---------------------------------------------------------------------------- //
+inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
+    resize(parentBounds);
+    applyModifiers();
+
+    Column::update(parentBounds);
+
+    if (m_elements.size() > 0) {
+        for (auto& e : m_elements) {
+            sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
+            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible()) {
+                e->m_bounds.setPosition({ e->m_bounds.getPosition().x, e->m_bounds.getPosition().y + m_offset});
+            }
+        }
+
+        if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().y <= m_bounds.getPosition().y)
+            m_offset += m_bounds.getPosition().y - m_elements[m_elements.size() - 1]->m_bounds.getPosition().y;
+        else if (m_elements[0]->m_bounds.getPosition().y >= m_bounds.getPosition().y)
+            m_offset -= m_elements[0]->m_bounds.getPosition().y - m_bounds.getPosition().y;
+    }
+}
+
+inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float delta) {
+    if (delta < 0)
+        m_offset -= m_scrollSpeed;
+    else if (delta > 0)
+        m_offset += m_scrollSpeed;
+}
+
+inline EType ScrollableColumn::getType() const {
+    return EType::ScrollableColumn;
+}
+
+
+// ---------------------------------------------------------------------------- //
+// Scrollable Column Implementation
+// ---------------------------------------------------------------------------- //
+inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
+    Column::update(parentBounds);
+    // m_bounds.setPosition(m_customPosition);
+}
+
+inline EType FreeColumn::getType() const {
+    return EType::FreeColumn;
+}
+
+inline void FreeColumn::setPosition(sf::Vector2f pos) {
+    m_customPosition = pos;
+    m_bounds.setPosition(pos);
 }
 
 
@@ -1188,11 +1362,29 @@ inline Row* row(
     const std::string& name = ""
 ) { return obj<Row>(modifier, elements, name); }
 
+inline ScrollableRow* scrollableRow(
+    Modifier modifier = default_mod, 
+    std::initializer_list<Element*> elements = {}, 
+    const std::string& name = ""
+) { return obj<ScrollableRow>(modifier, elements, name); }
+
 inline Column* column(
     Modifier modifier = default_mod, 
     std::initializer_list<Element*> elements = {}, 
     const std::string& name = ""
 ) { return obj<Column>(modifier, elements, name); }
+
+inline ScrollableColumn* scrollableColumn(
+    Modifier modifier = default_mod, 
+    std::initializer_list<Element*> elements = {}, 
+    const std::string& name = ""
+) { return obj<ScrollableColumn>(modifier, elements, name); }
+
+inline FreeColumn* freeColumn(
+    Modifier modifier = default_mod, 
+    std::initializer_list<Element*> elements = {}, 
+    const std::string& name = ""
+) { return obj<FreeColumn>(modifier, elements, name); }
 
 inline Spacer* spacer(
     Modifier modifier = default_mod, 
@@ -1316,7 +1508,9 @@ inline void Page::update(const sf::RectangleShape& parentBounds) {
 
     for (auto& c : m_containers) {
         if (c->m_modifier.isVisible()) {
-            c->m_bounds.setPosition(m_bounds.getPosition());
+            if (!(c->getType() == EType::FreeColumn))
+                c->m_bounds.setPosition(m_bounds.getPosition());
+
             c->update(m_bounds);
         }
     }
@@ -1341,6 +1535,11 @@ inline void Page::dispatchClick(const sf::Vector2f& pos) {
         c->checkClick(pos);
 }
 
+inline void Page::dispatchScroll(const sf::Vector2f& pos, const float delta) {
+    for (auto& c : m_containers)
+        c->checkScroll(pos, delta);
+}
+
 inline void Page::clear() {
     for (auto& c : m_containers) {
         c->clear();
@@ -1351,10 +1550,8 @@ inline void Page::clear() {
 }
 
 inline Page* page(std::initializer_list<Container*> containers = {}) {
-    return new Page(containers); // Let Page's constructor handle insertion into uilo_owned_pages
+    return new Page(containers);
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // UILO Implementation
@@ -1477,7 +1674,10 @@ inline void UILO::update() {
         m_clickPosition.reset();
     }
 
-    // if (m_mouseDragging && m_pollCount == 1) m_currentPage->dispatchClick(*m_clickPosition);
+    if (m_scrollPosition) {
+        m_currentPage->dispatchScroll(*m_scrollPosition, m_scrollDelta);
+        m_scrollPosition.reset();
+    }
 }    
 
 inline void UILO::update(sf::View& windowView) {
@@ -1506,6 +1706,11 @@ inline void UILO::update(sf::View& windowView) {
     if (m_clickPosition) {
         m_currentPage->dispatchClick(*m_clickPosition);
         m_clickPosition.reset();
+    }
+
+    if (m_scrollPosition) {
+        m_currentPage->dispatchScroll(*m_scrollPosition, m_scrollDelta);
+        m_scrollPosition.reset();
     }
 }
 
@@ -1579,6 +1784,13 @@ inline void UILO::setScale(float scale) {
     }
 }
 
+inline sf::Vector2f UILO::getMousePosition() const {
+    return {
+        static_cast<float>(sf::Mouse::getPosition(m_window).x), 
+        static_cast<float>(sf::Mouse::getPosition(m_window).y)
+    };
+}
+
 inline void UILO::pollEvents() {
     while (const auto event = (m_windowOwned) ?  m_window.pollEvent() : m_userWindow->pollEvent()) {
         if (!m_windowOwned && !m_userWindow)
@@ -1597,6 +1809,13 @@ inline void UILO::pollEvents() {
                 m_mouseDragging = true;
             }
 
+            m_shouldUpdate = true;
+        }
+
+        if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
+            if (m_windowOwned) m_scrollPosition = m_clickPosition = m_window.mapPixelToCoords(mouseScrolled->position);
+            else m_scrollPosition = m_clickPosition = m_userWindow->mapPixelToCoords(mouseScrolled->position);
+            m_scrollDelta = mouseScrolled->delta;
             m_shouldUpdate = true;
         }
 
