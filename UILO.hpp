@@ -155,6 +155,7 @@ public:
     bool m_uiloOwned = false;
     bool m_isDirty = false;
     bool m_markedForDeletion = false;
+    bool m_doRender = true;
 
     std::string m_name = "";
 
@@ -165,7 +166,7 @@ public:
     virtual void render(sf::RenderTarget& target);
     virtual void handleEvent(const sf::Event& event);
     virtual void checkClick(const sf::Vector2f& pos);
-    virtual void checkScroll(const sf::Vector2f& pos, const float delta) {}
+    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {}
     void setModifier(const Modifier& modifier);
     virtual EType getType() const;
 
@@ -189,7 +190,7 @@ public:
     void addElements(std::initializer_list<Element*> elements);
     virtual void handleEvent(const sf::Event& event) override;
     const std::vector<Element*>& getElements() const;
-    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override {};
+    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {};
     void clear();
 
 protected:
@@ -209,8 +210,8 @@ public:
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
-    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override 
-    { for (auto& e : m_elements) e->checkScroll(pos, delta); }
+    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override 
+    { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
 
 private:
     inline void applyVerticalAlignment(Element* e, const sf::RectangleShape& parentBounds);
@@ -228,7 +229,7 @@ public:
     using Row::checkClick;
 
     void update(sf::RectangleShape& parentBounds) override;
-    void checkScroll(const sf::Vector2f& pos, const float delta) override;
+    void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override;
     virtual EType getType() const override;
 
     void setScrollSpeed(float speed) { m_scrollSpeed = speed; }
@@ -254,8 +255,8 @@ public:
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
-    virtual void checkScroll(const sf::Vector2f& pos, const float delta) override
-    { for (auto& e : m_elements) e->checkScroll(pos, delta); }
+    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override
+    { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
 
 private:
     inline void applyHorizontalAlignment(Element* e, const sf::RectangleShape& parentBounds);
@@ -273,7 +274,7 @@ public:
     using Column::checkClick;
 
     void update(sf::RectangleShape& parentBounds) override;
-    void checkScroll(const sf::Vector2f& pos, const float delta) override;
+    void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override;
     virtual EType getType() const override;
 
     void setScrollSpeed(float speed) { m_scrollSpeed = speed; }
@@ -300,7 +301,7 @@ public:
     using Column::checkClick;
 
     void update(sf::RectangleShape& parentBounds) override;
-    void checkScroll(const sf::Vector2f& pos, const float delta) override {}
+    void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {}
     virtual EType getType() const override;
     void setPosition(sf::Vector2f pos);
     sf::Vector2f getPosition() const;
@@ -433,7 +434,7 @@ public:
     void render(sf::RenderTarget& target);
     void handleEvent(const sf::Event& event);
     void dispatchClick(const sf::Vector2f& pos);
-    void dispatchScroll(const sf::Vector2f& pos, const float delta);
+    void dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta);
     void clear();
 
 private:
@@ -448,6 +449,8 @@ private:
 // ---------------------------------------------------------------------------- //
 class UILO {
 public:
+    sf::RenderWindow m_window;
+
     UILO();
     UILO(const std::string& windowTitle = "", std::initializer_list<std::pair<Page*, std::string>> pages = {});
     UILO(sf::RenderWindow& userWindow, sf::View& windowView, std::initializer_list<std::pair<Page*, std::string>> pages = {});
@@ -466,7 +469,6 @@ public:
     sf::Vector2f getMousePosition() const;
 
 private:
-    sf::RenderWindow m_window;
     sf::RenderWindow* m_userWindow = nullptr;
     bool m_windowOwned = true;
     int m_pollCount = 10;
@@ -487,7 +489,8 @@ private:
     std::optional<sf::Vector2f> m_clickPosition;
     std::optional<sf::Vector2f> m_scrollPosition;
     sf::Vector2f m_mousePos;
-    float m_scrollDelta = 0.f;
+    float m_verticalScrollDelta = 0.f;
+    float m_horizontalScrollDelta = 0.f;
 
     std::vector<std::unique_ptr<Page>> m_ownedPages;
 
@@ -525,6 +528,7 @@ inline bool Modifier::isVisible() const                 { return m_isVisible; }
 // Element Implementation
 // ---------------------------------------------------------------------------- //
 inline Element::Element() {}
+
 inline Element::~Element() {}
 
 inline void Element::update(sf::RectangleShape& parentBounds) {
@@ -533,34 +537,29 @@ inline void Element::update(sf::RectangleShape& parentBounds) {
     m_pastBounds.setPosition(m_bounds.getPosition());
     m_pastBounds.setSize(m_bounds.getSize());
 }
+
 inline void Element::render(sf::RenderTarget& target) {}
 
 inline void Element::handleEvent(const sf::Event& event) {
     if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
         if (mousePressed->button == sf::Mouse::Button::Left) {
             sf::Vector2f mousePos(mousePressed->position);
-            if (m_bounds.getGlobalBounds().contains(mousePos)) {
+            if (m_bounds.getGlobalBounds().contains(mousePos))
                 if (m_modifier.getOnClick())
                     m_modifier.getOnClick()();
-            }
         }
     }
 }
 
 inline void Element::checkClick(const sf::Vector2f& pos) {
-    if (m_bounds.getGlobalBounds().contains(pos)) {
+    if (m_bounds.getGlobalBounds().contains(pos))
         if (m_modifier.getOnClick())
             m_modifier.getOnClick()();
-    }
 }
 
-inline void Element::setModifier(const Modifier& modifier) {
-    m_modifier = modifier;
-}
+inline void Element::setModifier(const Modifier& modifier) { m_modifier = modifier; }
 
-inline EType Element::getType() const {
-    return EType::Element;
-}
+inline EType Element::getType() const { return EType::Element; }
 
 inline void Element::resize(sf::RectangleShape& parent) {
     if (m_modifier.getFixedWidth() != 0) {
@@ -569,6 +568,7 @@ inline void Element::resize(sf::RectangleShape& parent) {
             m_bounds.getSize().y
         });
     }
+
     else {
         m_bounds.setSize({
             m_modifier.getWidth() * parent.getSize().x,
@@ -582,6 +582,7 @@ inline void Element::resize(sf::RectangleShape& parent) {
             m_modifier.getFixedHeight()
         });
     }
+
     else {
         m_bounds.setSize({
             m_bounds.getSize().x,
@@ -590,9 +591,7 @@ inline void Element::resize(sf::RectangleShape& parent) {
     }
 }
 
-inline void Element::applyModifiers() {
-    m_bounds.setFillColor(m_modifier.getColor());
-}
+inline void Element::applyModifiers() { m_bounds.setFillColor(m_modifier.getColor()); }
 
 
 
@@ -604,9 +603,9 @@ inline Container::Container(std::initializer_list<Element*> elements, const std:
         m_elements.push_back(e);
 
     m_name = name;
-    if (!m_name.empty()) {
+
+    if (!m_name.empty())
         containers[m_name] = this;
-    }
 }
 
 inline Container::Container(Modifier modifier, std::initializer_list<Element*> elements, const std::string& name) {
@@ -616,16 +615,14 @@ inline Container::Container(Modifier modifier, std::initializer_list<Element*> e
         m_elements.push_back(e);
 
     m_name = name;
-    if (!m_name.empty()) {
+
+    if (!m_name.empty())
         containers[m_name] = this;
-    }
 }
 
 inline Container::~Container() {}
 
-inline void Container::addElement(Element* element) {
-    m_elements.push_back(element);
-}
+inline void Container::addElement(Element* element) { m_elements.push_back(element); }
 
 inline void Container::addElements(std::initializer_list<Element*> elements) {
     for (auto& e : elements)
@@ -638,9 +635,7 @@ inline void Container::handleEvent(const sf::Event& event) {
     Element::handleEvent(event);
 }
 
-inline const std::vector<Element*>& Container::getElements() const {
-    return m_elements;
-}
+inline const std::vector<Element*>& Container::getElements() const { return m_elements; }
 
 inline void Container::clear() {
     for (auto& e : m_elements) {
@@ -651,8 +646,8 @@ inline void Container::clear() {
 
         e->m_markedForDeletion = true;
     }
-    m_elements.clear();
 
+    m_elements.clear();
     cleanupMarkedElements();
 }
 
@@ -670,29 +665,24 @@ inline void cleanupMarkedElements() {
             
             if (!element->m_name.empty()) {
                 auto buttonIt = buttons.find(element->m_name);
-                if (buttonIt != buttons.end() && buttonIt->second == element) {
+                if (buttonIt != buttons.end() && buttonIt->second == element)
                     buttons.erase(buttonIt);
-                }
                 
                 auto sliderIt = sliders.find(element->m_name);
-                if (sliderIt != sliders.end() && sliderIt->second == element) {
+                if (sliderIt != sliders.end() && sliderIt->second == element)
                     sliders.erase(sliderIt);
-                }
                 
                 auto textIt = texts.find(element->m_name);
-                if (textIt != texts.end() && textIt->second == element) {
+                if (textIt != texts.end() && textIt->second == element)
                     texts.erase(textIt);
-                }
                 
                 auto spacerIt = spacers.find(element->m_name);
-                if (spacerIt != spacers.end() && spacerIt->second == element) {
+                if (spacerIt != spacers.end() && spacerIt->second == element)
                     spacers.erase(spacerIt);
-                }
                 
                 auto containerIt = containers.find(element->m_name);
-                if (containerIt != containers.end() && containerIt->second == element) {
+                if (containerIt != containers.end() && containerIt->second == element)
                     containers.erase(containerIt);
-                }
             }
             
             it = uilo_owned_elements.erase(it);
@@ -712,113 +702,127 @@ inline void cleanupMarkedElements() {
 // Row Implementation
 // ---------------------------------------------------------------------------- //
 inline void Row::update(sf::RectangleShape& parentBounds) {
-    // Dirty check for Column itself
-    // m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    // m_pastBounds.setPosition(m_bounds.getPosition());
-    // m_pastBounds.setSize(m_bounds.getSize());
-    // if (!m_isDirty) return;
-
     resize(parentBounds);
     applyModifiers();
 
+    // Calculate total space requirements for width distribution
+    float totalPercent = 0.f, totalFixed = 0.f;
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
+        if (e->m_modifier.getFixedWidth() > 0.f) totalFixed += e->m_modifier.getFixedWidth();
+        else totalPercent += e->m_modifier.getWidth();
+    }
+    float remainingSpace = m_bounds.getSize().x - totalFixed;
+    if (totalPercent <= 0) totalPercent = 1.f;
+
+    // Update each child element with calculated width
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
+        float width = e->m_modifier.getFixedWidth() > 0.f ? e->m_modifier.getFixedWidth() : (e->m_modifier.getWidth() / totalPercent) * remainingSpace;
+        sf::RectangleShape slot({width, m_bounds.getSize().y});
+        e->update(slot);
+    }
+    
+    // Group elements by horizontal alignment for positioning
     std::vector<Element*> left, center, right;
+    float leftWidth = 0, centerWidth = 0, rightWidth = 0;
+
     for (auto& e : m_elements) {
         if (e->m_modifier.isVisible()) {
             Align a = e->m_modifier.getAlignment();
-            if (hasAlign(a, Align::RIGHT)) right.push_back(e);
-            else if (hasAlign(a, Align::CENTER_X)) center.push_back(e);
-            else left.push_back(e); // default is LEFT
+
+            if (hasAlign(a, Align::RIGHT)) {
+                right.push_back(e);
+                rightWidth += e->m_bounds.getSize().x;
+            } 
+            
+            else if (hasAlign(a, Align::CENTER_X)) {
+                center.push_back(e);
+                centerWidth += e->m_bounds.getSize().x;
+            } 
+            
+            else {
+                left.push_back(e);
+                leftWidth += e->m_bounds.getSize().x;
+            }
         }
     }
 
-    float totalFixed = 0.f;
-    float totalPercent = 0.f;
-
-    auto measureWidth = [&](Element* e) {
-        if (e->m_modifier.getFixedWidth() > 0.f)
-            return e->m_modifier.getFixedWidth();
-        totalPercent += e->m_modifier.getWidth();
-        return 0.f;
-    };
-
-    for (auto& e : m_elements)
-        totalFixed += measureWidth(e);
-
-    float remaining = m_bounds.getSize().x - totalFixed;
-    float centerWeight = 0.f;
-    for (auto& e : center) centerWeight += e->m_modifier.getWidth();
-
-    // LEFT-aligned
-    float xLeft = m_bounds.getPosition().x;
+    // Position left-aligned elements from left edge
+    float xPos;
+    xPos = m_bounds.getPosition().x;
     for (auto& e : left) {
-        float width = (e->m_modifier.getFixedWidth() > 0.f)
-            ? e->m_modifier.getFixedWidth()
-            : (e->m_modifier.getWidth() / totalPercent) * remaining;
-
-        sf::RectangleShape slot({ width, m_bounds.getSize().y });
-        slot.setPosition({ xLeft, m_bounds.getPosition().y });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ xLeft, m_bounds.getPosition().y }); // Y alignment later
-        xLeft += e->m_bounds.getSize().x;
+        e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
+        xPos += e->m_bounds.getSize().x;
     }
 
-    // RIGHT-aligned
-    float xRight = m_bounds.getPosition().x + m_bounds.getSize().x;
-    for (auto it = right.rbegin(); it != right.rend(); ++it) {
-        Element* e = *it;
-        float width = (e->m_modifier.getFixedWidth() > 0.f)
-            ? e->m_modifier.getFixedWidth()
-            : (e->m_modifier.getWidth() / totalPercent) * remaining;
-
-        xRight -= width;
-        sf::RectangleShape slot({ width, m_bounds.getSize().y });
-        slot.setPosition({ xRight, m_bounds.getPosition().y });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ xRight, m_bounds.getPosition().y }); // Y alignment later
-    }
-
-    // CENTER-aligned
-    float centerTotalWidth = 0.f;
+    // Position center-aligned elements in the middle
+    xPos = m_bounds.getPosition().x + (m_bounds.getSize().x - centerWidth) / 2.f;
     for (auto& e : center) {
-        float width = (e->m_modifier.getFixedWidth() > 0.f)
-            ? e->m_modifier.getFixedWidth()
-            : (e->m_modifier.getWidth() / totalPercent) * remaining;
-        centerTotalWidth += width;
+        e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
+        xPos += e->m_bounds.getSize().x;
     }
 
-    float xCenter = m_bounds.getPosition().x + (m_bounds.getSize().x - centerTotalWidth) / 2.f;
-    for (auto& e : center) {
-        float width = (e->m_modifier.getFixedWidth() > 0.f)
-            ? e->m_modifier.getFixedWidth()
-            : (e->m_modifier.getWidth() / totalPercent) * remaining;
-
-        sf::RectangleShape slot({ width, m_bounds.getSize().y });
-        slot.setPosition({ xCenter, m_bounds.getPosition().y });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ xCenter, m_bounds.getPosition().y });
-        xCenter += e->m_bounds.getSize().x;
+    // Position right-aligned elements from right edge
+    xPos = m_bounds.getPosition().x + m_bounds.getSize().x - rightWidth;
+    for (auto& e : right) {
+        e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
+        xPos += e->m_bounds.getSize().x;
     }
 
-    // Then apply vertical (Y) alignment if needed
-    for (auto& e : m_elements) {
-        auto a = e->m_modifier.getAlignment();
-        auto pos = e->m_bounds.getPosition();
+    // Apply vertical alignment to all elements
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
+        sf::Vector2f pos = e->m_bounds.getPosition();
+        Align a = e->m_modifier.getAlignment();
+
         if (hasAlign(a, Align::CENTER_Y))
             pos.y = m_bounds.getPosition().y + (m_bounds.getSize().y - e->m_bounds.getSize().y) / 2.f;
+
         else if (hasAlign(a, Align::BOTTOM))
             pos.y = m_bounds.getPosition().y + m_bounds.getSize().y - e->m_bounds.getSize().y;
+
+        else
+            pos.y = m_bounds.getPosition().y;
+
         e->m_bounds.setPosition(pos);
     }
-}    
+}
 
 inline void Row::render(sf::RenderTarget& target) {
-    target.draw(m_bounds);
-    for (auto& e : m_elements) {
-        if (e->m_modifier.isVisible())
-            e->render(target);
+    if (getType() == EType::ScrollableRow) {
+        // Create clipping view for scrollable content to prevent overflow
+        sf::View originalView = target.getView();
+        sf::FloatRect clipRect = m_bounds.getGlobalBounds();
+        sf::View clippingView(clipRect);
+
+        // Convert world coordinates to pixel coordinates for viewport calculation
+        sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
+        sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
+
+        // Calculate normalized viewport coordinates (0-1 range)
+        sf::Vector2u windowSize = target.getSize();
+        sf::FloatRect viewport(
+            {static_cast<float>(pixelPos.x) / windowSize.x,
+            static_cast<float>(pixelPos.y) / windowSize.y},
+            {clipRect.size.x / windowSize.x,
+            clipRect.size.y / windowSize.y}
+        );
+
+        clippingView.setViewport(viewport);
+        target.setView(clippingView);
+
+        target.draw(m_bounds);
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender)
+                e->render(target);
+        
+        target.setView(originalView);
+    } 
+    
+    else {
+        target.draw(m_bounds);
+
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender)
+                e->render(target);
     }
 }
 
@@ -828,9 +832,7 @@ inline void Row::checkClick(const sf::Vector2f& pos) {
     Element::checkClick(pos);
 }
 
-inline EType Row::getType() const {
-    return EType::Row;
-}
+inline EType Row::getType() const { return EType::Row; }
 
 inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& parentBounds) {
     auto align = e->m_modifier.getAlignment();
@@ -838,6 +840,7 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 
     if (hasAlign(align, Align::CENTER_Y))
         pos.y = parentBounds.getPosition().y + (parentBounds.getSize().y - e->m_bounds.getSize().y) / 2.f;
+
     else if (hasAlign(align, Align::BOTTOM))
         pos.y = parentBounds.getPosition().y + parentBounds.getSize().y - e->m_bounds.getSize().y;
 
@@ -858,22 +861,23 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
     if (m_elements.size() > 0) {
         for (auto& e : m_elements) {
             sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
-            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible()) {
+
+            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible())
                 e->m_bounds.setPosition({ e->m_bounds.getPosition().x + m_offset, e->m_bounds.getPosition().y});
-            }
         }
 
         if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().x <= m_bounds.getPosition().x)
             m_offset += m_bounds.getPosition().x - m_elements[m_elements.size() - 1]->m_bounds.getPosition().x;
+
         else if (m_elements[0]->m_bounds.getPosition().x >= m_bounds.getPosition().x)
             m_offset -= m_elements[0]->m_bounds.getPosition().x - m_bounds.getPosition().x;
     }
 }
 
-inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float delta) {
-    if (delta < 0)
+inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
+    if (horizontalDelta < 0)
         m_offset -= m_scrollSpeed;
-    else if (delta > 0)
+    else if (horizontalDelta > 0)
         m_offset += m_scrollSpeed;
 }
 
@@ -887,116 +891,123 @@ inline EType ScrollableRow::getType() const {
 // Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
-    // Dirty check for Column itself
-    // m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    // m_pastBounds.setPosition(m_bounds.getPosition());
-    // m_pastBounds.setSize(m_bounds.getSize());
-    // if (!m_isDirty) return;
-
     resize(parentBounds);
     applyModifiers();
 
+    float totalPercent = 0.f, totalFixed = 0.f;
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
+        if (e->m_modifier.getFixedHeight() > 0.f) totalFixed += e->m_modifier.getFixedHeight();
+        else totalPercent += e->m_modifier.getHeight();
+    }
+
+    float remainingSpace = m_bounds.getSize().y - totalFixed;
+    if (totalPercent <= 0) totalPercent = 1.f;
+
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
+        float height = e->m_modifier.getFixedHeight() > 0.f ? e->m_modifier.getFixedHeight() : (e->m_modifier.getHeight() / totalPercent) * remainingSpace;
+        sf::RectangleShape slot({m_bounds.getSize().x, height});
+        e->update(slot);
+    }
+    
     std::vector<Element*> top, center, bottom;
+    float topHeight = 0, centerHeight = 0, bottomHeight = 0;
+
     for (auto& e : m_elements) {
         if (e->m_modifier.isVisible()) {
             Align a = e->m_modifier.getAlignment();
-            if (hasAlign(a, Align::BOTTOM)) bottom.push_back(e);
-            else if (hasAlign(a, Align::CENTER_Y)) center.push_back(e);
-            else top.push_back(e); // default is TOP
+
+            if (hasAlign(a, Align::BOTTOM)) {
+                bottom.push_back(e);
+                bottomHeight += e->m_bounds.getSize().y;
+            } 
+            
+            else if (hasAlign(a, Align::CENTER_Y)) {
+                center.push_back(e);
+                centerHeight += e->m_bounds.getSize().y;
+            } 
+            
+            else {
+                top.push_back(e);
+                topHeight += e->m_bounds.getSize().y;
+            }
         }
     }
 
-    float totalFixed = 0.f;
-    float totalPercent = 0.f;
+    float yPos;
 
-    auto measureHeight = [&](Element* e) {
-        if (e->m_modifier.getFixedHeight() > 0.f)
-            return e->m_modifier.getFixedHeight();
-        totalPercent += e->m_modifier.getHeight();
-        return 0.f;
-    };
-
-    for (auto& e : m_elements)
-        totalFixed += measureHeight(e);
-
-    float remaining = m_bounds.getSize().y - totalFixed;
-    float centerWeight = 0.f;
-    for (auto& e : center) centerWeight += e->m_modifier.getHeight();
-
-    // TOP-aligned
-    float yTop = m_bounds.getPosition().y;
+    yPos = m_bounds.getPosition().y;
     for (auto& e : top) {
-        float height = (e->m_modifier.getFixedHeight() > 0.f)
-            ? e->m_modifier.getFixedHeight()
-            : (e->m_modifier.getHeight() / totalPercent) * remaining;
-
-        sf::RectangleShape slot({ m_bounds.getSize().x, height });
-        slot.setPosition({ m_bounds.getPosition().x, yTop });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ m_bounds.getPosition().x, yTop }); // X alignment later
-        yTop += e->m_bounds.getSize().y;
+        e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
+        yPos += e->m_bounds.getSize().y;
     }
 
-    // BOTTOM-aligned
-    float yBottom = m_bounds.getPosition().y + m_bounds.getSize().y;
-    for (auto it = bottom.rbegin(); it != bottom.rend(); ++it) {
-        Element* e = *it;
-        float height = (e->m_modifier.getFixedHeight() > 0.f)
-            ? e->m_modifier.getFixedHeight()
-            : (e->m_modifier.getHeight() / totalPercent) * remaining;
-
-        yBottom -= height;
-
-        sf::RectangleShape slot({ m_bounds.getSize().x, height });
-        slot.setPosition({ m_bounds.getPosition().x, yBottom });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ m_bounds.getPosition().x, yBottom });
-    }
-
-    // CENTER-aligned
-    float centerTotalHeight = 0.f;
+    yPos = m_bounds.getPosition().y + (m_bounds.getSize().y - centerHeight) / 2.f;
     for (auto& e : center) {
-        float height = (e->m_modifier.getFixedHeight() > 0.f)
-            ? e->m_modifier.getFixedHeight()
-            : (e->m_modifier.getHeight() / totalPercent) * remaining;
-        centerTotalHeight += height;
+        e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
+        yPos += e->m_bounds.getSize().y;
     }
 
-    float yCenter = m_bounds.getPosition().y + (m_bounds.getSize().y - centerTotalHeight) / 2.f;
-    for (auto& e : center) {
-        float height = (e->m_modifier.getFixedHeight() > 0.f)
-            ? e->m_modifier.getFixedHeight()
-            : (e->m_modifier.getHeight() / totalPercent) * remaining;
-
-        sf::RectangleShape slot({ m_bounds.getSize().x, height });
-        slot.setPosition({ m_bounds.getPosition().x, yCenter });
-
-        e->update(slot);
-        e->m_bounds.setPosition({ m_bounds.getPosition().x, yCenter });
-        yCenter += e->m_bounds.getSize().y;
+    yPos = m_bounds.getPosition().y + m_bounds.getSize().y - bottomHeight;
+    for (auto& e : bottom) {
+        e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
+        yPos += e->m_bounds.getSize().y;
     }
 
-    // Final pass for X alignment
-    for (auto& e : m_elements) {
-        Align a = e->m_modifier.getAlignment();
+    for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
         sf::Vector2f pos = e->m_bounds.getPosition();
+        Align a = e->m_modifier.getAlignment();
 
         if (hasAlign(a, Align::CENTER_X))
             pos.x = m_bounds.getPosition().x + (m_bounds.getSize().x - e->m_bounds.getSize().x) / 2.f;
+
         else if (hasAlign(a, Align::RIGHT))
             pos.x = m_bounds.getPosition().x + m_bounds.getSize().x - e->m_bounds.getSize().x;
 
+        else
+            pos.x = m_bounds.getPosition().x;
+
         e->m_bounds.setPosition(pos);
     }
-}    
+}
 
 inline void Column::render(sf::RenderTarget& target) {
-    target.draw(m_bounds);
-    for (auto& e : m_elements) {
-        if (e->m_modifier.isVisible())
-            e->render(target);
+    if (getType() == EType::ScrollableColumn) {
+        sf::View originalView = target.getView();
+
+        sf::FloatRect clipRect = m_bounds.getGlobalBounds();
+        sf::View clippingView(clipRect);
+
+        sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
+        sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
+
+        sf::Vector2u windowSize = target.getSize();
+        sf::FloatRect viewport(
+            {static_cast<float>(pixelPos.x) / windowSize.x,
+            static_cast<float>(pixelPos.y) / windowSize.y},
+            {clipRect.size.x / windowSize.x,
+            clipRect.size.y / windowSize.y}
+        );
+
+        clippingView.setViewport(viewport);
+
+        target.setView(clippingView);
+
+        target.draw(m_bounds);
+
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender)
+                e->render(target);
+        
+        target.setView(originalView);
+
+    } 
+    
+    else {
+        target.draw(m_bounds);
+        
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender)
+                e->render(target);
     }
 }
 
@@ -1006,9 +1017,7 @@ inline void Column::checkClick(const sf::Vector2f& pos) {
     Element::checkClick(pos);
 }
 
-inline EType Column::getType() const {
-    return EType::Column;
-}
+inline EType Column::getType() const { return EType::Column; }
 
 inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShape& parentBounds) {
     auto align = e->m_modifier.getAlignment();
@@ -1016,6 +1025,7 @@ inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShap
 
     if (hasAlign(align, Align::CENTER_X))
         pos.x = parentBounds.getPosition().x + (parentBounds.getSize().x - e->m_bounds.getSize().x) / 2.f;
+
     else if (hasAlign(align, Align::RIGHT))
         pos.x = parentBounds.getPosition().x + parentBounds.getSize().x - e->m_bounds.getSize().x;
 
@@ -1036,28 +1046,31 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
     if (m_elements.size() > 0) {
         for (auto& e : m_elements) {
             sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
-            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible()) {
+            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible())
                 e->m_bounds.setPosition({ e->m_bounds.getPosition().x, e->m_bounds.getPosition().y + m_offset});
-            }
+
+            const std::optional<sf::FloatRect> intersection = m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds());
+
+            if (!intersection) e->m_doRender = false;
+            else e->m_doRender = true;
         }
 
         if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().y <= m_bounds.getPosition().y)
             m_offset += m_bounds.getPosition().y - m_elements[m_elements.size() - 1]->m_bounds.getPosition().y;
+
         else if (m_elements[0]->m_bounds.getPosition().y >= m_bounds.getPosition().y)
             m_offset -= m_elements[0]->m_bounds.getPosition().y - m_bounds.getPosition().y;
     }
 }
 
-inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float delta) {
-    if (delta < 0)
+inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
+    if (verticalDelta< 0)
         m_offset -= m_scrollSpeed;
-    else if (delta > 0)
+    else if (verticalDelta > 0)
         m_offset += m_scrollSpeed;
 }
 
-inline EType ScrollableColumn::getType() const {
-    return EType::ScrollableColumn;
-}
+inline EType ScrollableColumn::getType() const { return EType::ScrollableColumn; }
 
 
 // ---------------------------------------------------------------------------- //
@@ -1071,21 +1084,13 @@ inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
     m_bounds.setPosition(m_customPosition);
 }
 
-inline EType FreeColumn::getType() const {
-    return EType::FreeColumn;
-}
+inline EType FreeColumn::getType() const { return EType::FreeColumn; }
 
-inline void FreeColumn::setPosition(sf::Vector2f pos) {
-    m_customPosition = pos;
-}
+inline void FreeColumn::setPosition(sf::Vector2f pos) { m_customPosition = pos; }
 
-inline sf::Vector2f FreeColumn::getPosition() const {
-    return m_customPosition;
-}
+inline sf::Vector2f FreeColumn::getPosition() const { return m_customPosition; }
 
-inline sf::Vector2f FreeColumn::getSize() const {
-    return m_bounds.getSize();
-}
+inline sf::Vector2f FreeColumn::getSize() const { return m_bounds.getSize(); }
 
 inline sf::Vector2f FreeColumn::getCenter() const {
     return 
@@ -1108,9 +1113,9 @@ inline Text::Text(Modifier modifier, const std::string& str, sf::Font font, cons
 : m_string(str), m_font(font){
     m_modifier = modifier;
     m_name = name;
-    if (!m_name.empty()) {
+
+    if (!m_name.empty())
         texts[m_name] = this;
-    }
 }
 
 inline Text::Text(Modifier modifier, const std::string& str, const std::string& fontPath, const std::string& name)
@@ -1124,16 +1129,19 @@ inline Text::Text(Modifier modifier, const std::string& str, const std::string& 
 
 inline void Text::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
+
     m_bounds.setPosition(parentBounds.getPosition());
     float fontSize = m_modifier.getFixedHeight() > 0
         ? m_modifier.getFixedHeight()
         : m_bounds.getSize().y;
+
     m_text.emplace(m_font, m_string);
     m_text->setCharacterSize(static_cast<unsigned>(fontSize));
     m_text->setFillColor(m_modifier.getColor());
+
     sf::FloatRect textBounds = m_text->getLocalBounds();
     m_bounds.setSize({ textBounds.size.x + textBounds.position.x, m_bounds.getSize().y });
-    // Dirty check for Text
+
     m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
     m_pastBounds.setPosition(m_bounds.getPosition());
     m_pastBounds.setSize(m_bounds.getSize());
@@ -1155,6 +1163,7 @@ inline void Text::render(sf::RenderTarget& target) {
 
 inline void Text::setString(const std::string& newStr) {
     m_string = newStr;
+
     if (m_text)
         m_text->setString(newStr);
 }
@@ -1167,9 +1176,9 @@ inline void Text::setString(const std::string& newStr) {
 inline Spacer::Spacer(Modifier& modifier, const std::string& name) { 
     m_modifier = modifier;
     m_name = name;
-    if (!m_name.empty()) {
+
+    if (!m_name.empty())
         spacers[m_name] = this;
-    }
 }
 
 inline void Spacer::update(sf::RectangleShape& parentBounds) {
@@ -1230,7 +1239,7 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
             m_bounds.getPosition().y + (m_bounds.getSize().y / 2.f) - (m_text->m_bounds.getSize().y / 2.f)
         });
     }
-    // Dirty check for Button
+
     m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
     m_pastBounds.setPosition(m_bounds.getPosition());
     m_pastBounds.setSize(m_bounds.getSize());
@@ -1274,17 +1283,20 @@ inline void Button::render (sf::RenderTarget& target) {
     if (m_text) {
         m_text->render(target);
     }
-
-    m_isClicked = false;
 }
 
 inline void Button::checkClick(const sf::Vector2f& pos) {
+    // Check if click position is within button bounds
     if (m_bounds.getGlobalBounds().contains(pos)) {
-        if (m_modifier.getOnClick()) m_modifier.getOnClick()();
         m_isClicked = true;
+        std::cout << "Button clicked: " << m_name << std::endl;
+        
+        // Execute onClick callback if one is set
+        if (m_modifier.getOnClick()) {
+            m_modifier.getOnClick()();
+        }
     }
 }
-
 
 inline void Button::setText(const std::string& newStr) {
     if (m_text)
@@ -1321,6 +1333,7 @@ inline Slider::Slider(
 inline void Slider::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
+
     m_knobRect.setSize
     ({
         m_bounds.getSize().x, 
@@ -1344,7 +1357,7 @@ inline void Slider::update(sf::RectangleShape& parentBounds) {
         m_bounds.getPosition().x, 
         m_bounds.getPosition().y + m_bounds.getSize().y - (m_bounds.getSize().y * m_curVal)
     });
-    // Dirty check for Slider
+
     m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
     m_pastBounds.setPosition(m_bounds.getPosition());
     m_pastBounds.setSize(m_bounds.getSize());
@@ -1357,18 +1370,23 @@ inline void Slider::render(sf::RenderTarget& target) {
 
 inline void Slider::checkClick(const sf::Vector2f& pos) {
     if (m_bounds.getGlobalBounds().contains(pos)) {
+        // Calculate relative Y position within slider bounds
         float relY = pos.y - m_bounds.getPosition().y;
-        float t = 1.f - (relY / m_bounds.getSize().y); // 1 at top, 0 at bottom
+        
+        // Convert Y position to normalized value (1 at top, 0 at bottom)
+        float t = 1.f - (relY / m_bounds.getSize().y);
+        
+        // Map normalized position to slider's value range
         float v = m_minVal + t * (m_maxVal - m_minVal);
+        
+        // Clamp to valid range
         if (v < m_minVal) v = m_minVal;
         if (v > m_maxVal) v = m_maxVal;
         m_curVal = v;
     }
 }
 
-inline float Slider::getValue() const {
-    return m_curVal;
-}
+inline float Slider::getValue() const { return m_curVal; }
 
 inline void Slider::setValue(float newVal) {
     m_curVal = newVal < m_minVal ? m_minVal : (newVal > m_maxVal ? m_maxVal : newVal);
@@ -1381,10 +1399,13 @@ inline void Slider::setValue(float newVal) {
 // ---------------------------------------------------------------------------- //
 template <typename T, typename... Args>
 T* obj(Args&&... args) {
+    // Create element with perfect forwarding of constructor arguments
     auto ptr = std::make_unique<T>(std::forward<Args>(args)...);
     T* raw = ptr.get();
+    
+    // Transfer ownership to global container for automatic memory management
     uilo_owned_elements.emplace_back(std::move(ptr));
-    // raw->m_isDirty = true;
+    
     return raw;
 }
 
@@ -1459,54 +1480,54 @@ static Slider* default_slider = slider();
 // Global Element Getters
 // ---------------------------------------------------------------------------- //
 inline Row* getRow(const std::string& name) {
-    if (containers.find(name) != containers.end()) {
+    if (containers.find(name) != containers.end())
         return dynamic_cast<Row*>(containers[name]);
-    } else {
+    else {
         std::cerr << "[UILO] Error: Row element \"" << name << "\" not found.\n";
         return default_row;
     }
 }
 
 inline Column* getColumn(const std::string& name) {
-    if (containers.find(name) != containers.end()) {
+    if (containers.find(name) != containers.end())
         return dynamic_cast<Column*>(containers[name]);
-    } else {
+    else {
         std::cerr << "[UILO] Error: Column element \"" << name << "\" not found.\n";
         return default_column;
     }
 }
 
 inline Spacer* getSpacer(const std::string& name) {
-    if (spacers.find(name) != spacers.end()) {
+    if (spacers.find(name) != spacers.end())
         return spacers[name];
-    } else {
+    else {
         std::cerr << "[UILO] Error: Spacer element \"" << name << "\" not found.\n";
         return default_spacer;
     }
 }
 
 inline Button* getButton(const std::string& name) {
-    if (buttons.find(name) != buttons.end()) {
+    if (buttons.find(name) != buttons.end())
         return buttons[name];
-    } else {
+    else {
         std::cerr << "[UILO] Error: Button element \"" << name << "\" not found.\n";
         return default_button;
     }
 }
 
 inline Text* getText(const std::string& name) {
-    if (texts.find(name) != texts.end()) {
+    if (texts.find(name) != texts.end())
         return texts[name];
-    } else {
+    else {
         std::cerr << "[UILO] Error: Text element \"" << name << "\" not found.\n";
         return default_text;
     }
 }
 
 inline Slider* getSlider(const std::string& name) {
-    if (sliders.find(name) != sliders.end()) {
+    if (sliders.find(name) != sliders.end())
         return sliders[name];
-    } else {
+    else {
         std::cerr << "[UILO] Error: Slider element \"" << name << "\" not found.\n";
         return default_slider;
     }
@@ -1519,9 +1540,8 @@ inline Slider* getSlider(const std::string& name) {
 inline Page::Page(std::initializer_list<Container*> containers) {
     m_bounds.setFillColor(sf::Color::Transparent);
 
-    for (const auto& c : containers) {
+    for (const auto& c : containers)
         m_containers.push_back(c);
-    }
 
     uilo_owned_pages.insert(this);
 }
@@ -1567,9 +1587,9 @@ inline void Page::dispatchClick(const sf::Vector2f& pos) {
         c->checkClick(pos);
 }
 
-inline void Page::dispatchScroll(const sf::Vector2f& pos, const float delta) {
-    for (auto& c : m_containers)
-        c->checkScroll(pos, delta);
+inline void Page::dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
+    for (auto& c : m_containers)    
+        c->checkScroll(pos, verticalDelta, horizontalDelta);
 }
 
 inline void Page::clear() {
@@ -1577,13 +1597,12 @@ inline void Page::clear() {
         c->clear();
         c->m_markedForDeletion = true;
     }
+
     m_containers.clear();
     cleanupMarkedElements();
 }
 
-inline Page* page(std::initializer_list<Container*> containers = {}) {
-    return new Page(containers);
-}
+inline Page* page(std::initializer_list<Container*> containers = {}) { return new Page(containers); }
 
 // ---------------------------------------------------------------------------- //
 // UILO Implementation
@@ -1627,11 +1646,12 @@ inline UILO::UILO(const std::string& windowTitle, std::initializer_list<std::pai
     if (m_window.isOpen()) m_running = true;
 
     for (auto& [page, name] : pages) {
-        if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+        if (uilo_owned_pages.find(page) != uilo_owned_pages.end())
             uilo_owned_pages.insert(page);
-        }
+
         m_ownedPages.push_back(std::unique_ptr<Page>(page));
         m_pages[name] = page;
+
         if (!m_currentPage) m_currentPage = page;
     }
 
@@ -1649,11 +1669,12 @@ inline UILO::UILO(sf::RenderWindow& userWindow, sf::View& windowView, std::initi
     }
 
     for (auto& [page, name] : pages) {
-        if (uilo_owned_pages.find(page) != uilo_owned_pages.end()) {
+        if (uilo_owned_pages.find(page) != uilo_owned_pages.end())
             uilo_owned_pages.insert(page);
-        }
+
         m_ownedPages.push_back(std::unique_ptr<Page>(page));
         m_pages[name] = page;
+
         if (!m_currentPage) m_currentPage = page;
 
     }
@@ -1671,13 +1692,23 @@ inline UILO::~UILO() {
 inline void UILO::update() {
     pollEvents();
 
-    for (auto& [name, btn] : buttons) {
-        btn->setClicked(false);
+    // Reset button click states after first frame to prevent sticky clicks
+    static bool firstFrame = true;
+    if (!firstFrame) {
+        for (auto& [name, btn] : uilo::buttons) {
+            if (btn->isClicked()) {
+                std::cout << "Resetting button: " << name << std::endl;
+            }
+            btn->setClicked(false);
+        }
     }
+
+    firstFrame = false;
 
     if (!m_windowOwned)
         return;
 
+    // Check if window size changed or if we have pending input events
     sf::Vector2u currentSize = m_window.getSize();
     bool windowResized = (currentSize != m_lastWindowSize);
 
@@ -1686,6 +1717,7 @@ inline void UILO::update() {
     }
 
     if (m_shouldUpdate) {
+        // Update view and bounds based on new window size
         m_defaultView.setSize({ (float)currentSize.x, (float)currentSize.y });
 
         m_bounds.setSize(m_defaultView.getSize());
@@ -1696,23 +1728,22 @@ inline void UILO::update() {
 
         m_window.setView(m_defaultView);
 
-        for (int i = 0; i < 20; i++)
+        // Update UI layout multiple times for stability (complex layouts may need multiple passes)
+        for (int i = 0; i < 12; ++i)
             m_currentPage->update(m_bounds);
 
         m_lastWindowSize = currentSize;
-
-        render();
-
-        m_shouldUpdate = false;
     }
 
+    // Process any pending click events
     if (m_clickPosition) {
         m_currentPage->dispatchClick(*m_clickPosition);
         m_clickPosition.reset();
     }
 
+    // Process any pending scroll events
     if (m_scrollPosition) {
-        m_currentPage->dispatchScroll(*m_scrollPosition, m_scrollDelta);
+        m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
         m_scrollPosition.reset();
     }
 }
@@ -1744,7 +1775,7 @@ inline void UILO::update(sf::View& windowView) {
     }
 
     if (m_scrollPosition) {
-        m_currentPage->dispatchScroll(*m_scrollPosition, m_scrollDelta);
+        m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
         m_scrollPosition.reset();
     }
 }
@@ -1757,23 +1788,21 @@ inline void UILO::render() {
     }
     else if (m_shouldUpdate)
         m_currentPage->render(*m_userWindow);
+
+    m_shouldUpdate = false;
 }
 
-inline void UILO::setTitle(const std::string& newTitle) {
-    m_window.setTitle(newTitle);
-}
+inline void UILO::setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
 
-inline bool UILO::isRunning() const {
-    return m_running;
-}
+inline bool UILO::isRunning() const { return m_running; }
 
 inline void UILO::addPage(std::pair<Page*, std::string> newPage) {
     Page*& page = newPage.first;
     const std::string& name = newPage.second;
 
-    if (uilo_owned_pages.find(page) == uilo_owned_pages.end()) {
+    if (uilo_owned_pages.find(page) == uilo_owned_pages.end())
         uilo_owned_pages.insert(page);
-    }
+
     m_ownedPages.push_back(std::unique_ptr<Page>(page));
     m_pages[name] = page;
     if (!m_currentPage) m_currentPage = page;
@@ -1816,10 +1845,7 @@ inline void UILO::setScale(float scale) {
     }
 }
 
-inline sf::Vector2f UILO::getMousePosition() const {
-    // std::cout << (m_defaultView.getCenter().x - (m_defaultView.getSize().x / 2)) << ", " << (m_defaultView.getCenter().y - (m_defaultView.getSize().y / 2)) << std::endl;
-    return m_mousePos;
-}
+inline sf::Vector2f UILO::getMousePosition() const { return m_mousePos; }
 
 inline void UILO::pollEvents() {
     while (const auto event = (m_windowOwned) ?  m_window.pollEvent() : m_userWindow->pollEvent()) {
@@ -1846,9 +1872,21 @@ inline void UILO::pollEvents() {
             m_mousePos = m_window.mapPixelToCoords(mouseMoved->position);
 
         if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            if (m_windowOwned) m_scrollPosition = m_clickPosition = m_window.mapPixelToCoords(mouseScrolled->position);
-            else m_scrollPosition = m_clickPosition = m_userWindow->mapPixelToCoords(mouseScrolled->position);
-            m_scrollDelta = mouseScrolled->delta;
+            if (m_windowOwned) {
+                m_scrollPosition = m_clickPosition = m_window.mapPixelToCoords(mouseScrolled->position);
+            } else {
+                m_scrollPosition = m_clickPosition = m_userWindow->mapPixelToCoords(mouseScrolled->position);
+            }
+
+            if (mouseScrolled->wheel == sf::Mouse::Wheel::Vertical) {
+                m_verticalScrollDelta = mouseScrolled->delta;
+                m_horizontalScrollDelta = 0.f;
+            }
+            else if (mouseScrolled->wheel == sf::Mouse::Wheel::Horizontal) {
+                m_horizontalScrollDelta = mouseScrolled->delta;
+                m_verticalScrollDelta = 0.f;
+            }
+
             m_shouldUpdate = true;
         }
 
