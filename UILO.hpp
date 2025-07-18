@@ -449,8 +449,6 @@ private:
 // ---------------------------------------------------------------------------- //
 class UILO {
 public:
-    sf::RenderWindow m_window;
-
     UILO();
     UILO(const std::string& windowTitle = "", std::initializer_list<std::pair<Page*, std::string>> pages = {});
     UILO(sf::RenderWindow& userWindow, sf::View& windowView, std::initializer_list<std::pair<Page*, std::string>> pages = {});
@@ -461,14 +459,17 @@ public:
     void render();
     void setTitle(const std::string& newTitle);
     bool isRunning() const;
+    bool windowShouldUpdate() const;
     void addPage(std::pair<Page*, std::string> newPage);
     void addPages(std::initializer_list<std::pair<Page*, std::string>> pages);
     void switchToPage(const std::string& pageName);
     void forceUpdate();
+    void forceUpdate(sf::View& windowView);
     void setScale(float scale = 1.5f);
     sf::Vector2f getMousePosition() const;
 
 private:
+    sf::RenderWindow m_window;
     sf::RenderWindow* m_userWindow = nullptr;
     bool m_windowOwned = true;
     int m_pollCount = 10;
@@ -1690,6 +1691,8 @@ inline UILO::~UILO() {
 }
 
 inline void UILO::update() {
+    sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
+
     pollEvents();
 
     // Reset button click states after first frame to prevent sticky clicks
@@ -1705,11 +1708,8 @@ inline void UILO::update() {
 
     firstFrame = false;
 
-    if (!m_windowOwned)
-        return;
-
     // Check if window size changed or if we have pending input events
-    sf::Vector2u currentSize = m_window.getSize();
+    sf::Vector2u currentSize = target.getSize();
     bool windowResized = (currentSize != m_lastWindowSize);
 
     if (windowResized || m_clickPosition || m_scrollPosition) {
@@ -1726,7 +1726,7 @@ inline void UILO::update() {
             m_defaultView.getCenter().y - m_defaultView.getSize().y * 0.5f
         });
 
-        m_window.setView(m_defaultView);
+        target.setView(m_defaultView);
 
         // Update UI layout multiple times for stability (complex layouts may need multiple passes)
         for (int i = 0; i < 12; ++i)
@@ -1754,26 +1754,54 @@ inline void UILO::update(sf::View& windowView) {
     if (m_windowOwned)
         return;
 
+    // Reset button click states after first frame to prevent sticky clicks
+    static bool firstFrame = true;
+    if (!firstFrame) {
+        for (auto& [name, btn] : uilo::buttons) {
+            if (btn->isClicked()) {
+                std::cout << "Resetting button: " << name << std::endl;
+            }
+            btn->setClicked(false);
+        }
+    }
+
+    firstFrame = false;
+
+    // Check if window size changed or if we have pending input events
     sf::Vector2u currentSize = m_userWindow->getSize();
+    bool windowResized = (currentSize != m_lastWindowSize);
+
+    if (windowResized || m_clickPosition || m_scrollPosition) {
+        m_shouldUpdate = true;
+    }
+
     if (m_shouldUpdate) {
-        windowView.setSize({ (float)currentSize.x * 2, (float)currentSize.y * 2 });
+        // Update view and bounds based on new window size
+        windowView.setSize({ (float)currentSize.x, (float)currentSize.y });
 
         m_bounds.setSize(windowView.getSize());
         m_bounds.setPosition({
-            windowView.getCenter().x - (windowView.getSize().x / 2),
-            windowView.getCenter().y - (windowView.getSize().y / 2)
+            windowView.getCenter().x - windowView.getSize().x * 0.5f,
+            windowView.getCenter().y - windowView.getSize().y * 0.5f
         });
 
         m_userWindow->setView(windowView);
-        m_currentPage->update(m_bounds);
+
+        // Update UI layout multiple times for stability (complex layouts may need multiple passes)
+        for (int i = 0; i < 12; ++i)
+            m_currentPage->update(m_bounds);
+
         m_lastWindowSize = currentSize;
+        std::cout << "Updated" << std::endl;
     }
 
+    // Process any pending click events
     if (m_clickPosition) {
         m_currentPage->dispatchClick(*m_clickPosition);
         m_clickPosition.reset();
     }
 
+    // Process any pending scroll events
     if (m_scrollPosition) {
         m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
         m_scrollPosition.reset();
@@ -1781,20 +1809,29 @@ inline void UILO::update(sf::View& windowView) {
 }
 
 inline void UILO::render() {
-    if (m_windowOwned && m_shouldUpdate) {
-        m_window.clear(sf::Color::Black);
-        m_currentPage->render(m_window);
-        m_window.display();
+    if (m_shouldUpdate) {
+        sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
+        
+        if (m_windowOwned) {
+            target.clear(sf::Color::Black);
+            m_currentPage->render(target);
+            target.display();
+        } else {
+            // For user-managed windows, only render the UI, let user handle clear/display
+            m_currentPage->render(target);
+        }
     }
-    else if (m_shouldUpdate)
-        m_currentPage->render(*m_userWindow);
 
     m_shouldUpdate = false;
 }
 
-inline void UILO::setTitle(const std::string& newTitle) { m_window.setTitle(newTitle); }
+inline void UILO::setTitle(const std::string& newTitle) { 
+    if (m_windowOwned) m_window.setTitle(newTitle);
+    // Note: User-managed windows need to set title themselves
+}
 
 inline bool UILO::isRunning() const { return m_running; }
+inline bool UILO::windowShouldUpdate() const { return m_shouldUpdate; }
 
 inline void UILO::addPage(std::pair<Page*, std::string> newPage) {
     Page*& page = newPage.first;
@@ -1831,8 +1868,15 @@ inline void UILO::switchToPage(const std::string& pageName) {
 }
 
 inline void UILO::forceUpdate() {
+    if (m_windowOwned) return;
     m_shouldUpdate = true;
     update();
+}
+
+inline void UILO::forceUpdate(sf::View& windowView) {
+    if (!m_windowOwned) return;
+    m_shouldUpdate = true;
+    update(windowView);
 }
 
 inline void UILO::setScale(float scale) {
@@ -1868,8 +1912,10 @@ inline void UILO::pollEvents() {
             m_shouldUpdate = true;
         }
 
-        if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>())
-            m_mousePos = m_window.mapPixelToCoords(mouseMoved->position);
+        if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>()) {
+            if (m_windowOwned) m_mousePos = m_window.mapPixelToCoords(mouseMoved->position);
+            else m_mousePos = m_userWindow->mapPixelToCoords(mouseMoved->position);
+        }
 
         if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
             if (m_windowOwned) {
