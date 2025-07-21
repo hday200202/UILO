@@ -156,6 +156,7 @@ public:
     bool m_isDirty = false;
     bool m_markedForDeletion = false;
     bool m_doRender = true;
+    std::vector<std::shared_ptr<sf::Drawable>> m_customGeometry;
 
     std::string m_name = "";
 
@@ -169,6 +170,9 @@ public:
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {}
     void setModifier(const Modifier& modifier);
     virtual EType getType() const;
+    sf::Vector2f getPosition() const { return m_bounds.getPosition(); }
+    sf::Vector2f getSize() const { return m_bounds.getSize(); }
+    void setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry);
 
 protected:
     void resize(sf::RectangleShape& parent);
@@ -594,6 +598,11 @@ inline void Element::resize(sf::RectangleShape& parent) {
 
 inline void Element::applyModifiers() { m_bounds.setFillColor(m_modifier.getColor()); }
 
+inline void Element::setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry) {
+    m_customGeometry.clear();
+    m_customGeometry = customGeometry;
+}
+
 
 
 // ---------------------------------------------------------------------------- //
@@ -794,7 +803,7 @@ inline void Row::render(sf::RenderTarget& target) {
         sf::FloatRect clipRect = m_bounds.getGlobalBounds();
         sf::View clippingView(clipRect);
 
-        // Convert world coordinates to pixel coordinates for viewport calculation
+        // Convert world coordinates to pixel coordinates for viewport calculation        
         sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
         sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
 
@@ -804,7 +813,7 @@ inline void Row::render(sf::RenderTarget& target) {
             {static_cast<float>(pixelPos.x) / windowSize.x,
             static_cast<float>(pixelPos.y) / windowSize.y},
             {clipRect.size.x / windowSize.x,
-            clipRect.size.y / windowSize.y}
+            clipRect.size.y / windowSize.y} 
         );
 
         clippingView.setViewport(viewport);
@@ -814,6 +823,13 @@ inline void Row::render(sf::RenderTarget& target) {
         for (auto& e : m_elements)
             if (e->m_modifier.isVisible() && e->m_doRender)
                 e->render(target);
+
+        sf::RenderStates states;
+        states.transform.translate(m_bounds.getPosition());
+
+        for (auto& d : m_customGeometry) {
+            target.draw(*d, states);
+        }
         
         target.setView(originalView);
     } 
@@ -876,10 +892,16 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 }
 
 inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
-    if (horizontalDelta < 0)
-        m_offset -= m_scrollSpeed;
-    else if (horizontalDelta > 0)
-        m_offset += m_scrollSpeed;
+    if (m_bounds.getGlobalBounds().contains(pos)) {
+        if (horizontalDelta < 0)
+            m_offset -= m_scrollSpeed;
+        else if (horizontalDelta > 0)
+            m_offset += m_scrollSpeed;
+
+        else if (verticalDelta != 0)
+            for (auto& e : m_elements)
+                e->checkScroll(pos, verticalDelta, horizontalDelta);
+    }
 }
 
 inline EType ScrollableRow::getType() const {
@@ -974,7 +996,6 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 inline void Column::render(sf::RenderTarget& target) {
     if (getType() == EType::ScrollableColumn) {
         sf::View originalView = target.getView();
-
         sf::FloatRect clipRect = m_bounds.getGlobalBounds();
         sf::View clippingView(clipRect);
 
@@ -990,22 +1011,26 @@ inline void Column::render(sf::RenderTarget& target) {
         );
 
         clippingView.setViewport(viewport);
-
         target.setView(clippingView);
 
         target.draw(m_bounds);
-
         for (auto& e : m_elements)
             if (e->m_modifier.isVisible() && e->m_doRender)
                 e->render(target);
+
+        sf::RenderStates states;
+        states.transform.translate(m_bounds.getPosition());
+
+        for (auto& d : m_customGeometry) {
+            target.draw(*d, states);
+        }
         
         target.setView(originalView);
-
-    } 
+    }
     
     else {
         target.draw(m_bounds);
-        
+
         for (auto& e : m_elements)
             if (e->m_modifier.isVisible() && e->m_doRender)
                 e->render(target);
@@ -1065,10 +1090,16 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
 }
 
 inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
-    if (verticalDelta< 0)
-        m_offset -= m_scrollSpeed;
-    else if (verticalDelta > 0)
-        m_offset += m_scrollSpeed;
+    if (m_bounds.getGlobalBounds().contains(pos)) {
+        if (verticalDelta < 0)
+            m_offset -= m_scrollSpeed;
+        else if (verticalDelta > 0)
+            m_offset += m_scrollSpeed;
+
+        else if (horizontalDelta != 0)
+            for (auto& e : m_elements)
+                e->checkScroll(pos, verticalDelta, horizontalDelta);
+    }
 }
 
 inline EType ScrollableColumn::getType() const { return EType::ScrollableColumn; }
@@ -1792,7 +1823,6 @@ inline void UILO::update(sf::View& windowView) {
             m_currentPage->update(m_bounds);
 
         m_lastWindowSize = currentSize;
-        std::cout << "Updated" << std::endl;
     }
 
     // Process any pending click events
