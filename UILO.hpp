@@ -1,10 +1,10 @@
 /* ---------------------------------------------------------------------------- //
-  Uilo - Retained-mode UI library for SFML
-  Author: Harrison Day 2025
-  License: MPL-2.0 (see LICENSE.md for full terms)
+ Uilo - Retained-mode UI library for SFML
+ Author: Harrison Day 2025
+ License: MPL-2.0 (see LICENSE.md for full terms)
 
-  This software is provided as-is. Redistribution and modification are allowed
-  under the terms of the Mozilla Public License 2.0.
+ This software is provided as-is. Redistribution and modification are allowed
+ under the terms of the Mozilla Public License 2.0.
 // ---------------------------------------------------------------------------- */
 
 #ifndef UILO_HPP
@@ -20,6 +20,7 @@
 #include <thread>
 #include <future>
 #include <algorithm>
+#include <optional>
 
 namespace uilo {
 
@@ -37,8 +38,6 @@ class Text;
 class Spacer;
 class Button;
 
-
-
 // ---------------------------------------------------------------------------- //
 // Global Ownership
 // ---------------------------------------------------------------------------- //
@@ -53,8 +52,6 @@ static std::unordered_map<std::string, Spacer*> spacers;
 static std::unordered_map<std::string, Button*> buttons;
 
 void cleanupMarkedElements();
-
-
 
 // ---------------------------------------------------------------------------- //
 // Alignment Enum
@@ -73,8 +70,6 @@ inline Align operator|(Align lhs, Align rhs);
 inline Align operator&(Align lhs, Align rhs);
 inline bool hasAlign(Align value, Align flag);
 
-
-
 // ---------------------------------------------------------------------------- //
 // Element Type Enum
 // ---------------------------------------------------------------------------- //
@@ -89,8 +84,6 @@ enum class EType {
     Button,
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Button Styles
 // ---------------------------------------------------------------------------- //
@@ -99,8 +92,6 @@ enum class ButtonStyle {
     Pill,
     Rect,
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Modifier
@@ -117,8 +108,10 @@ public:
     Modifier& setfixedHeight(float px);
     Modifier& align(Align alignment);
     Modifier& setColor(sf::Color color);
-    Modifier& onClick(funcPtr cb);
+    Modifier& onLClick(funcPtr cb);
+    Modifier& onRClick(funcPtr cb);
     Modifier& setVisible(bool visible);
+    Modifier& setHighPriority(bool highPriority);
 
     float getWidth() const;
     float getHeight() const;
@@ -126,8 +119,10 @@ public:
     float getFixedHeight() const;
     Align getAlignment() const;
     sf::Color getColor() const;
-    const funcPtr& getOnClick() const;
+    const funcPtr& getOnLClick() const;
+    const funcPtr& getOnRClick() const;
     bool isVisible() const;
+    bool isHighPriority() const;
 
 private:
     float m_widthPct = 1.f;
@@ -135,14 +130,14 @@ private:
     float m_fixedWidth = 0.f;
     float m_fixedHeight = 0.f;
     bool m_isVisible = true;
+    bool m_highPriority = false;
     Align m_alignment = Align::NONE;
     sf::Color m_color = sf::Color::Transparent;
-    std::function<void()> m_onClick = nullptr;
+    std::function<void()> m_onLClick = nullptr;
+    std::function<void()> m_onRClick = nullptr;
 };
 
 inline Modifier default_mod;
-
-
 
 // ---------------------------------------------------------------------------- //
 // Element Base Class
@@ -153,7 +148,7 @@ public:
     sf::RectangleShape m_pastBounds;
     Modifier m_modifier;
     bool m_uiloOwned = false;
-    bool m_isDirty = false;
+    bool m_isDirty = true;
     bool m_markedForDeletion = false;
     bool m_doRender = true;
     std::vector<std::shared_ptr<sf::Drawable>> m_customGeometry;
@@ -166,7 +161,7 @@ public:
     virtual void update(sf::RectangleShape& parentBounds);
     virtual void render(sf::RenderTarget& target);
     virtual void handleEvent(const sf::Event& event);
-    virtual void checkClick(const sf::Vector2f& pos);
+    virtual void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button);
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {}
     void setModifier(const Modifier& modifier);
     virtual EType getType() const;
@@ -178,8 +173,6 @@ protected:
     void resize(sf::RectangleShape& parent);
     void applyModifiers();
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Container Base Class
@@ -201,8 +194,6 @@ protected:
     std::vector<Element*> m_elements;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Row Container
 // ---------------------------------------------------------------------------- //
@@ -212,16 +203,14 @@ public:
 
     void update(sf::RectangleShape& parentBounds) override;
     void render(sf::RenderTarget& target) override;
-    void checkClick(const sf::Vector2f& pos) override;
+    void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
     virtual EType getType() const override;
-    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override 
+    virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override
     { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
 
 private:
     inline void applyVerticalAlignment(Element* e, const sf::RectangleShape& parentBounds);
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Scrollable Row Container
@@ -246,8 +235,6 @@ private:
     float m_scrollSpeed = 10.f;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Column Container
 // ---------------------------------------------------------------------------- //
@@ -257,7 +244,7 @@ public:
 
     void update(sf::RectangleShape& parentBounds) override;
     void render(sf::RenderTarget& target) override;
-    void checkClick(const sf::Vector2f& pos) override;
+    void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
     virtual EType getType() const override;
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override
     { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
@@ -265,8 +252,6 @@ public:
 private:
     inline void applyHorizontalAlignment(Element* e, const sf::RectangleShape& parentBounds);
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Scrollable Column Container
@@ -291,8 +276,6 @@ private:
     float m_scrollSpeed = 10.f;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Free Column Container
 // ---------------------------------------------------------------------------- //
@@ -316,10 +299,8 @@ public:
     void hide() { m_modifier.setVisible(false); }
 };
 
-
-
 // ---------------------------------------------------------------------------- //
-// Text Element (WIP / Placeholder)
+// Text Element
 // ---------------------------------------------------------------------------- //
 class Text : public Element {
 public:
@@ -337,8 +318,6 @@ private:
     std::optional<sf::Text> m_text;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Spacer Element
 // ---------------------------------------------------------------------------- //
@@ -347,8 +326,6 @@ public:
     Spacer(Modifier& modifier, const std::string& name = "");
     void update(sf::RectangleShape& parentBounds) override;
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Button Element
@@ -366,7 +343,7 @@ public:
 
     void update(sf::RectangleShape& parentBounds) override;
     void render (sf::RenderTarget& target) override;
-    void checkClick(const sf::Vector2f& pos) override;
+    void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
 
     void setText(const std::string& newStr);
     std::string getText() const;
@@ -389,8 +366,6 @@ private:
     bool m_isHovered = false;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Slider Element
 // ---------------------------------------------------------------------------- //
@@ -405,7 +380,7 @@ public:
 
     void update(sf::RectangleShape& parentBounds) override;
     void render(sf::RenderTarget& target) override;
-    void checkClick(const sf::Vector2f& pos) override;
+    void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
 
     float getValue() const;
     void setValue(float newVal);
@@ -422,8 +397,6 @@ private:
     sf::RectangleShape m_barRect;
 };
 
-
-
 // ---------------------------------------------------------------------------- //
 // Page View
 // ---------------------------------------------------------------------------- //
@@ -437,7 +410,7 @@ public:
     void update(const sf::RectangleShape& parentBounds);
     void render(sf::RenderTarget& target);
     void handleEvent(const sf::Event& event);
-    void dispatchClick(const sf::Vector2f& pos);
+    void dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button button);
     void dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta);
     void clear();
 
@@ -445,8 +418,6 @@ private:
     std::vector<Container*> m_containers;
     sf::RectangleShape m_bounds;
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // UILO Application Core
@@ -471,6 +442,11 @@ public:
     void forceUpdate(sf::View& windowView);
     void setScale(float scale = 1.5f);
     sf::Vector2f getMousePosition() const;
+    float getVerticalScrollDelta() const;
+    void resetScrollDeltas();
+    
+    void setInputBlocked(bool blocked);
+    bool isInputBlocked() const;
 
 private:
     sf::RenderWindow m_window;
@@ -486,12 +462,13 @@ private:
     std::unordered_map<std::string, Page*> m_pages;
     Page* m_currentPage = nullptr;
 
-    bool m_running       = false;
-    bool m_shouldUpdate  = true;
+    bool m_running = false;
+    bool m_shouldUpdate = true;
     bool m_mouseDragging = false;
+    bool m_inputBlocked = false;
 
     sf::Vector2u m_lastWindowSize;
-    std::optional<sf::Vector2f> m_clickPosition;
+    std::optional<std::pair<sf::Vector2f, sf::Mouse::Button>> m_clickInfo;
     std::optional<sf::Vector2f> m_scrollPosition;
     sf::Vector2f m_mousePos;
     float m_verticalScrollDelta = 0.f;
@@ -499,35 +476,39 @@ private:
 
     std::vector<std::unique_ptr<Page>> m_ownedPages;
 
+    std::vector<sf::RectangleShape> m_elementBoundsCache;
+    bool m_cacheIsInitialized = false;
+
     void pollEvents();
     void initDefaultView();
     void setView(const sf::View& view);
+    void _internal_update(sf::RenderWindow& target, sf::View& view);
 };
-
-
 
 // ---------------------------------------------------------------------------- //
 // Modifier Implementation
 // ---------------------------------------------------------------------------- //
-inline Modifier& Modifier::setWidth(float pct)          { m_widthPct = pct; m_fixedWidth = 0.f; return *this; }
-inline Modifier& Modifier::setHeight(float pct)         { m_heightPct = pct; m_fixedHeight = 0.f; return *this; }
-inline Modifier& Modifier::setfixedWidth(float px)      { m_fixedWidth = px; return *this; }
-inline Modifier& Modifier::setfixedHeight(float px)     { m_fixedHeight = px; return *this; }
-inline Modifier& Modifier::align(Align alignment)       { m_alignment = alignment; return *this; }
-inline Modifier& Modifier::setColor(sf::Color color)    { m_color = color; return *this; }
-inline Modifier& Modifier::onClick(funcPtr cb)          { m_onClick = std::move(cb); return *this; }
-inline Modifier& Modifier::setVisible(bool visible)     { m_isVisible = visible; return *this; }
+inline Modifier& Modifier::setWidth(float pct) { m_widthPct = pct; m_fixedWidth = 0.f; return *this; }
+inline Modifier& Modifier::setHeight(float pct) { m_heightPct = pct; m_fixedHeight = 0.f; return *this; }
+inline Modifier& Modifier::setfixedWidth(float px) { m_fixedWidth = px; return *this; }
+inline Modifier& Modifier::setfixedHeight(float px) { m_fixedHeight = px; return *this; }
+inline Modifier& Modifier::align(Align alignment) { m_alignment = alignment; return *this; }
+inline Modifier& Modifier::setColor(sf::Color color) { m_color = color; return *this; }
+inline Modifier& Modifier::onLClick(funcPtr cb) { m_onLClick = std::move(cb); return *this; }
+inline Modifier& Modifier::onRClick(funcPtr cb) { m_onRClick = std::move(cb); return *this; }
+inline Modifier& Modifier::setVisible(bool visible) { m_isVisible = visible; return *this; }
+inline Modifier& Modifier::setHighPriority(bool highPriority) { m_highPriority = highPriority; return *this; }
 
-inline float Modifier::getWidth() const                 { return m_widthPct; }
-inline float Modifier::getHeight() const                { return m_heightPct; }
-inline float Modifier::getFixedWidth() const            { return m_fixedWidth; }
-inline float Modifier::getFixedHeight() const           { return m_fixedHeight; }
-inline Align Modifier::getAlignment() const             { return m_alignment; }
-inline sf::Color Modifier::getColor() const             { return m_color; }
-inline const funcPtr& Modifier::getOnClick() const      { return m_onClick; }
-inline bool Modifier::isVisible() const                 { return m_isVisible; }
-
-
+inline float Modifier::getWidth() const { return m_widthPct; }
+inline float Modifier::getHeight() const { return m_heightPct; }
+inline float Modifier::getFixedWidth() const { return m_fixedWidth; }
+inline float Modifier::getFixedHeight() const { return m_fixedHeight; }
+inline Align Modifier::getAlignment() const { return m_alignment; }
+inline sf::Color Modifier::getColor() const { return m_color; }
+inline const funcPtr& Modifier::getOnLClick() const { return m_onLClick; }
+inline const funcPtr& Modifier::getOnRClick() const { return m_onRClick; }
+inline bool Modifier::isVisible() const { return m_isVisible; }
+inline bool Modifier::isHighPriority() const { return m_highPriority; }
 
 // ---------------------------------------------------------------------------- //
 // Element Implementation
@@ -537,29 +518,36 @@ inline Element::Element() {}
 inline Element::~Element() {}
 
 inline void Element::update(sf::RectangleShape& parentBounds) {
-    // Base: just check dirty
     m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
+    if (m_isDirty) {
+        m_pastBounds.setPosition(m_bounds.getPosition());
+        m_pastBounds.setSize(m_bounds.getSize());
+    }
 }
 
 inline void Element::render(sf::RenderTarget& target) {}
 
 inline void Element::handleEvent(const sf::Event& event) {
     if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
-        if (mousePressed->button == sf::Mouse::Button::Left) {
-            sf::Vector2f mousePos(mousePressed->position);
-            if (m_bounds.getGlobalBounds().contains(mousePos))
-                if (m_modifier.getOnClick())
-                    m_modifier.getOnClick()();
+        sf::Vector2f mousePos(mousePressed->position);
+        if (m_bounds.getGlobalBounds().contains(mousePos)) {
+            if (mousePressed->button == sf::Mouse::Button::Left) {
+                if (m_modifier.getOnLClick()) m_modifier.getOnLClick()();
+            } else if (mousePressed->button == sf::Mouse::Button::Right) {
+                if (m_modifier.getOnRClick()) m_modifier.getOnRClick()();
+            }
         }
     }
 }
 
-inline void Element::checkClick(const sf::Vector2f& pos) {
-    if (m_bounds.getGlobalBounds().contains(pos))
-        if (m_modifier.getOnClick())
-            m_modifier.getOnClick()();
+inline void Element::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
+    if (m_bounds.getGlobalBounds().contains(pos)) {
+        if (button == sf::Mouse::Button::Left) {
+            if (m_modifier.getOnLClick()) m_modifier.getOnLClick()();
+        } else if (button == sf::Mouse::Button::Right) {
+            if (m_modifier.getOnRClick()) m_modifier.getOnRClick()();
+        }
+    }
 }
 
 inline void Element::setModifier(const Modifier& modifier) { m_modifier = modifier; }
@@ -573,7 +561,6 @@ inline void Element::resize(sf::RectangleShape& parent) {
             m_bounds.getSize().y
         });
     }
-
     else {
         m_bounds.setSize({
             m_modifier.getWidth() * parent.getSize().x,
@@ -587,7 +574,6 @@ inline void Element::resize(sf::RectangleShape& parent) {
             m_modifier.getFixedHeight()
         });
     }
-
     else {
         m_bounds.setSize({
             m_bounds.getSize().x,
@@ -602,8 +588,6 @@ inline void Element::setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>
     m_customGeometry.clear();
     m_customGeometry = customGeometry;
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Container Implementation
@@ -650,10 +634,8 @@ inline const std::vector<Element*>& Container::getElements() const { return m_el
 inline void Container::clear() {
     for (auto& e : m_elements) {
         if (Container* childContainer = dynamic_cast<Container*>(e)) {
-            std::cout << "Clearing child container: " << childContainer->m_name << std::endl;
             childContainer->clear();
         }
-
         e->m_markedForDeletion = true;
     }
 
@@ -662,51 +644,37 @@ inline void Container::clear() {
 }
 
 inline void cleanupMarkedElements() {
-    std::cout << "Cleaning up marked elements, uilo_owned_elements size: " << uilo_owned_elements.size() << std::endl;
-    
     auto it = uilo_owned_elements.begin();
-    size_t deletedCount = 0;
-    
     while (it != uilo_owned_elements.end()) {
         Element* element = it->get();
-        
         if (element->m_markedForDeletion) {
-            std::cout << "  Deleting marked element: " << element->m_name << std::endl;
-            
             if (!element->m_name.empty()) {
                 auto buttonIt = buttons.find(element->m_name);
                 if (buttonIt != buttons.end() && buttonIt->second == element)
                     buttons.erase(buttonIt);
-                
+
                 auto sliderIt = sliders.find(element->m_name);
                 if (sliderIt != sliders.end() && sliderIt->second == element)
                     sliders.erase(sliderIt);
-                
+
                 auto textIt = texts.find(element->m_name);
                 if (textIt != texts.end() && textIt->second == element)
                     texts.erase(textIt);
-                
+
                 auto spacerIt = spacers.find(element->m_name);
                 if (spacerIt != spacers.end() && spacerIt->second == element)
                     spacers.erase(spacerIt);
-                
+
                 auto containerIt = containers.find(element->m_name);
                 if (containerIt != containers.end() && containerIt->second == element)
                     containers.erase(containerIt);
             }
-            
             it = uilo_owned_elements.erase(it);
-            deletedCount++;
         } else {
             ++it;
         }
     }
-    
-    std::cout << "Cleaned up " << deletedCount << " marked elements" << std::endl;
-    std::cout << "uilo_owned_elements size after: " << uilo_owned_elements.size() << std::endl;
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Row Implementation
@@ -714,8 +682,8 @@ inline void cleanupMarkedElements() {
 inline void Row::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
+    Element::update(parentBounds);
 
-    // Calculate total space requirements for width distribution
     float totalPercent = 0.f, totalFixed = 0.f;
     for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
         if (e->m_modifier.getFixedWidth() > 0.f) totalFixed += e->m_modifier.getFixedWidth();
@@ -724,31 +692,26 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
     float remainingSpace = m_bounds.getSize().x - totalFixed;
     if (totalPercent <= 0) totalPercent = 1.f;
 
-    // Update each child element with calculated width
     for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
         float width = e->m_modifier.getFixedWidth() > 0.f ? e->m_modifier.getFixedWidth() : (e->m_modifier.getWidth() / totalPercent) * remainingSpace;
         sf::RectangleShape slot({width, m_bounds.getSize().y});
         e->update(slot);
     }
-    
-    // Group elements by horizontal alignment for positioning
+
     std::vector<Element*> left, center, right;
     float leftWidth = 0, centerWidth = 0, rightWidth = 0;
 
     for (auto& e : m_elements) {
         if (e->m_modifier.isVisible()) {
             Align a = e->m_modifier.getAlignment();
-
             if (hasAlign(a, Align::RIGHT)) {
                 right.push_back(e);
                 rightWidth += e->m_bounds.getSize().x;
-            } 
-            
+            }
             else if (hasAlign(a, Align::CENTER_X)) {
                 center.push_back(e);
                 centerWidth += e->m_bounds.getSize().x;
-            } 
-            
+            }
             else {
                 left.push_back(e);
                 leftWidth += e->m_bounds.getSize().x;
@@ -756,7 +719,6 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
         }
     }
 
-    // Position left-aligned elements from left edge
     float xPos;
     xPos = m_bounds.getPosition().x;
     for (auto& e : left) {
@@ -764,31 +726,26 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
         xPos += e->m_bounds.getSize().x;
     }
 
-    // Position center-aligned elements in the middle
     xPos = m_bounds.getPosition().x + (m_bounds.getSize().x - centerWidth) / 2.f;
     for (auto& e : center) {
         e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
         xPos += e->m_bounds.getSize().x;
     }
 
-    // Position right-aligned elements from right edge
     xPos = m_bounds.getPosition().x + m_bounds.getSize().x - rightWidth;
     for (auto& e : right) {
         e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
         xPos += e->m_bounds.getSize().x;
     }
 
-    // Apply vertical alignment to all elements
     for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
         sf::Vector2f pos = e->m_bounds.getPosition();
         Align a = e->m_modifier.getAlignment();
 
         if (hasAlign(a, Align::CENTER_Y))
             pos.y = m_bounds.getPosition().y + (m_bounds.getSize().y - e->m_bounds.getSize().y) / 2.f;
-
         else if (hasAlign(a, Align::BOTTOM))
             pos.y = m_bounds.getPosition().y + m_bounds.getSize().y - e->m_bounds.getSize().y;
-
         else
             pos.y = m_bounds.getPosition().y;
 
@@ -798,55 +755,64 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 
 inline void Row::render(sf::RenderTarget& target) {
     if (getType() == EType::ScrollableRow) {
-        // Create clipping view for scrollable content to prevent overflow
         sf::View originalView = target.getView();
         sf::FloatRect clipRect = m_bounds.getGlobalBounds();
         sf::View clippingView(clipRect);
 
-        // Convert world coordinates to pixel coordinates for viewport calculation        
         sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
         sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
 
-        // Calculate normalized viewport coordinates (0-1 range)
         sf::Vector2u windowSize = target.getSize();
         sf::FloatRect viewport(
             {static_cast<float>(pixelPos.x) / windowSize.x,
-            static_cast<float>(pixelPos.y) / windowSize.y},
+             static_cast<float>(pixelPos.y) / windowSize.y},
             {clipRect.size.x / windowSize.x,
-            clipRect.size.y / windowSize.y} 
+             clipRect.size.y / windowSize.y}
         );
 
         clippingView.setViewport(viewport);
         target.setView(clippingView);
 
         target.draw(m_bounds);
-        for (auto& e : m_elements)
-            if (e->m_modifier.isVisible() && e->m_doRender)
-                e->render(target);
 
         sf::RenderStates states;
         states.transform.translate(m_bounds.getPosition());
-
+        
+        // Render normal priority elements first
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
+                e->render(target);
+        
         for (auto& d : m_customGeometry) {
             target.draw(*d, states);
         }
         
+        // Then render high priority elements on top
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && e->m_modifier.isHighPriority())
+                e->render(target);
+
         target.setView(originalView);
-    } 
-    
+    }
     else {
         target.draw(m_bounds);
-
+        
+        // Render normal priority elements first
         for (auto& e : m_elements)
-            if (e->m_modifier.isVisible() && e->m_doRender)
+            if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
+                e->render(target);
+        
+        // Then render high priority elements on top
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && e->m_modifier.isHighPriority())
                 e->render(target);
     }
 }
 
-inline void Row::checkClick(const sf::Vector2f& pos) {
+inline void Row::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     for (auto& e : m_elements)
-        e->checkClick(pos);
-    Element::checkClick(pos);
+        if (e) e->checkClick(pos, button);
+    Element::checkClick(pos, button);
 }
 
 inline EType Row::getType() const { return EType::Row; }
@@ -857,14 +823,11 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 
     if (hasAlign(align, Align::CENTER_Y))
         pos.y = parentBounds.getPosition().y + (parentBounds.getSize().y - e->m_bounds.getSize().y) / 2.f;
-
     else if (hasAlign(align, Align::BOTTOM))
         pos.y = parentBounds.getPosition().y + parentBounds.getSize().y - e->m_bounds.getSize().y;
 
     e->m_bounds.setPosition(pos);
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Scrollable Row Implementation
@@ -872,22 +835,20 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
+    Element::update(parentBounds);
 
     Row::update(parentBounds);
 
-    if (m_elements.size() > 0) {
+    if (!m_elements.empty()) {
         for (auto& e : m_elements) {
-            sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
-
-            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible())
+            if (e->m_modifier.isVisible())
                 e->m_bounds.setPosition({ e->m_bounds.getPosition().x + m_offset, e->m_bounds.getPosition().y});
         }
 
-        if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().x <= m_bounds.getPosition().x)
-            m_offset += m_bounds.getPosition().x - m_elements[m_elements.size() - 1]->m_bounds.getPosition().x;
-
-        else if (m_elements[0]->m_bounds.getPosition().x >= m_bounds.getPosition().x)
-            m_offset -= m_elements[0]->m_bounds.getPosition().x - m_bounds.getPosition().x;
+        if (m_elements.back()->m_bounds.getPosition().x <= m_bounds.getPosition().x)
+            m_offset += m_bounds.getPosition().x - m_elements.back()->m_bounds.getPosition().x;
+        else if (m_elements.front()->m_bounds.getPosition().x >= m_bounds.getPosition().x)
+            m_offset -= m_elements.front()->m_bounds.getPosition().x - m_bounds.getPosition().x;
     }
 }
 
@@ -897,7 +858,6 @@ inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float vert
             m_offset -= m_scrollSpeed;
         else if (horizontalDelta > 0)
             m_offset += m_scrollSpeed;
-
         else if (verticalDelta != 0)
             for (auto& e : m_elements)
                 e->checkScroll(pos, verticalDelta, horizontalDelta);
@@ -908,14 +868,13 @@ inline EType ScrollableRow::getType() const {
     return EType::ScrollableRow;
 }
 
-
-
 // ---------------------------------------------------------------------------- //
 // Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
+    Element::update(parentBounds);
 
     float totalPercent = 0.f, totalFixed = 0.f;
     for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
@@ -931,7 +890,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
         sf::RectangleShape slot({m_bounds.getSize().x, height});
         e->update(slot);
     }
-    
+
     std::vector<Element*> top, center, bottom;
     float topHeight = 0, centerHeight = 0, bottomHeight = 0;
 
@@ -942,13 +901,11 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
             if (hasAlign(a, Align::BOTTOM)) {
                 bottom.push_back(e);
                 bottomHeight += e->m_bounds.getSize().y;
-            } 
-            
+            }
             else if (hasAlign(a, Align::CENTER_Y)) {
                 center.push_back(e);
                 centerHeight += e->m_bounds.getSize().y;
-            } 
-            
+            }
             else {
                 top.push_back(e);
                 topHeight += e->m_bounds.getSize().y;
@@ -982,10 +939,8 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 
         if (hasAlign(a, Align::CENTER_X))
             pos.x = m_bounds.getPosition().x + (m_bounds.getSize().x - e->m_bounds.getSize().x) / 2.f;
-
         else if (hasAlign(a, Align::RIGHT))
             pos.x = m_bounds.getPosition().x + m_bounds.getSize().x - e->m_bounds.getSize().x;
-
         else
             pos.x = m_bounds.getPosition().x;
 
@@ -1005,42 +960,55 @@ inline void Column::render(sf::RenderTarget& target) {
         sf::Vector2u windowSize = target.getSize();
         sf::FloatRect viewport(
             {static_cast<float>(pixelPos.x) / windowSize.x,
-            static_cast<float>(pixelPos.y) / windowSize.y},
+             static_cast<float>(pixelPos.y) / windowSize.y},
             {clipRect.size.x / windowSize.x,
-            clipRect.size.y / windowSize.y}
+             clipRect.size.y / windowSize.y}
         );
 
         clippingView.setViewport(viewport);
         target.setView(clippingView);
 
         target.draw(m_bounds);
-        for (auto& e : m_elements)
-            if (e->m_modifier.isVisible() && e->m_doRender)
-                e->render(target);
-
+        
         sf::RenderStates states;
         states.transform.translate(m_bounds.getPosition());
+
+        // Render normal priority elements first
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
+                e->render(target);
+
 
         for (auto& d : m_customGeometry) {
             target.draw(*d, states);
         }
         
+        // Then render high priority elements on top
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && e->m_modifier.isHighPriority())
+                e->render(target);
+
         target.setView(originalView);
     }
-    
     else {
         target.draw(m_bounds);
-
+        
+        // Render normal priority elements first
         for (auto& e : m_elements)
-            if (e->m_modifier.isVisible() && e->m_doRender)
+            if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
+                e->render(target);
+        
+        // Then render high priority elements on top
+        for (auto& e : m_elements)
+            if (e->m_modifier.isVisible() && e->m_doRender && e->m_modifier.isHighPriority())
                 e->render(target);
     }
 }
 
-inline void Column::checkClick(const sf::Vector2f& pos) {
+inline void Column::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     for (auto& e : m_elements)
-        e->checkClick(pos);
-    Element::checkClick(pos);
+        if (e) e->checkClick(pos, button);
+    Element::checkClick(pos, button);
 }
 
 inline EType Column::getType() const { return EType::Column; }
@@ -1051,14 +1019,11 @@ inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShap
 
     if (hasAlign(align, Align::CENTER_X))
         pos.x = parentBounds.getPosition().x + (parentBounds.getSize().x - e->m_bounds.getSize().x) / 2.f;
-
     else if (hasAlign(align, Align::RIGHT))
         pos.x = parentBounds.getPosition().x + parentBounds.getSize().x - e->m_bounds.getSize().x;
 
     e->m_bounds.setPosition(pos);
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Scrollable Column Implementation
@@ -1066,26 +1031,23 @@ inline void Column::applyHorizontalAlignment(Element* e, const sf::RectangleShap
 inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
+    Element::update(parentBounds);
 
     Column::update(parentBounds);
 
-    if (m_elements.size() > 0) {
+    if (!m_elements.empty()) {
         for (auto& e : m_elements) {
-            sf::FloatRect bounds = e->m_bounds.getGlobalBounds();
-            if (e->m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds()) && e->m_modifier.isVisible())
+            if (e->m_modifier.isVisible())
                 e->m_bounds.setPosition({ e->m_bounds.getPosition().x, e->m_bounds.getPosition().y + m_offset});
 
             const std::optional<sf::FloatRect> intersection = m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds());
-
-            if (!intersection) e->m_doRender = false;
-            else e->m_doRender = true;
+            e->m_doRender = intersection.has_value();
         }
 
-        if (m_elements[m_elements.size() - 1]->m_bounds.getPosition().y <= m_bounds.getPosition().y)
-            m_offset += m_bounds.getPosition().y - m_elements[m_elements.size() - 1]->m_bounds.getPosition().y;
-
-        else if (m_elements[0]->m_bounds.getPosition().y >= m_bounds.getPosition().y)
-            m_offset -= m_elements[0]->m_bounds.getPosition().y - m_bounds.getPosition().y;
+        if (m_elements.back()->m_bounds.getPosition().y <= m_bounds.getPosition().y)
+            m_offset += m_bounds.getPosition().y - m_elements.back()->m_bounds.getPosition().y;
+        else if (m_elements.front()->m_bounds.getPosition().y >= m_bounds.getPosition().y)
+            m_offset -= m_elements.front()->m_bounds.getPosition().y - m_bounds.getPosition().y;
     }
 }
 
@@ -1095,7 +1057,6 @@ inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float v
             m_offset -= m_scrollSpeed;
         else if (verticalDelta > 0)
             m_offset += m_scrollSpeed;
-
         else if (horizontalDelta != 0)
             for (auto& e : m_elements)
                 e->checkScroll(pos, verticalDelta, horizontalDelta);
@@ -1104,9 +1065,8 @@ inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float v
 
 inline EType ScrollableColumn::getType() const { return EType::ScrollableColumn; }
 
-
 // ---------------------------------------------------------------------------- //
-// Scrollable Column Implementation
+// Free Column Implementation
 // ---------------------------------------------------------------------------- //
 inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
     sf::RectangleShape newParentBounds({0, 0});
@@ -1114,6 +1074,7 @@ inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
     newParentBounds.setSize(m_bounds.getSize());
     Column::update(newParentBounds);
     m_bounds.setPosition(m_customPosition);
+    Element::update(parentBounds);
 }
 
 inline EType FreeColumn::getType() const { return EType::FreeColumn; }
@@ -1125,7 +1086,7 @@ inline sf::Vector2f FreeColumn::getPosition() const { return m_customPosition; }
 inline sf::Vector2f FreeColumn::getSize() const { return m_bounds.getSize(); }
 
 inline sf::Vector2f FreeColumn::getCenter() const {
-    return 
+    return
     {
         m_customPosition.x + (m_bounds.getSize().x / 2),
         m_customPosition.y + (m_bounds.getSize().y / 2)
@@ -1136,12 +1097,10 @@ inline sf::FloatRect FreeColumn::getBounds() const {
     return sf::FloatRect(m_customPosition, m_bounds.getSize());
 }
 
-
-
 // ---------------------------------------------------------------------------- //
 // Text Implementation
 // ---------------------------------------------------------------------------- //
-inline Text::Text(Modifier modifier, const std::string& str, sf::Font font, const std::string& name) 
+inline Text::Text(Modifier modifier, const std::string& str, sf::Font font, const std::string& name)
 : m_string(str), m_font(font){
     m_modifier = modifier;
     m_name = name;
@@ -1153,6 +1112,9 @@ inline Text::Text(Modifier modifier, const std::string& str, sf::Font font, cons
 inline Text::Text(Modifier modifier, const std::string& str, const std::string& fontPath, const std::string& name)
 : m_string(str) {
     m_modifier = modifier;
+    m_name = name;
+    if (!m_name.empty())
+        texts[m_name] = this;
 
     if (!fontPath.empty())
         if (!m_font.openFromFile(fontPath))
@@ -1174,9 +1136,7 @@ inline void Text::update(sf::RectangleShape& parentBounds) {
     sf::FloatRect textBounds = m_text->getLocalBounds();
     m_bounds.setSize({ textBounds.size.x + textBounds.position.x, m_bounds.getSize().y });
 
-    m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
+    Element::update(parentBounds);
 }
 
 inline void Text::render(sf::RenderTarget& target) {
@@ -1187,7 +1147,7 @@ inline void Text::render(sf::RenderTarget& target) {
 
     m_text->setPosition(
         {m_bounds.getPosition().x + m_bounds.getSize().x / 2.f,
-        m_bounds.getPosition().y + m_bounds.getSize().y / 2.f}
+         m_bounds.getPosition().y + m_bounds.getSize().y / 2.f}
     );
 
     target.draw(*m_text);
@@ -1195,17 +1155,15 @@ inline void Text::render(sf::RenderTarget& target) {
 
 inline void Text::setString(const std::string& newStr) {
     m_string = newStr;
-
     if (m_text)
         m_text->setString(newStr);
+    m_isDirty = true;
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Spacer Implementation
 // ---------------------------------------------------------------------------- //
-inline Spacer::Spacer(Modifier& modifier, const std::string& name) { 
+inline Spacer::Spacer(Modifier& modifier, const std::string& name) {
     m_modifier = modifier;
     m_name = name;
 
@@ -1215,19 +1173,17 @@ inline Spacer::Spacer(Modifier& modifier, const std::string& name) {
 
 inline void Spacer::update(sf::RectangleShape& parentBounds) {
     m_bounds.setFillColor(sf::Color::Transparent);
-
     resize(parentBounds);
     applyModifiers();
+    Element::update(parentBounds);
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Button Implementation
 // ---------------------------------------------------------------------------- //
 inline Button::Button(
-    Modifier modifier, 
-    ButtonStyle buttonStyle, 
+    Modifier modifier,
+    ButtonStyle buttonStyle,
     const std::string& buttonText,
     const std::string& textFont,
     sf::Color textColor,
@@ -1245,8 +1201,8 @@ inline Button::Button(
             Modifier()
             .setHeight(0.4f)
             .setColor(textColor)
-            .align(Align::CENTER_X | Align::CENTER_Y), 
-            buttonText, 
+            .align(Align::CENTER_X | Align::CENTER_Y),
+            buttonText,
             textFont
         );
     }
@@ -1272,34 +1228,31 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
         });
     }
 
-    m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
+    Element::update(parentBounds);
 }
 
 inline void Button::render (sf::RenderTarget& target) {
     if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect)
         target.draw(m_bounds);
-
     else {
         m_leftCircle.setPointCount(static_cast<unsigned int>(m_bounds.getSize().y * 2));
         m_rightCircle.setPointCount(static_cast<unsigned int>(m_bounds.getSize().y * 2));
 
         m_leftCircle.setRadius(m_bounds.getSize().y / 2);
         m_rightCircle.setRadius(m_bounds.getSize().y / 2);
-        m_bodyRect.setSize
-        ({
-            m_bounds.getSize().x - m_bounds.getSize().y, 
+        m_bodyRect.setSize(
+        {
+            m_bounds.getSize().x - m_bounds.getSize().y,
             m_bounds.getSize().y
         });
         m_leftCircle.setPosition(m_bounds.getPosition());
-        m_rightCircle.setPosition
-        ({
-            m_bounds.getPosition().x + m_bounds.getSize().x - m_bounds.getSize().y, 
+        m_rightCircle.setPosition(
+        {
+            m_bounds.getPosition().x + m_bounds.getSize().x - m_bounds.getSize().y,
             m_bounds.getPosition().y
         });
-        m_bodyRect.setPosition
-        ({
+        m_bodyRect.setPosition(
+        {
             m_bounds.getPosition().x + m_leftCircle.getRadius(),
             m_bounds.getPosition().y
         });
@@ -1311,21 +1264,23 @@ inline void Button::render (sf::RenderTarget& target) {
             target.draw(m_bodyRect);
         }
     }
-    
+
     if (m_text) {
         m_text->render(target);
     }
 }
 
-inline void Button::checkClick(const sf::Vector2f& pos) {
-    // Check if click position is within button bounds
+inline void Button::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     if (m_bounds.getGlobalBounds().contains(pos)) {
-        m_isClicked = true;
-        std::cout << "Button clicked: " << m_name << std::endl;
-        
-        // Execute onClick callback if one is set
-        if (m_modifier.getOnClick()) {
-            m_modifier.getOnClick()();
+        if (button == sf::Mouse::Button::Left) {
+            m_isClicked = true;
+            if (m_modifier.getOnLClick()) {
+                m_modifier.getOnLClick()();
+            }
+        } else if (button == sf::Mouse::Button::Right) {
+            if (m_modifier.getOnRClick()) {
+                m_modifier.getOnRClick()();
+            }
         }
     }
 }
@@ -1340,8 +1295,6 @@ inline std::string Button::getText() const {
         return m_text->getString();
     return "";
 }
-
-
 
 // ---------------------------------------------------------------------------- //
 // Slider Implementation
@@ -1366,33 +1319,31 @@ inline void Slider::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
 
-    m_knobRect.setSize
-    ({
-        m_bounds.getSize().x, 
+    m_knobRect.setSize(
+    {
+        m_bounds.getSize().x,
         m_bounds.getSize().x * 0.25f
     });
-    
-    m_barRect.setSize
-    ({
-        4.f, 
+
+    m_barRect.setSize(
+    {
+        4.f,
         m_bounds.getSize().y
     });
 
-    m_barRect.setPosition
-    ({
-        m_bounds.getPosition().x + (m_bounds.getSize().x / 2) - 2, 
+    m_barRect.setPosition(
+    {
+        m_bounds.getPosition().x + (m_bounds.getSize().x / 2) - 2,
         m_bounds.getPosition().y
     });
 
-    m_knobRect.setPosition
-    ({
-        m_bounds.getPosition().x, 
+    m_knobRect.setPosition(
+    {
+        m_bounds.getPosition().x,
         m_bounds.getPosition().y + m_bounds.getSize().y - (m_bounds.getSize().y * m_curVal)
     });
 
-    m_isDirty = (m_bounds.getPosition() != m_pastBounds.getPosition() || m_bounds.getSize() != m_pastBounds.getSize());
-    m_pastBounds.setPosition(m_bounds.getPosition());
-    m_pastBounds.setSize(m_bounds.getSize());
+    Element::update(parentBounds);
 }
 
 inline void Slider::render(sf::RenderTarget& target) {
@@ -1400,18 +1351,12 @@ inline void Slider::render(sf::RenderTarget& target) {
     target.draw(m_knobRect);
 }
 
-inline void Slider::checkClick(const sf::Vector2f& pos) {
-    if (m_bounds.getGlobalBounds().contains(pos)) {
-        // Calculate relative Y position within slider bounds
+inline void Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
+    if (button == sf::Mouse::Button::Left && m_bounds.getGlobalBounds().contains(pos)) {
         float relY = pos.y - m_bounds.getPosition().y;
-        
-        // Convert Y position to normalized value (1 at top, 0 at bottom)
         float t = 1.f - (relY / m_bounds.getSize().y);
-        
-        // Map normalized position to slider's value range
         float v = m_minVal + t * (m_maxVal - m_minVal);
-        
-        // Clamp to valid range
+
         if (v < m_minVal) v = m_minVal;
         if (v > m_maxVal) v = m_maxVal;
         m_curVal = v;
@@ -1424,55 +1369,49 @@ inline void Slider::setValue(float newVal) {
     m_curVal = newVal < m_minVal ? m_minVal : (newVal > m_maxVal ? m_maxVal : newVal);
 }
 
-
-
 // ---------------------------------------------------------------------------- //
 // Element Factory
 // ---------------------------------------------------------------------------- //
 template <typename T, typename... Args>
 T* obj(Args&&... args) {
-    // Create element with perfect forwarding of constructor arguments
     auto ptr = std::make_unique<T>(std::forward<Args>(args)...);
     T* raw = ptr.get();
-    
-    // Transfer ownership to global container for automatic memory management
     uilo_owned_elements.emplace_back(std::move(ptr));
-    
     return raw;
 }
 
 inline Row* row(
-    Modifier modifier = default_mod, 
-    std::initializer_list<Element*> elements = {}, 
+    Modifier modifier = default_mod,
+    std::initializer_list<Element*> elements = {},
     const std::string& name = ""
 ) { return obj<Row>(modifier, elements, name); }
 
 inline ScrollableRow* scrollableRow(
-    Modifier modifier = default_mod, 
-    std::initializer_list<Element*> elements = {}, 
+    Modifier modifier = default_mod,
+    std::initializer_list<Element*> elements = {},
     const std::string& name = ""
 ) { return obj<ScrollableRow>(modifier, elements, name); }
 
 inline Column* column(
-    Modifier modifier = default_mod, 
-    std::initializer_list<Element*> elements = {}, 
+    Modifier modifier = default_mod,
+    std::initializer_list<Element*> elements = {},
     const std::string& name = ""
 ) { return obj<Column>(modifier, elements, name); }
 
 inline ScrollableColumn* scrollableColumn(
-    Modifier modifier = default_mod, 
-    std::initializer_list<Element*> elements = {}, 
+    Modifier modifier = default_mod,
+    std::initializer_list<Element*> elements = {},
     const std::string& name = ""
 ) { return obj<ScrollableColumn>(modifier, elements, name); }
 
 inline FreeColumn* freeColumn(
-    Modifier modifier = default_mod, 
-    std::initializer_list<Element*> elements = {}, 
+    Modifier modifier = default_mod,
+    std::initializer_list<Element*> elements = {},
     const std::string& name = ""
 ) { return obj<FreeColumn>(modifier, elements, name); }
 
 inline Spacer* spacer(
-    Modifier modifier = default_mod, 
+    Modifier modifier = default_mod,
     const std::string& name = ""
 ) { return obj<Spacer>(modifier, name); }
 
@@ -1501,18 +1440,16 @@ inline Slider* slider(
 
 static Row* default_row = row();
 static Column* default_column = column();
-static Spacer* default_spacer = spacer();
+static Spacer* default_spacer = new Spacer(default_mod);
 static Button* default_button = button();
 static Text* default_text = text();
 static Slider* default_slider = slider();
-
-
 
 // ---------------------------------------------------------------------------- //
 // Global Element Getters
 // ---------------------------------------------------------------------------- //
 inline Row* getRow(const std::string& name) {
-    if (containers.find(name) != containers.end())
+    if (containers.count(name))
         return dynamic_cast<Row*>(containers[name]);
     else {
         std::cerr << "[UILO] Error: Row element \"" << name << "\" not found.\n";
@@ -1521,7 +1458,7 @@ inline Row* getRow(const std::string& name) {
 }
 
 inline Column* getColumn(const std::string& name) {
-    if (containers.find(name) != containers.end())
+    if (containers.count(name))
         return dynamic_cast<Column*>(containers[name]);
     else {
         std::cerr << "[UILO] Error: Column element \"" << name << "\" not found.\n";
@@ -1530,7 +1467,7 @@ inline Column* getColumn(const std::string& name) {
 }
 
 inline Spacer* getSpacer(const std::string& name) {
-    if (spacers.find(name) != spacers.end())
+    if (spacers.count(name))
         return spacers[name];
     else {
         std::cerr << "[UILO] Error: Spacer element \"" << name << "\" not found.\n";
@@ -1539,7 +1476,7 @@ inline Spacer* getSpacer(const std::string& name) {
 }
 
 inline Button* getButton(const std::string& name) {
-    if (buttons.find(name) != buttons.end())
+    if (buttons.count(name))
         return buttons[name];
     else {
         std::cerr << "[UILO] Error: Button element \"" << name << "\" not found.\n";
@@ -1548,7 +1485,7 @@ inline Button* getButton(const std::string& name) {
 }
 
 inline Text* getText(const std::string& name) {
-    if (texts.find(name) != texts.end())
+    if (texts.count(name))
         return texts[name];
     else {
         std::cerr << "[UILO] Error: Text element \"" << name << "\" not found.\n";
@@ -1557,14 +1494,13 @@ inline Text* getText(const std::string& name) {
 }
 
 inline Slider* getSlider(const std::string& name) {
-    if (sliders.find(name) != sliders.end())
+    if (sliders.count(name))
         return sliders[name];
     else {
         std::cerr << "[UILO] Error: Slider element \"" << name << "\" not found.\n";
         return default_slider;
     }
 }
-
 
 // ---------------------------------------------------------------------------- //
 // Page Implementation
@@ -1577,29 +1513,26 @@ inline Page::Page(std::initializer_list<Container*> containers) {
 
     uilo_owned_pages.insert(this);
 }
- 
+
 inline Page::~Page() {
-    if (uilo_owned_pages.find(this) != uilo_owned_pages.end() && !time_to_delete) {
+    if (uilo_owned_pages.count(this) && !time_to_delete) {
         std::cerr << "[UILO] Error: Attempted to delete a UILO-owned page directly.\n";
         std::abort();
     }
 }
- 
+
 inline void Page::update(const sf::RectangleShape& parentBounds) {
     m_bounds = parentBounds;
-
-    std::vector<std::future<void>> futures;
 
     for (auto& c : m_containers) {
         if (c->m_modifier.isVisible()) {
             if (!(c->getType() == EType::FreeColumn))
                 c->m_bounds.setPosition(m_bounds.getPosition());
-
             c->update(m_bounds);
         }
     }
 }
- 
+
 inline void Page::render(sf::RenderTarget& target) {
     target.draw(m_bounds);
 
@@ -1608,19 +1541,19 @@ inline void Page::render(sf::RenderTarget& target) {
             c->render(target);
     }
 }
- 
+
 inline void Page::handleEvent(const sf::Event& event) {
     for (auto& c : m_containers)
         c->handleEvent(event);
 }
- 
-inline void Page::dispatchClick(const sf::Vector2f& pos) {
+
+inline void Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     for (auto& c : m_containers)
-        c->checkClick(pos);
+        c->checkClick(pos, button);
 }
 
 inline void Page::dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
-    for (auto& c : m_containers)    
+    for (auto& c : m_containers)
         c->checkScroll(pos, verticalDelta, horizontalDelta);
 }
 
@@ -1629,7 +1562,6 @@ inline void Page::clear() {
         c->clear();
         c->m_markedForDeletion = true;
     }
-
     m_containers.clear();
     cleanupMarkedElements();
 }
@@ -1677,16 +1609,7 @@ inline UILO::UILO(const std::string& windowTitle, std::initializer_list<std::pai
 
     if (m_window.isOpen()) m_running = true;
 
-    for (auto& [page, name] : pages) {
-        if (uilo_owned_pages.find(page) != uilo_owned_pages.end())
-            uilo_owned_pages.insert(page);
-
-        m_ownedPages.push_back(std::unique_ptr<Page>(page));
-        m_pages[name] = page;
-
-        if (!m_currentPage) m_currentPage = page;
-    }
-
+    addPages(pages);
     m_bounds.setFillColor(sf::Color::Transparent);
 }
 
@@ -1700,17 +1623,7 @@ inline UILO::UILO(sf::RenderWindow& userWindow, sf::View& windowView, std::initi
         m_windowOwned = false;
     }
 
-    for (auto& [page, name] : pages) {
-        if (uilo_owned_pages.find(page) != uilo_owned_pages.end())
-            uilo_owned_pages.insert(page);
-
-        m_ownedPages.push_back(std::unique_ptr<Page>(page));
-        m_pages[name] = page;
-
-        if (!m_currentPage) m_currentPage = page;
-
-    }
-
+    addPages(pages);
     m_bounds.setFillColor(sf::Color::Transparent);
 }
 
@@ -1721,143 +1634,103 @@ inline UILO::~UILO() {
     m_pages.clear();
 }
 
-inline void UILO::update() {
-    sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
-
+inline void UILO::_internal_update(sf::RenderWindow& target, sf::View& view) {
     pollEvents();
 
-    // Reset button click states after first frame to prevent sticky clicks
     static bool firstFrame = true;
     if (!firstFrame) {
         for (auto& [name, btn] : uilo::buttons) {
-            if (btn->isClicked()) {
-                std::cout << "Resetting button: " << name << std::endl;
-            }
             btn->setClicked(false);
         }
     }
-
     firstFrame = false;
 
-    // Check if window size changed or if we have pending input events
     sf::Vector2u currentSize = target.getSize();
-    bool windowResized = (currentSize != m_lastWindowSize);
+    if (currentSize != m_lastWindowSize) {
+        m_shouldUpdate = true;
+        m_lastWindowSize = currentSize;
+    }
 
-    if (windowResized || m_clickPosition || m_scrollPosition) {
+    if (!m_shouldUpdate && m_cacheIsInitialized && m_elementBoundsCache.size() == uilo_owned_elements.size()) {
+        for (size_t i = 0; i < uilo_owned_elements.size(); ++i) {
+            const auto& element = uilo_owned_elements[i];
+            const auto& cachedBounds = m_elementBoundsCache[i];
+            if (element->m_bounds.getPosition() != cachedBounds.getPosition() ||
+                element->m_bounds.getSize() != cachedBounds.getSize() ||
+                element->m_isDirty) {
+                m_shouldUpdate = true;
+                break;
+            }
+        }
+    } else if (!m_cacheIsInitialized || m_elementBoundsCache.size() != uilo_owned_elements.size()) {
         m_shouldUpdate = true;
     }
 
     if (m_shouldUpdate) {
-        // Update view and bounds based on new window size
-        m_defaultView.setSize({ (float)currentSize.x, (float)currentSize.y });
-
-        m_bounds.setSize(m_defaultView.getSize());
+        view.setSize({ (float)currentSize.x, (float)currentSize.y });
+        m_bounds.setSize(view.getSize());
         m_bounds.setPosition({
-            m_defaultView.getCenter().x - m_defaultView.getSize().x * 0.5f,
-            m_defaultView.getCenter().y - m_defaultView.getSize().y * 0.5f
+            view.getCenter().x - view.getSize().x * 0.5f,
+            view.getCenter().y - view.getSize().y * 0.5f
         });
+        target.setView(view);
 
-        target.setView(m_defaultView);
+        if (m_currentPage) {
+            for (int i = 0; i < 12; ++i)
+                m_currentPage->update(m_bounds);
+        }
 
-        // Update UI layout multiple times for stability (complex layouts may need multiple passes)
-        for (int i = 0; i < 12; ++i)
-            m_currentPage->update(m_bounds);
-
-        m_lastWindowSize = currentSize;
+        m_elementBoundsCache.clear();
+        m_elementBoundsCache.reserve(uilo_owned_elements.size());
+        for (const auto& elementPtr : uilo_owned_elements) {
+            m_elementBoundsCache.push_back(elementPtr->m_bounds);
+            elementPtr->m_isDirty = false;
+        }
+        m_cacheIsInitialized = true;
     }
 
-    // Process any pending click events
-    if (m_clickPosition) {
-        m_currentPage->dispatchClick(*m_clickPosition);
-        m_clickPosition.reset();
+    if (m_clickInfo) {
+        if (m_currentPage && !m_inputBlocked) {
+            m_currentPage->dispatchClick(m_clickInfo->first, m_clickInfo->second);
+        }
+        m_clickInfo.reset();
     }
 
-    // Process any pending scroll events
     if (m_scrollPosition) {
-        m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
+        if (m_currentPage && !m_inputBlocked) {
+            m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
+        }
         m_scrollPosition.reset();
     }
 }
 
+inline void UILO::update() {
+    sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
+    _internal_update(target, m_defaultView);
+}
+
 inline void UILO::update(sf::View& windowView) {
-    pollEvents();
-
-    if (m_windowOwned)
-        return;
-
-    // Reset button click states after first frame to prevent sticky clicks
-    static bool firstFrame = true;
-    if (!firstFrame) {
-        for (auto& [name, btn] : uilo::buttons) {
-            if (btn->isClicked()) {
-                std::cout << "Resetting button: " << name << std::endl;
-            }
-            btn->setClicked(false);
-        }
-    }
-
-    firstFrame = false;
-
-    // Check if window size changed or if we have pending input events
-    sf::Vector2u currentSize = m_userWindow->getSize();
-    bool windowResized = (currentSize != m_lastWindowSize);
-
-    if (windowResized || m_clickPosition || m_scrollPosition) {
-        m_shouldUpdate = true;
-    }
-
-    if (m_shouldUpdate) {
-        // Update view and bounds based on new window size
-        windowView.setSize({ (float)currentSize.x, (float)currentSize.y });
-
-        m_bounds.setSize(windowView.getSize());
-        m_bounds.setPosition({
-            windowView.getCenter().x - windowView.getSize().x * 0.5f,
-            windowView.getCenter().y - windowView.getSize().y * 0.5f
-        });
-
-        m_userWindow->setView(windowView);
-
-        // Update UI layout multiple times for stability (complex layouts may need multiple passes)
-        for (int i = 0; i < 12; ++i)
-            m_currentPage->update(m_bounds);
-
-        m_lastWindowSize = currentSize;
-    }
-
-    // Process any pending click events
-    if (m_clickPosition) {
-        m_currentPage->dispatchClick(*m_clickPosition);
-        m_clickPosition.reset();
-    }
-
-    // Process any pending scroll events
-    if (m_scrollPosition) {
-        m_currentPage->dispatchScroll(*m_scrollPosition, m_verticalScrollDelta, m_horizontalScrollDelta);
-        m_scrollPosition.reset();
-    }
+    if (m_windowOwned) return;
+    _internal_update(*m_userWindow, windowView);
 }
 
 inline void UILO::render() {
     if (m_shouldUpdate) {
         sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
-        
+
         if (m_windowOwned) {
             target.clear(sf::Color::Black);
-            m_currentPage->render(target);
+            if (m_currentPage) m_currentPage->render(target);
             target.display();
         } else {
-            // For user-managed windows, only render the UI, let user handle clear/display
-            m_currentPage->render(target);
+            if (m_currentPage) m_currentPage->render(target);
         }
     }
-
     m_shouldUpdate = false;
 }
 
-inline void UILO::setTitle(const std::string& newTitle) { 
+inline void UILO::setTitle(const std::string& newTitle) {
     if (m_windowOwned) m_window.setTitle(newTitle);
-    // Note: User-managed windows need to set title themselves
 }
 
 inline bool UILO::isRunning() const { return m_running; }
@@ -1867,44 +1740,45 @@ inline void UILO::addPage(std::pair<Page*, std::string> newPage) {
     Page*& page = newPage.first;
     const std::string& name = newPage.second;
 
-    if (uilo_owned_pages.find(page) == uilo_owned_pages.end())
+    if (!uilo_owned_pages.count(page))
         uilo_owned_pages.insert(page);
 
     m_ownedPages.push_back(std::unique_ptr<Page>(page));
     m_pages[name] = page;
     if (!m_currentPage) m_currentPage = page;
+    m_cacheIsInitialized = false;
 }
 
 inline void UILO::addPages(std::initializer_list<std::pair<Page*, std::string>> pages) {
     for (const auto& [page, name] : pages) {
-        if (uilo_owned_pages.find(page) == uilo_owned_pages.end()) {
+        if (!uilo_owned_pages.count(page)) {
             uilo_owned_pages.insert(page);
         }
         m_ownedPages.push_back(std::unique_ptr<Page>(page));
         m_pages[name] = page;
         if (!m_currentPage) m_currentPage = page;
     }
+    m_cacheIsInitialized = false;
 }
 
 inline void UILO::switchToPage(const std::string& pageName) {
     auto it = m_pages.find(pageName);
     if (it != m_pages.end()) {
-        m_currentPage = it->second;
-        m_shouldUpdate = true;
-        m_currentPage->update(m_bounds);
+        if (m_currentPage != it->second) {
+            m_currentPage = it->second;
+            m_shouldUpdate = true;
+        }
     } else {
         std::cerr << "[UILO] Page \"" << pageName << "\" not found.\n";
     }
 }
 
 inline void UILO::forceUpdate() {
-    if (m_windowOwned) return;
     m_shouldUpdate = true;
     update();
 }
 
 inline void UILO::forceUpdate(sf::View& windowView) {
-    if (!m_windowOwned) return;
     m_shouldUpdate = true;
     update(windowView);
 }
@@ -1920,40 +1794,42 @@ inline void UILO::setScale(float scale) {
 }
 
 inline sf::Vector2f UILO::getMousePosition() const { return m_mousePos; }
+inline float UILO::getVerticalScrollDelta() const { return m_verticalScrollDelta; }
+inline void UILO::resetScrollDeltas() { 
+    m_verticalScrollDelta = 0.f; 
+    m_horizontalScrollDelta = 0.f; 
+}
+
+inline void UILO::setInputBlocked(bool blocked) { m_inputBlocked = blocked; }
+inline bool UILO::isInputBlocked() const { return m_inputBlocked; }
 
 inline void UILO::pollEvents() {
-    while (const auto event = (m_windowOwned) ?  m_window.pollEvent() : m_userWindow->pollEvent()) {
-        if (!m_windowOwned && !m_userWindow)
-            return;
+    sf::RenderWindow* activeWindow = m_windowOwned ? &m_window : m_userWindow;
+    if (!activeWindow) return;
 
+    while (const auto event = activeWindow->pollEvent()) {
         if (event->is<sf::Event::Closed>()) {
-            if (m_windowOwned) m_window.close();
-            else m_userWindow->close();
+            activeWindow->close();
             m_running = false;
         }
 
         if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) {
-            if (mousePressed->button == sf::Mouse::Button::Left) {
-                if (m_windowOwned) m_clickPosition = m_window.mapPixelToCoords(mousePressed->position);
-                else m_clickPosition = m_userWindow->mapPixelToCoords(mousePressed->position);
-                m_mouseDragging = true;
+            sf::Mouse::Button button = mousePressed->button;
+            if (button == sf::Mouse::Button::Left || button == sf::Mouse::Button::Right) {
+                m_clickInfo = { activeWindow->mapPixelToCoords(mousePressed->position), button };
+                m_shouldUpdate = true;
+                if (button == sf::Mouse::Button::Left) {
+                    m_mouseDragging = true;
+                }
             }
-
-            m_shouldUpdate = true;
         }
 
         if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>()) {
-            if (m_windowOwned) m_mousePos = m_window.mapPixelToCoords(mouseMoved->position);
-            else m_mousePos = m_userWindow->mapPixelToCoords(mouseMoved->position);
+            m_mousePos = activeWindow->mapPixelToCoords(mouseMoved->position);
         }
 
         if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            if (m_windowOwned) {
-                m_scrollPosition = m_clickPosition = m_window.mapPixelToCoords(mouseScrolled->position);
-            } else {
-                m_scrollPosition = m_clickPosition = m_userWindow->mapPixelToCoords(mouseScrolled->position);
-            }
-
+            m_scrollPosition = activeWindow->mapPixelToCoords(mouseScrolled->position);
             if (mouseScrolled->wheel == sf::Mouse::Wheel::Vertical) {
                 m_verticalScrollDelta = mouseScrolled->delta;
                 m_horizontalScrollDelta = 0.f;
@@ -1962,7 +1838,6 @@ inline void UILO::pollEvents() {
                 m_horizontalScrollDelta = mouseScrolled->delta;
                 m_verticalScrollDelta = 0.f;
             }
-
             m_shouldUpdate = true;
         }
 
@@ -1989,9 +1864,7 @@ inline void UILO::setView(const sf::View& view) {
         m_userWindow->setView(m_defaultView);
 }
 
-
-
-// ---------------------------------------------------------------------------- //
+// -------------------scale--------------------------------------------------------- //
 // Alignment Helpers
 // ---------------------------------------------------------------------------- //
 inline Align operator|(Align lhs, Align rhs) {
@@ -2003,10 +1876,8 @@ inline Align operator&(Align lhs, Align rhs) {
 }
 
 inline bool hasAlign(Align value, Align flag) {
-    return static_cast<uint8_t>(value & flag) != 0;
+    return (static_cast<uint8_t>(value) & static_cast<uint8_t>(flag)) != 0;
 }
-
-
 
 using contains = std::initializer_list<uilo::Element*>;
 
