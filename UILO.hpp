@@ -151,6 +151,7 @@ public:
     bool m_isDirty = true;
     bool m_markedForDeletion = false;
     bool m_doRender = true;
+    bool m_isHovered = false;
     std::vector<std::shared_ptr<sf::Drawable>> m_customGeometry;
 
     std::string m_name = "";
@@ -162,11 +163,13 @@ public:
     virtual void render(sf::RenderTarget& target);
     virtual void handleEvent(const sf::Event& event);
     virtual void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button);
+    virtual void checkHover(const sf::Vector2f& pos);
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {}
     void setModifier(const Modifier& modifier);
     virtual EType getType() const;
     sf::Vector2f getPosition() const { return m_bounds.getPosition(); }
     sf::Vector2f getSize() const { return m_bounds.getSize(); }
+    bool isHovered() const { return m_isHovered; }
     void setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry);
 
 protected:
@@ -204,6 +207,7 @@ public:
     void update(sf::RectangleShape& parentBounds) override;
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+    void checkHover(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override
     { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
@@ -220,6 +224,7 @@ public:
     using Row::Row;
     using Row::render;
     using Row::checkClick;
+    using Row::checkHover;
 
     void update(sf::RectangleShape& parentBounds) override;
     void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override;
@@ -245,6 +250,7 @@ public:
     void update(sf::RectangleShape& parentBounds) override;
     void render(sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+    void checkHover(const sf::Vector2f& pos) override;
     virtual EType getType() const override;
     virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override
     { for (auto& e : m_elements) e->checkScroll(pos, verticalDelta, horizontalDelta); }
@@ -261,6 +267,7 @@ public:
     using Column::Column;
     using Column::render;
     using Column::checkClick;
+    using Column::checkHover;
 
     void update(sf::RectangleShape& parentBounds) override;
     void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override;
@@ -286,6 +293,7 @@ public:
     using Column::Column;
     using Column::render;
     using Column::checkClick;
+    using Column::checkHover;
 
     void update(sf::RectangleShape& parentBounds) override;
     void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {}
@@ -344,6 +352,7 @@ public:
     void update(sf::RectangleShape& parentBounds) override;
     void render (sf::RenderTarget& target) override;
     void checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+    void checkHover(const sf::Vector2f& pos) override;
 
     void setText(const std::string& newStr);
     std::string getText() const;
@@ -412,6 +421,7 @@ public:
     void handleEvent(const sf::Event& event);
     void dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button button);
     void dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta);
+    void dispatchHover(const sf::Vector2f& pos);
     void clear();
 
 private:
@@ -548,6 +558,10 @@ inline void Element::checkClick(const sf::Vector2f& pos, sf::Mouse::Button butto
             if (m_modifier.getOnRClick()) m_modifier.getOnRClick()();
         }
     }
+}
+
+inline void Element::checkHover(const sf::Vector2f& pos) {
+    m_isHovered = m_bounds.getGlobalBounds().contains(pos);
 }
 
 inline void Element::setModifier(const Modifier& modifier) { m_modifier = modifier; }
@@ -815,6 +829,12 @@ inline void Row::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     Element::checkClick(pos, button);
 }
 
+inline void Row::checkHover(const sf::Vector2f& pos) {
+    Element::checkHover(pos);
+    for (auto& e : m_elements)
+        if (e) e->checkHover(pos);
+}
+
 inline EType Row::getType() const { return EType::Row; }
 
 inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& parentBounds) {
@@ -1009,6 +1029,12 @@ inline void Column::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
     for (auto& e : m_elements)
         if (e) e->checkClick(pos, button);
     Element::checkClick(pos, button);
+}
+
+inline void Column::checkHover(const sf::Vector2f& pos) {
+    Element::checkHover(pos);
+    for (auto& e : m_elements)
+        if (e) e->checkHover(pos);
 }
 
 inline EType Column::getType() const { return EType::Column; }
@@ -1285,6 +1311,11 @@ inline void Button::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
     }
 }
 
+inline void Button::checkHover(const sf::Vector2f& pos) {
+    m_isHovered = m_bounds.getGlobalBounds().contains(pos);
+    Element::checkHover(pos);
+}
+
 inline void Button::setText(const std::string& newStr) {
     if (m_text)
         m_text->setString(newStr);
@@ -1557,6 +1588,11 @@ inline void Page::dispatchScroll(const sf::Vector2f& pos, const float verticalDe
         c->checkScroll(pos, verticalDelta, horizontalDelta);
 }
 
+inline void Page::dispatchHover(const sf::Vector2f& pos) {
+    for (auto& c : m_containers)
+        c->checkHover(pos);
+}
+
 inline void Page::clear() {
     for (auto& c : m_containers) {
         c->clear();
@@ -1706,12 +1742,30 @@ inline void UILO::_internal_update(sf::RenderWindow& target, sf::View& view) {
 
 inline void UILO::update() {
     sf::RenderWindow& target = m_windowOwned ? m_window : *m_userWindow;
+    
+    // Update mouse position every frame using real-time mouse position
+    m_mousePos = target.mapPixelToCoords(sf::Mouse::getPosition(target));
+    
     _internal_update(target, m_defaultView);
+    
+    // Always check hover for the current mouse position on every frame
+    if (m_currentPage && !m_inputBlocked) {
+        m_currentPage->dispatchHover(m_mousePos);
+    }
 }
 
 inline void UILO::update(sf::View& windowView) {
     if (m_windowOwned) return;
+    
+    // Update mouse position every frame using real-time mouse position
+    m_mousePos = m_userWindow->mapPixelToCoords(sf::Mouse::getPosition(*m_userWindow));
+    
     _internal_update(*m_userWindow, windowView);
+    
+    // Always check hover for the current mouse position on every frame
+    if (m_currentPage && !m_inputBlocked) {
+        m_currentPage->dispatchHover(m_mousePos);
+    }
 }
 
 inline void UILO::render() {
