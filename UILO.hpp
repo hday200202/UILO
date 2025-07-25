@@ -42,14 +42,14 @@ class Button;
 // Global Ownership
 // ---------------------------------------------------------------------------- //
 static std::unordered_set<Page*> uilo_owned_pages;
-static std::vector<std::unique_ptr<Element>> uilo_owned_elements;
-static bool time_to_delete = false;
+inline static std::vector<std::unique_ptr<Element>> uilo_owned_elements;
+inline static bool time_to_delete = false;
 
-static std::unordered_map<std::string, Slider*> sliders;
-static std::unordered_map<std::string, Container*> containers;
-static std::unordered_map<std::string, Text*> texts;
-static std::unordered_map<std::string, Spacer*> spacers;
-static std::unordered_map<std::string, Button*> buttons;
+inline static std::unordered_map<std::string, Slider*> sliders;
+inline static std::unordered_map<std::string, Container*> containers;
+inline static std::unordered_map<std::string, Text*> texts;
+inline static std::unordered_map<std::string, Spacer*> spacers;
+inline static std::unordered_map<std::string, Button*> buttons;
 
 void cleanupMarkedElements();
 
@@ -91,6 +91,14 @@ enum class ButtonStyle {
     Default,
     Pill,
     Rect,
+};
+
+// ---------------------------------------------------------------------------- //
+// Slider Orientation
+// ---------------------------------------------------------------------------- //
+enum class SliderOrientation {
+    Vertical,
+    Horizontal,
 };
 
 // ---------------------------------------------------------------------------- //
@@ -384,6 +392,7 @@ public:
         Modifier modifier = default_mod,
         sf::Color knobColor = sf::Color::White,
         sf::Color barColor = sf::Color::Black,
+        SliderOrientation orientation = SliderOrientation::Vertical,
         const std::string& name = ""
     );
 
@@ -401,6 +410,7 @@ private:
 
     sf::Color m_knobColor = sf::Color::White;
     sf::Color m_barColor = sf::Color::Black;
+    SliderOrientation m_orientation = SliderOrientation::Vertical;
 
     sf::RectangleShape m_knobRect;
     sf::RectangleShape m_barRect;
@@ -1334,8 +1344,9 @@ inline Slider::Slider(
     Modifier modifier,
     sf::Color knobColor,
     sf::Color barColor,
+    SliderOrientation orientation,
     const std::string& name
-) : m_knobColor(knobColor), m_barColor(barColor) {
+) : m_knobColor(knobColor), m_barColor(barColor), m_orientation(orientation) {
     m_modifier = modifier;
     m_knobRect.setFillColor(m_knobColor);
     m_barRect.setFillColor(m_barColor);
@@ -1350,29 +1361,57 @@ inline void Slider::update(sf::RectangleShape& parentBounds) {
     resize(parentBounds);
     applyModifiers();
 
-    m_knobRect.setSize(
-    {
-        m_bounds.getSize().x,
-        m_bounds.getSize().x * 0.25f
-    });
+    if (m_orientation == SliderOrientation::Vertical) {
+        // Vertical slider (original implementation)
+        m_knobRect.setSize(
+        {
+            m_bounds.getSize().x,
+            m_bounds.getSize().x * 0.25f
+        });
 
-    m_barRect.setSize(
-    {
-        4.f,
-        m_bounds.getSize().y
-    });
+        m_barRect.setSize(
+        {
+            4.f,
+            m_bounds.getSize().y
+        });
 
-    m_barRect.setPosition(
-    {
-        m_bounds.getPosition().x + (m_bounds.getSize().x / 2) - 2,
-        m_bounds.getPosition().y
-    });
+        m_barRect.setPosition(
+        {
+            m_bounds.getPosition().x + (m_bounds.getSize().x / 2) - 2,
+            m_bounds.getPosition().y
+        });
 
-    m_knobRect.setPosition(
-    {
-        m_bounds.getPosition().x,
-        m_bounds.getPosition().y + m_bounds.getSize().y - (m_bounds.getSize().y * m_curVal)
-    });
+        m_knobRect.setPosition(
+        {
+            m_bounds.getPosition().x,
+            m_bounds.getPosition().y + m_bounds.getSize().y - (m_bounds.getSize().y * m_curVal)
+        });
+    } else {
+        // Horizontal slider
+        m_knobRect.setSize(
+        {
+            m_bounds.getSize().y * 0.25f,
+            m_bounds.getSize().y
+        });
+
+        m_barRect.setSize(
+        {
+            m_bounds.getSize().x,
+            4.f
+        });
+
+        m_barRect.setPosition(
+        {
+            m_bounds.getPosition().x,
+            m_bounds.getPosition().y + (m_bounds.getSize().y / 2) - 2
+        });
+
+        m_knobRect.setPosition(
+        {
+            m_bounds.getPosition().x + (m_bounds.getSize().x * m_curVal) - (m_knobRect.getSize().x / 2),
+            m_bounds.getPosition().y
+        });
+    }
 
     Element::update(parentBounds);
 }
@@ -1384,9 +1423,19 @@ inline void Slider::render(sf::RenderTarget& target) {
 
 inline void Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
     if (button == sf::Mouse::Button::Left && m_bounds.getGlobalBounds().contains(pos)) {
-        float relY = pos.y - m_bounds.getPosition().y;
-        float t = 1.f - (relY / m_bounds.getSize().y);
-        float v = m_minVal + t * (m_maxVal - m_minVal);
+        float t, v;
+        
+        if (m_orientation == SliderOrientation::Vertical) {
+            // Vertical slider (original implementation)
+            float relY = pos.y - m_bounds.getPosition().y;
+            t = 1.f - (relY / m_bounds.getSize().y);
+        } else {
+            // Horizontal slider
+            float relX = pos.x - m_bounds.getPosition().x;
+            t = relX / m_bounds.getSize().x;
+        }
+        
+        v = m_minVal + t * (m_maxVal - m_minVal);
 
         if (v < m_minVal) v = m_minVal;
         if (v > m_maxVal) v = m_maxVal;
@@ -1466,15 +1515,30 @@ inline Slider* slider(
     Modifier modifier = default_mod,
     sf::Color knobColor = sf::Color::White,
     sf::Color barColor = sf::Color::Black,
+    SliderOrientation orientation = SliderOrientation::Vertical,
     const std::string& name = ""
-) { return obj<Slider>(modifier, knobColor, barColor, name); }
+) { return obj<Slider>(modifier, knobColor, barColor, orientation, name); }
 
-static Row* default_row = row();
-static Column* default_column = column();
-static Spacer* default_spacer = new Spacer(default_mod);
-static Button* default_button = button();
-static Text* default_text = text();
-static Slider* default_slider = slider();
+inline Slider* verticalSlider(
+    Modifier modifier = default_mod,
+    sf::Color knobColor = sf::Color::White,
+    sf::Color barColor = sf::Color::Black,
+    const std::string& name = ""
+) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Vertical, name); }
+
+inline Slider* horizontalSlider(
+    Modifier modifier = default_mod,
+    sf::Color knobColor = sf::Color::White,
+    sf::Color barColor = sf::Color::Black,
+    const std::string& name = ""
+) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Horizontal, name); }
+
+inline static Row* default_row = row();
+inline static Column* default_column = column();
+inline static Spacer* default_spacer = new Spacer(default_mod);
+inline static Button* default_button = button();
+inline static Text* default_text = text();
+inline static Slider* default_slider = slider();
 
 // ---------------------------------------------------------------------------- //
 // Global Element Getters
