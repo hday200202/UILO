@@ -769,72 +769,104 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	applyModifiers();
 	Element::update(parentBounds);
 
+	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		if (e->m_modifier.getFixedWidth() > 0.f) totalFixed += e->m_modifier.getFixedWidth();
-		else totalPercent += e->m_modifier.getWidth();
-	}
-	float remainingSpace = m_bounds.getSize().x - totalFixed;
-	if (totalPercent <= 0) totalPercent = 1.f;
-
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		float width = e->m_modifier.getFixedWidth() > 0.f ? e->m_modifier.getFixedWidth() : (e->m_modifier.getWidth() / totalPercent) * remainingSpace;
-		sf::RectangleShape slot({width, m_bounds.getSize().y});
-		e->update(slot);
-	}
-
-	std::vector<Element*> left, center, right;
-	float leftWidth = 0, centerWidth = 0, rightWidth = 0;
-
-	for (auto& e : m_elements) {
+	size_t visibleCount = 0;
+	for (const auto& e : m_elements) {
 		if (e->m_modifier.isVisible()) {
-			Align a = e->m_modifier.getAlignment();
-			if (hasAlign(a, Align::RIGHT)) {
+			++visibleCount;
+			const float fixedWidth = e->m_modifier.getFixedWidth();
+			if (fixedWidth > 0.f) {
+				totalFixed += fixedWidth;
+			} else {
+				totalPercent += e->m_modifier.getWidth();
+			}
+		}
+	}
+	
+	if (visibleCount == 0) return; // Early exit if no visible elements
+	
+	const float remainingSpace = m_bounds.getSize().x - totalFixed;
+	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
+	const sf::Vector2f boundsSize = m_bounds.getSize();
+	
+	// Update all elements in single pass
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const float fixedWidth = e->m_modifier.getFixedWidth();
+			const float width = (fixedWidth > 0.f) ? fixedWidth : (e->m_modifier.getWidth() * percentScale * remainingSpace);
+			const sf::RectangleShape slot({width, boundsSize.y});
+			e->update(const_cast<sf::RectangleShape&>(slot));
+		}
+	}
+
+	// Categorize elements by alignment in single pass
+	std::vector<Element*> left, center, right;
+	left.reserve(visibleCount);
+	center.reserve(visibleCount);
+	right.reserve(visibleCount);
+	
+	float leftWidth = 0.f, centerWidth = 0.f, rightWidth = 0.f;
+
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const Align alignment = e->m_modifier.getAlignment();
+			const float elementWidth = e->m_bounds.getSize().x;
+			
+			if (hasAlign(alignment, Align::RIGHT)) {
 				right.push_back(e);
-				rightWidth += e->m_bounds.getSize().x;
-			}
-			else if (hasAlign(a, Align::CENTER_X)) {
+				rightWidth += elementWidth;
+			} else if (hasAlign(alignment, Align::CENTER_X)) {
 				center.push_back(e);
-				centerWidth += e->m_bounds.getSize().x;
-			}
-			else {
+				centerWidth += elementWidth;
+			} else {
 				left.push_back(e);
-				leftWidth += e->m_bounds.getSize().x;
+				leftWidth += elementWidth;
 			}
 		}
 	}
 
-	float xPos;
-	xPos = m_bounds.getPosition().x;
-	for (auto& e : left) {
+	// Position elements efficiently
+	const sf::Vector2f boundsPos = m_bounds.getPosition();
+	const float boundsWidth = boundsSize.x;
+	
+	// Left aligned elements
+	float xPos = boundsPos.x;
+	for (const auto& e : left) {
 		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
 		xPos += e->m_bounds.getSize().x;
 	}
 
-	xPos = m_bounds.getPosition().x + (m_bounds.getSize().x - centerWidth) / 2.f;
-	for (auto& e : center) {
+	// Center aligned elements
+	xPos = boundsPos.x + (boundsWidth - centerWidth) * 0.5f;
+	for (const auto& e : center) {
 		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
 		xPos += e->m_bounds.getSize().x;
 	}
 
-	xPos = m_bounds.getPosition().x + m_bounds.getSize().x - rightWidth;
-	for (auto& e : right) {
+	// Right aligned elements
+	xPos = boundsPos.x + boundsWidth - rightWidth;
+	for (const auto& e : right) {
 		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
 		xPos += e->m_bounds.getSize().x;
 	}
 
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		sf::Vector2f pos = e->m_bounds.getPosition();
-		Align a = e->m_modifier.getAlignment();
+	// Apply vertical alignment in final pass
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const Align alignment = e->m_modifier.getAlignment();
+			sf::Vector2f pos = e->m_bounds.getPosition();
 
-		if (hasAlign(a, Align::CENTER_Y))
-			pos.y = m_bounds.getPosition().y + (m_bounds.getSize().y - e->m_bounds.getSize().y) / 2.f;
-		else if (hasAlign(a, Align::BOTTOM))
-			pos.y = m_bounds.getPosition().y + m_bounds.getSize().y - e->m_bounds.getSize().y;
-		else
-			pos.y = m_bounds.getPosition().y;
+			if (hasAlign(alignment, Align::CENTER_Y)) {
+				pos.y = boundsPos.y + (boundsSize.y - e->m_bounds.getSize().y) * 0.5f;
+			} else if (hasAlign(alignment, Align::BOTTOM)) {
+				pos.y = boundsPos.y + boundsSize.y - e->m_bounds.getSize().y;
+			} else {
+				pos.y = boundsPos.y;
+			}
 
-		e->m_bounds.setPosition(pos);
+			e->m_bounds.setPosition(pos);
+		}
 	}
 }
 
@@ -898,18 +930,47 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 	applyModifiers();
 	Element::update(parentBounds);
 
+	// Update layout and positions (but not children yet)
 	Row::update(parentBounds);
 
 	if (!m_elements.empty()) {
+		// Cache bounds for intersection tests
+		const sf::FloatRect containerBounds = m_bounds.getGlobalBounds();
+		const float offsetX = m_offset;
+		
+		// Apply offset and check visibility in single pass
+		Element* firstElement = nullptr;
+		Element* lastElement = nullptr;
+		
 		for (auto& e : m_elements) {
-			if (e->m_modifier.isVisible())
-				e->m_bounds.setPosition({ e->m_bounds.getPosition().x + m_offset, e->m_bounds.getPosition().y});
+			if (e->m_modifier.isVisible()) {
+				if (!firstElement) firstElement = e;
+				lastElement = e;
+				
+				// Apply horizontal offset
+				const sf::Vector2f currentPos = e->m_bounds.getPosition();
+				e->m_bounds.setPosition({currentPos.x + offsetX, currentPos.y});
+				
+				// Only update if visible in container - optimized intersection check
+				const sf::FloatRect elementBounds = e->m_bounds.getGlobalBounds();
+				if (containerBounds.findIntersection(elementBounds).has_value()) {
+					e->update(e->m_bounds);
+				}
+			}
 		}
 
-		if (m_elements.back()->m_bounds.getPosition().x <= m_bounds.getPosition().x)
-			m_offset += m_bounds.getPosition().x - m_elements.back()->m_bounds.getPosition().x;
-		else if (m_elements.front()->m_bounds.getPosition().x >= m_bounds.getPosition().x)
-			m_offset -= m_elements.front()->m_bounds.getPosition().x - m_bounds.getPosition().x;
+		// Boundary checking with cached positions
+		if (firstElement && lastElement) {
+			const float containerLeft = m_bounds.getPosition().x;
+			const float lastElementRight = lastElement->m_bounds.getPosition().x;
+			const float firstElementLeft = firstElement->m_bounds.getPosition().x;
+			
+			if (lastElementRight <= containerLeft) {
+				m_offset += containerLeft - lastElementRight;
+			} else if (firstElementLeft >= containerLeft) {
+				m_offset -= firstElementLeft - containerLeft;
+			}
+		}
 	}
 }
 
@@ -937,75 +998,104 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 	applyModifiers();
 	Element::update(parentBounds);
 
+	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		if (e->m_modifier.getFixedHeight() > 0.f) totalFixed += e->m_modifier.getFixedHeight();
-		else totalPercent += e->m_modifier.getHeight();
-	}
-
-	float remainingSpace = m_bounds.getSize().y - totalFixed;
-	if (totalPercent <= 0) totalPercent = 1.f;
-
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		float height = e->m_modifier.getFixedHeight() > 0.f ? e->m_modifier.getFixedHeight() : (e->m_modifier.getHeight() / totalPercent) * remainingSpace;
-		sf::RectangleShape slot({m_bounds.getSize().x, height});
-		e->update(slot);
-	}
-
-	std::vector<Element*> top, center, bottom;
-	float topHeight = 0, centerHeight = 0, bottomHeight = 0;
-
-	for (auto& e : m_elements) {
+	size_t visibleCount = 0;
+	for (const auto& e : m_elements) {
 		if (e->m_modifier.isVisible()) {
-			Align a = e->m_modifier.getAlignment();
-
-			if (hasAlign(a, Align::BOTTOM)) {
-				bottom.push_back(e);
-				bottomHeight += e->m_bounds.getSize().y;
-			}
-			else if (hasAlign(a, Align::CENTER_Y)) {
-				center.push_back(e);
-				centerHeight += e->m_bounds.getSize().y;
-			}
-			else {
-				top.push_back(e);
-				topHeight += e->m_bounds.getSize().y;
+			++visibleCount;
+			const float fixedHeight = e->m_modifier.getFixedHeight();
+			if (fixedHeight > 0.f) {
+				totalFixed += fixedHeight;
+			} else {
+				totalPercent += e->m_modifier.getHeight();
 			}
 		}
 	}
 
-	float yPos;
+	if (visibleCount == 0) return; // Early exit if no visible elements
 
-	yPos = m_bounds.getPosition().y;
-	for (auto& e : top) {
+	const float remainingSpace = m_bounds.getSize().y - totalFixed;
+	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
+	const sf::Vector2f boundsSize = m_bounds.getSize();
+
+	// Update all elements in single pass
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const float fixedHeight = e->m_modifier.getFixedHeight();
+			const float height = (fixedHeight > 0.f) ? fixedHeight : (e->m_modifier.getHeight() * percentScale * remainingSpace);
+			const sf::RectangleShape slot({boundsSize.x, height});
+			e->update(const_cast<sf::RectangleShape&>(slot));
+		}
+	}
+
+	// Categorize elements by alignment in single pass
+	std::vector<Element*> top, center, bottom;
+	top.reserve(visibleCount);
+	center.reserve(visibleCount);
+	bottom.reserve(visibleCount);
+	
+	float topHeight = 0.f, centerHeight = 0.f, bottomHeight = 0.f;
+
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const Align alignment = e->m_modifier.getAlignment();
+			const float elementHeight = e->m_bounds.getSize().y;
+
+			if (hasAlign(alignment, Align::BOTTOM)) {
+				bottom.push_back(e);
+				bottomHeight += elementHeight;
+			} else if (hasAlign(alignment, Align::CENTER_Y)) {
+				center.push_back(e);
+				centerHeight += elementHeight;
+			} else {
+				top.push_back(e);
+				topHeight += elementHeight;
+			}
+		}
+	}
+
+	// Position elements efficiently
+	const sf::Vector2f boundsPos = m_bounds.getPosition();
+	const float boundsHeight = boundsSize.y;
+
+	// Top aligned elements
+	float yPos = boundsPos.y;
+	for (const auto& e : top) {
 		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
 		yPos += e->m_bounds.getSize().y;
 	}
 
-	yPos = m_bounds.getPosition().y + (m_bounds.getSize().y - centerHeight) / 2.f;
-	for (auto& e : center) {
+	// Center aligned elements
+	yPos = boundsPos.y + (boundsHeight - centerHeight) * 0.5f;
+	for (const auto& e : center) {
 		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
 		yPos += e->m_bounds.getSize().y;
 	}
 
-	yPos = m_bounds.getPosition().y + m_bounds.getSize().y - bottomHeight;
-	for (auto& e : bottom) {
+	// Bottom aligned elements
+	yPos = boundsPos.y + boundsHeight - bottomHeight;
+	for (const auto& e : bottom) {
 		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
 		yPos += e->m_bounds.getSize().y;
 	}
 
-	for (auto& e : m_elements) if (e->m_modifier.isVisible()) {
-		sf::Vector2f pos = e->m_bounds.getPosition();
-		Align a = e->m_modifier.getAlignment();
+	// Apply horizontal alignment in final pass
+	for (const auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			const Align alignment = e->m_modifier.getAlignment();
+			sf::Vector2f pos = e->m_bounds.getPosition();
 
-		if (hasAlign(a, Align::CENTER_X))
-			pos.x = m_bounds.getPosition().x + (m_bounds.getSize().x - e->m_bounds.getSize().x) / 2.f;
-		else if (hasAlign(a, Align::RIGHT))
-			pos.x = m_bounds.getPosition().x + m_bounds.getSize().x - e->m_bounds.getSize().x;
-		else
-			pos.x = m_bounds.getPosition().x;
+			if (hasAlign(alignment, Align::CENTER_X)) {
+				pos.x = boundsPos.x + (boundsSize.x - e->m_bounds.getSize().x) * 0.5f;
+			} else if (hasAlign(alignment, Align::RIGHT)) {
+				pos.x = boundsPos.x + boundsSize.x - e->m_bounds.getSize().x;
+			} else {
+				pos.x = boundsPos.x;
+			}
 
-		e->m_bounds.setPosition(pos);
+			e->m_bounds.setPosition(pos);
+		}
 	}
 }
 
@@ -1114,21 +1204,50 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
 	applyModifiers();
 	Element::update(parentBounds);
 
+	// Update layout and positions (but not children yet)
 	Column::update(parentBounds);
 
 	if (!m_elements.empty()) {
+		// Cache bounds for intersection tests
+		const sf::FloatRect containerBounds = m_bounds.getGlobalBounds();
+		const float offsetY = m_offset;
+		
+		// Apply offset and check visibility in single pass
+		Element* firstElement = nullptr;
+		Element* lastElement = nullptr;
+		
 		for (auto& e : m_elements) {
-			if (e->m_modifier.isVisible())
-				e->m_bounds.setPosition({ e->m_bounds.getPosition().x, e->m_bounds.getPosition().y + m_offset});
-
-			const std::optional<sf::FloatRect> intersection = m_bounds.getGlobalBounds().findIntersection(e->m_bounds.getGlobalBounds());
-			e->m_doRender = intersection.has_value();
+			if (e->m_modifier.isVisible()) {
+				if (!firstElement) firstElement = e;
+				lastElement = e;
+				
+				// Apply vertical offset
+				const sf::Vector2f currentPos = e->m_bounds.getPosition();
+				e->m_bounds.setPosition({currentPos.x, currentPos.y + offsetY});
+				
+				// Only update if visible in container - optimized intersection check
+				const sf::FloatRect elementBounds = e->m_bounds.getGlobalBounds();
+				const bool isVisible = containerBounds.findIntersection(elementBounds).has_value();
+				e->m_doRender = isVisible;
+				
+				if (isVisible) {
+					e->update(e->m_bounds);
+				}
+			}
 		}
 
-		if (m_elements.back()->m_bounds.getPosition().y <= m_bounds.getPosition().y)
-			m_offset += m_bounds.getPosition().y - m_elements.back()->m_bounds.getPosition().y;
-		else if (m_elements.front()->m_bounds.getPosition().y >= m_bounds.getPosition().y)
-			m_offset -= m_elements.front()->m_bounds.getPosition().y - m_bounds.getPosition().y;
+		// Boundary checking with cached positions
+		if (firstElement && lastElement) {
+			const float containerTop = m_bounds.getPosition().y;
+			const float lastElementBottom = lastElement->m_bounds.getPosition().y;
+			const float firstElementTop = firstElement->m_bounds.getPosition().y;
+			
+			if (lastElementBottom <= containerTop) {
+				m_offset += containerTop - lastElementBottom;
+			} else if (firstElementTop >= containerTop) {
+				m_offset -= firstElementTop - containerTop;
+			}
+		}
 	}
 }
 
