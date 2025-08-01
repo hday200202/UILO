@@ -196,7 +196,7 @@ public:
 	void setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry);
 
 protected:
-	void resize(sf::RectangleShape& parent);
+	void resize(const sf::RectangleShape& parent = sf::RectangleShape(), const bool inSlot = false);
 	void applyModifiers();
 };
 
@@ -639,7 +639,7 @@ inline void Element::setModifier(const Modifier& modifier) { m_modifier = modifi
 
 inline EType Element::getType() const { return EType::Element; }
 
-inline void Element::resize(sf::RectangleShape& parent) {
+inline void Element::resize(const sf::RectangleShape& parent, const bool inSlot) {
 	if (m_modifier.getFixedWidth() != 0) {
 		m_bounds.setSize({
 			m_modifier.getFixedWidth(),
@@ -647,10 +647,16 @@ inline void Element::resize(sf::RectangleShape& parent) {
 		});
 	}
 	else {
-		m_bounds.setSize({
-			m_modifier.getWidth() * parent.getSize().x,
-			m_bounds.getSize().y
-		});
+		if (inSlot)
+			m_bounds.setSize({
+				parent.getSize().x,
+				m_bounds.getSize().y
+			});
+		else
+			m_bounds.setSize({
+				m_modifier.getWidth() * parent.getSize().x,
+				m_bounds.getSize().y
+			});
 	}
 
 	if (m_modifier.getFixedHeight() != 0) {
@@ -660,10 +666,16 @@ inline void Element::resize(sf::RectangleShape& parent) {
 		});
 	}
 	else {
-		m_bounds.setSize({
-			m_bounds.getSize().x,
-			m_modifier.getHeight() * parent.getSize().y
-		});
+		if (inSlot)
+			m_bounds.setSize({
+				m_bounds.getSize().x,
+				parent.getSize().y
+			});
+		else
+			m_bounds.setSize({
+				m_bounds.getSize().x,
+				m_modifier.getHeight() * parent.getSize().y
+			});
 	}
 }
 
