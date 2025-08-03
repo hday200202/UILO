@@ -456,6 +456,8 @@ public:
 
 	static Dropdown* s_openDropdown;
 
+	friend class Page;
+
 private:
 	Button* m_mainButton;
 	FreeColumn* m_optionsColumn;
@@ -907,7 +909,7 @@ inline bool Row::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
 	bool childClicked = false;
 	for (auto& e : m_elements)
 		if (e) {
-			if (e->m_modifier.isVisible())
+			if (e->m_modifier.isVisible() && e->m_bounds.getGlobalBounds().contains(pos))
 				childClicked = e->checkClick(pos, button);
 			if (childClicked) return childClicked;
 		}
@@ -917,7 +919,7 @@ inline bool Row::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
 inline void Row::checkHover(const sf::Vector2f& pos) {
 	Element::checkHover(pos);
 	for (auto& e : m_elements)
-		if (e) e->checkHover(pos);
+		if (e && e->m_bounds.getGlobalBounds().contains(pos)) e->checkHover(pos);
 }
 
 inline EType Row::getType() const { return EType::Row; }
@@ -1179,9 +1181,14 @@ inline void Column::render(sf::RenderTarget& target) {
 
 inline bool Column::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
 	bool childClicked = false;
+	
+	// FreeColumns (used for dropdown options) should not use bounds checking
+	// to allow clicks to reach their children regardless of positioning
+	bool isFreeColumn = (getType() == EType::FreeColumn);
+	
 	for (auto& e : m_elements)
 		if (e) {
-			if (e->m_modifier.isVisible())
+			if (e->m_modifier.isVisible() && (isFreeColumn || e->m_bounds.getGlobalBounds().contains(pos)))
 				childClicked = e->checkClick(pos, button);
 			if (childClicked) return childClicked;
 		}
@@ -1190,8 +1197,12 @@ inline bool Column::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 
 inline void Column::checkHover(const sf::Vector2f& pos) {
 	Element::checkHover(pos);
+	
+	// FreeColumns (used for dropdown options) should not use bounds checking
+	bool isFreeColumn = (getType() == EType::FreeColumn);
+	
 	for (auto& e : m_elements)
-		if (e) e->checkHover(pos);
+		if (e && (isFreeColumn || e->m_bounds.getGlobalBounds().contains(pos))) e->checkHover(pos);
 }
 
 inline EType Column::getType() const { return EType::Column; }
@@ -1500,7 +1511,7 @@ inline bool Button::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 		}
 	}
 
-	return m_isClicked;
+	return false;
 }
 
 inline void Button::checkHover(const sf::Vector2f& pos) {
@@ -2006,10 +2017,61 @@ inline void Page::handleEvent(const sf::Event& event) {
 }
 
 inline bool Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
-	for (auto& c : m_containers)
-	if (c->m_modifier.isVisible())
-		if (c->checkClick(pos, button))
-			return true;
+	// First, handle dropdown logic if any dropdown is open
+	if (Dropdown::s_openDropdown) {
+		Dropdown* openDropdown = Dropdown::s_openDropdown;
+		
+		// Check if click is on the dropdown options
+		if (openDropdown->m_optionsColumn && openDropdown->m_optionsColumn->m_modifier.isVisible()) {
+			if (openDropdown->m_optionsColumn->getBounds().contains(pos)) {
+				// Click is on dropdown options - let the options handle it
+				bool handled = openDropdown->m_optionsColumn->checkClick(pos, button);
+				if (handled) return true;
+			}
+		}
+		
+		// Check if click is on the main dropdown button
+		if (openDropdown->m_mainButton && openDropdown->m_mainButton->m_bounds.getGlobalBounds().contains(pos)) {
+			bool handled = openDropdown->m_mainButton->checkClick(pos, button);
+			return handled;
+		}
+		
+		// Click is outside dropdown - close it and don't consume the click
+		openDropdown->m_isOpen = false;
+		if (openDropdown->m_optionsColumn) openDropdown->m_optionsColumn->m_modifier.setVisible(false);
+		Dropdown::s_openDropdown = nullptr;
+		openDropdown->m_isDirty = true;
+		// Fall through to handle the click normally
+	}
+	
+	// Check high priority elements (excluding dropdown options which we handled above)
+	for (auto& e : high_priority_elements) {
+		if (e->m_modifier.isVisible()) {
+			// Skip dropdown option columns as we handled them above
+			if (e->getType() == EType::FreeColumn) {
+				// Check if this is a dropdown options column
+				bool isDropdownOptions = false;
+				for (const auto& [name, dropdown] : dropdowns) {
+					if (dropdown->m_optionsColumn == e.get()) {
+						isDropdownOptions = true;
+						break;
+					}
+				}
+				if (isDropdownOptions) continue; // Skip, already handled above
+			}
+			
+			if (e->checkClick(pos, button))
+				return true;
+		}
+	}
+	
+	// Then check regular containers with bounds checking
+	for (auto& c : m_containers) {
+		if (c->m_modifier.isVisible() && c->m_bounds.getGlobalBounds().contains(pos)) {
+			if (c->checkClick(pos, button))
+				return true;
+		}
+	}
 	return false;
 }
 
@@ -2019,6 +2081,12 @@ inline void Page::dispatchScroll(const sf::Vector2f& pos, const float verticalDe
 }
 
 inline void Page::dispatchHover(const sf::Vector2f& pos) {
+	// Check high priority elements first (like dropdown options)
+	for (auto& e : high_priority_elements)
+		if (e->m_modifier.isVisible())
+			e->checkHover(pos);
+	
+	// Then check regular containers
 	for (auto& c : m_containers)
 		c->checkHover(pos);
 }
