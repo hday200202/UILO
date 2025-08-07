@@ -245,13 +245,14 @@ private:
 class ScrollableRow : public Row {
 public:
 	using Row::Row;
-	using Row::render;
 	using Row::checkClick;
 	using Row::checkHover;
 
 	void update(sf::RectangleShape& parentBounds) override;
 	void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override;
 	virtual EType getType() const override;
+
+	void render(sf::RenderTarget& target) override;
 
 	void setScrollSpeed(float speed) { m_scrollSpeed = speed; }
 	void setOffset(float offset) { m_offset = offset; }
@@ -939,6 +940,55 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 // ---------------------------------------------------------------------------- //
 // Scrollable Row Implementation
 // ---------------------------------------------------------------------------- //
+inline void ScrollableRow::render(sf::RenderTarget& target) {
+	// Only ScrollableRow gets this clipped render
+	if (getType() == EType::ScrollableRow) {
+		sf::View originalView = target.getView();
+		sf::FloatRect clipRect = m_bounds.getGlobalBounds();
+		sf::View clippingView(clipRect);
+
+		sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
+		sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
+
+		sf::Vector2u windowSize = target.getSize();
+		sf::FloatRect viewport(
+			{static_cast<float>(pixelPos.x) / windowSize.x,
+			 static_cast<float>(pixelPos.y) / windowSize.y},
+			{clipRect.size.x / windowSize.x,
+			 clipRect.size.y / windowSize.y}
+		);
+
+		clippingView.setViewport(viewport);
+		target.setView(clippingView);
+
+		target.draw(m_bounds);
+
+		sf::RenderStates states;
+		states.transform.translate(m_bounds.getPosition());
+
+		// Render normal priority elements first (including their custom geometry, clipped)
+		for (auto& e : m_elements)
+			if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority()) {
+				e->render(target);
+			}
+
+		// Render this row's custom geometry, clipped
+		for (auto& d : m_customGeometry) {
+			target.draw(*d, states);
+		}
+
+		// Then render high priority elements on top (including their custom geometry, clipped)
+		for (auto& e : m_elements)
+			if (e->m_modifier.isVisible() && e->m_doRender && e->m_modifier.isHighPriority()) {
+				e->render(target);
+			}
+
+		target.setView(originalView);
+	} else {
+		// fallback to Row render (should never hit)
+		Row::render(target);
+	}
+}
 inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 	resize(parentBounds);
 	applyModifiers();
@@ -2405,7 +2455,7 @@ inline void UILO::setView(const sf::View& view) {
 		m_userWindow->setView(m_defaultView);
 }
 
-// -------------------scale--------------------------------------------------------- //
+// ---------------------------------------------------------------------------- //
 // Alignment Helpers
 // ---------------------------------------------------------------------------- //
 inline Align operator|(Align lhs, Align rhs) {
