@@ -216,6 +216,53 @@ public:
 	virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {};
 	void clear();
 
+	inline int getElementIndex(Element* element) const {
+		auto it = std::find(m_elements.begin(), m_elements.end(), element);
+		if (it != m_elements.end()) {
+			return static_cast<int>(std::distance(m_elements.begin(), it));
+		}
+		return -1; // Element not found
+	}
+
+	inline void insertElementAt(Element* element, int index) {
+		if (index < 0 || index > static_cast<int>(m_elements.size())) {
+			std::cerr << "Index out of bounds in container: " << m_name << std::endl;
+			return;
+		}
+		auto it = std::find(m_elements.begin(), m_elements.end(), element);
+		if (it != m_elements.end()) {
+			m_elements.erase(it);
+		}
+		m_elements.insert(m_elements.begin() + index, element);
+	}
+
+	inline void removeElement(Element* element) {
+		auto it = std::find(m_elements.begin(), m_elements.end(), element);
+		if (it != m_elements.end()) {
+			m_elements.erase(it);
+		} else {
+			std::cerr << "Element not found in container: " << m_name << std::endl;
+		}
+	}
+
+	inline void swapElements(Element* a, Element* b) {
+		auto itA = std::find(m_elements.begin(), m_elements.end(), a);
+		auto itB = std::find(m_elements.begin(), m_elements.end(), b);
+		if (itA != m_elements.end() && itB != m_elements.end()) {
+			std::iter_swap(itA, itB);
+		} else {
+			std::cerr << "One or both elements not found in container: " << m_name << std::endl;
+		}
+	}
+
+	inline void swapElements(int indexA, int indexB) {
+		if (indexA < 0 || indexB < 0 || indexA >= static_cast<int>(m_elements.size()) || indexB >= static_cast<int>(m_elements.size())) {
+			std::cerr << "Index out of bounds in container: " << m_name << std::endl;
+			return;
+		}
+		std::iter_swap(m_elements.begin() + indexA, m_elements.begin() + indexB);
+	}
+
 protected:
 	std::vector<Element*> m_elements;
 };
@@ -526,6 +573,7 @@ public:
 
 	void setInputBlocked(bool blocked);
 	bool isInputBlocked() const;
+	bool isMouseDragging() const;
 	inline void setFullClean(bool doFullClean) { m_fullClean = doFullClean; }
 
 private:
@@ -2393,6 +2441,7 @@ inline void UILO::resetScrollDeltas() {
 
 inline void UILO::setInputBlocked(bool blocked) { m_inputBlocked = blocked; }
 inline bool UILO::isInputBlocked() const { return m_inputBlocked; }
+inline bool UILO::isMouseDragging() const { return m_mouseDragging;}
 
 inline void UILO::pollEvents() {
 	sf::RenderWindow* activeWindow = m_windowOwned ? &m_window : m_userWindow;
