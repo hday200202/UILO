@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <optional>
 #include <memory> // Added for std::unique_ptr
+#include <fstream> // For std::ifstream
 
 namespace uilo {
 
@@ -515,11 +516,37 @@ private:
 // Static pointer to currently open dropdown
 inline Dropdown* Dropdown::s_openDropdown = nullptr;
 
+// ---------------------------------------------------------------------------- //
+// Textbox Element
+// ---------------------------------------------------------------------------- //
 class TextBox : public Text {
 public:
 
+
 private:
 
+};
+
+// ---------------------------------------------------------------------------- //
+// Image Element
+// ---------------------------------------------------------------------------- //
+static sf::Image default_image;
+class Image : public Element {
+public:
+	Image(
+		Modifier modifier = default_mod,
+		sf::Image& image = default_image,
+		const bool recolor = false,
+		const std::string& name = ""
+	);
+
+	void setImage(sf::Image& image = default_image, bool recolor = false);
+	void update(sf::RectangleShape& parentBounds) override;
+	void render(sf::RenderTarget& target) override;
+
+private:
+	std::unique_ptr<sf::Image> m_image;
+	std::unique_ptr<sf::Texture> m_tex;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -1825,22 +1852,18 @@ inline Dropdown::Dropdown(
 inline Dropdown::~Dropdown() {}
 
 inline void Dropdown::update(sf::RectangleShape& parentBounds) {
-	// The parent container (Column/Row) will size and position the Dropdown's m_bounds.
-	// We just need to update our internal children based on that.
-	resize(parentBounds); // This correctly sizes the Dropdown's own m_bounds
+	resize(parentBounds);
 	applyModifiers();
 
 	if (m_mainButton) {
-		// The main button should always be the same size as the dropdown element itself.
 		m_mainButton->m_bounds.setSize(m_bounds.getSize());
-		m_mainButton->update(m_bounds); // Update button internals (like text)
+		m_mainButton->update(m_bounds);
 	}
 
-	// Update the options column if it's open
 	if (m_optionsColumn) {
 		m_optionsColumn->m_modifier.setVisible(m_isOpen);
 		if (m_isOpen) {
-			sf::Vector2f optionsPos = m_bounds.getPosition(); // Use the current (pre-aligned) position
+			sf::Vector2f optionsPos = m_bounds.getPosition();
 			optionsPos.y += m_bounds.getSize().y;
 			m_optionsColumn->setPosition(optionsPos);
 			m_optionsColumn->m_modifier
@@ -1853,43 +1876,33 @@ inline void Dropdown::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
 }
 
-// ALIGNMENT FIX IS HERE
 inline void Dropdown::render(sf::RenderTarget& target) {
-	// Just before rendering, we force the internal button's position to match
-	// the Dropdown's final, aligned position. This is the crucial step that
-	// was missing.
 	if (m_mainButton) {
 		m_mainButton->m_bounds.setPosition(m_bounds.getPosition());
 		m_mainButton->render(target);
 	}
 
 	if (m_isOpen && m_mainButton && m_optionsColumn) {
-		// We also need to re-sync the options column position based on the final
-		// aligned position of the main button.
 		sf::Vector2f optionsPos = m_mainButton->getPosition();
 		optionsPos.y += m_mainButton->getSize().y;
 		m_optionsColumn->setPosition(optionsPos);
-		// m_optionsColumn->render(target);
 	}
 }
 
 inline bool Dropdown::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
-	// If this dropdown is open and click is outside, close it and do not consume
 	if (m_isOpen && m_optionsColumn && !m_optionsColumn->getBounds().contains(pos) && !m_mainButton->m_bounds.getGlobalBounds().contains(pos)) {
 		m_isOpen = false;
 		m_isDirty = true;
 		if (m_optionsColumn) m_optionsColumn->m_modifier.setVisible(false);
 		if (s_openDropdown == this) s_openDropdown = nullptr;
-		return false; // Do not consume, let others handle
+		return false;
 	}
 
-	// If click is on main button, let it handle toggling
 	if (m_mainButton && m_mainButton->m_bounds.getGlobalBounds().contains(pos)) {
 		bool handled = m_mainButton->checkClick(pos, button);
 		return handled;
 	}
 
-	// If open, check options
 	if (m_isOpen && m_optionsColumn && m_optionsColumn->m_modifier.isVisible()) {
 		for (auto& e : m_optionsColumn->getElements()) {
 			if (e && e->m_modifier.isVisible() && e->m_bounds.getGlobalBounds().contains(pos)) {
@@ -1911,6 +1924,84 @@ inline void Dropdown::checkHover(const sf::Vector2f& pos) {
 
 inline std::string Dropdown::getSelected() const {
 	return m_selectedOption;
+}
+
+// ---------------------------------------------------------------------------- //
+// Image Implementation
+// ---------------------------------------------------------------------------- //
+inline Image::Image(
+	Modifier modifier,
+	sf::Image& image,
+	const bool recolor,
+	const std::string& name
+) {
+	m_modifier = modifier;
+	m_image = std::make_unique<sf::Image>(image);
+
+	// recolor all pixels with an opacity value > 0
+	if (recolor) {
+		for (unsigned int x = 0; x < m_image->getSize().x; x++) {
+			for (unsigned int y = 0; y < m_image->getSize().y; y++) {
+				sf::Color pixel = m_image->getPixel({x, y});
+				if (pixel.a > 0) {
+					sf::Color modColor = m_modifier.getColor();
+					m_image->setPixel({x, y}, sf::Color(modColor.r, modColor.g, modColor.b, pixel.a));
+				}
+			}
+		}
+	}
+
+	m_tex = std::make_unique<sf::Texture>();
+	if (m_image->getSize().x > 0 && m_image->getSize().y > 0) {
+		if (!m_tex->loadFromImage(*m_image))
+			std::cerr << "[UILO] could not create image: " << m_image.get() << "\n";
+	}
+	m_tex->setSmooth(true);
+	m_name = name;
+}
+
+inline void Image::setImage(sf::Image& image, bool recolor) {
+	m_image = std::make_unique<sf::Image>(image);
+
+	// recolor all pixels with an opacity value > 0
+	if (recolor) {
+		for (unsigned int x = 0; x < m_image->getSize().x; x++) {
+			for (unsigned int y = 0; y < m_image->getSize().y; y++) {
+				sf::Color pixel = m_image->getPixel({x, y});
+				if (pixel.a > 0) {
+					sf::Color modColor = m_modifier.getColor();
+					m_image->setPixel({x, y}, sf::Color(modColor.r, modColor.g, modColor.b, pixel.a));
+				}
+			}
+		}
+	}
+
+	m_tex = std::make_unique<sf::Texture>();
+	if (m_image->getSize().x > 0 && m_image->getSize().y > 0) {
+		if (!m_tex->loadFromImage(*m_image))
+			std::cerr << "[UILO] could not create image: " << m_image.get() << "\n";
+	}
+	m_tex->setSmooth(true);
+}
+
+inline void Image::update(sf::RectangleShape& parentBounds) {
+	Element::update(parentBounds);
+	resize(parentBounds);
+	applyModifiers();
+}
+
+inline void Image::render(sf::RenderTarget& target) {
+	if (m_image.get() && m_tex.get() && m_tex->getSize().x > 0 && m_tex->getSize().y > 0) {
+		sf::Sprite spr(*m_tex);
+
+		spr.setScale({
+			m_bounds.getSize().x / static_cast<float>(m_tex->getSize().x),
+			m_bounds.getSize().y / static_cast<float>(m_tex->getSize().y)
+		});
+
+		spr.setPosition(m_bounds.getPosition());
+		target.draw(spr);
+	}
 }
 
 // ---------------------------------------------------------------------------- //
@@ -1997,9 +2088,14 @@ inline Dropdown* dropdown(
 	sf::Color textColor = sf::Color::White,
 	sf::Color optionBackgroundColor = sf::Color(50, 50, 50),
 	const std::string& name = ""
-) {
-	return obj<Dropdown>(modifier, defaultText, options, textFont, textColor, optionBackgroundColor, name);
-}
+) { return obj<Dropdown>(modifier, defaultText, options, textFont, textColor, optionBackgroundColor, name); }
+
+inline Image* image(
+	Modifier modifier = default_mod,
+	sf::Image& image = default_image,
+	const bool recolor = false,
+	const std::string& name = ""
+) { return obj<Image>(modifier, image, recolor, name); }
 
 inline static Row* default_row = row();
 inline static Column* default_column = column();
@@ -2246,13 +2342,14 @@ inline UILO::UILO(const std::string& windowTitle)
 }
 
 inline UILO::UILO(sf::RenderWindow& userWindow, sf::View& windowView) {
-	m_defaultView = windowView;
 	m_userWindow = &userWindow;
+	m_windowOwned = false;
+	
+	initDefaultView();
 	m_userWindow->setView(m_defaultView);
 
 	if (m_userWindow->isOpen()) {
 		m_running = true;
-		m_windowOwned = false;
 	}
 	m_bounds.setFillColor(sf::Color::Transparent);
 }
@@ -2301,7 +2398,12 @@ inline void UILO::_internal_update(sf::RenderWindow& target, sf::View& view) {
 	}
 
 	if (m_shouldUpdate) {
-		view.setSize({ (float)currentSize.x, (float)currentSize.y });
+		// Apply render scale to view size
+		sf::Vector2f scaledSize = {
+			(float)currentSize.x / m_renderScale,
+			(float)currentSize.y / m_renderScale
+		};
+		view.setSize(scaledSize);
 		m_bounds.setSize(view.getSize());
 		m_bounds.setPosition({
 			view.getCenter().x - view.getSize().x * 0.5f,
@@ -2427,8 +2529,12 @@ inline void UILO::setScale(float scale) {
 	if (m_windowOwned) {
 		m_window.setView(m_defaultView);
 	} else if (m_userWindow) {
+		// For user windows, we apply the scale but the user needs to use 
+		// the parameterless update() method, or handle scaling in their own view
 		m_userWindow->setView(m_defaultView);
 	}
+	// Force update to apply new scaling
+	m_shouldUpdate = true;
 }
 
 inline sf::Vector2f UILO::getMousePosition() const { return m_mousePos; }
@@ -2481,7 +2587,7 @@ inline void UILO::pollEvents() {
 			m_shouldUpdate = true;
 		}
 
-		if (const auto* mouseReleased = event->getIf<sf::Event::MouseButtonReleased>()) {
+		if (event->getIf<sf::Event::MouseButtonReleased>()) {
 			m_mouseDragging = false;
 		}
 	}
