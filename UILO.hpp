@@ -320,10 +320,15 @@ public:
 	void setOffset(float offset) { m_offset = offset; }
 	float getOffset() const { return m_offset; }
 	float getScrollSpeed() const { return m_scrollSpeed; }
+	
+	void lock() { m_locked = true; }
+	void unlock() { m_locked = false; }
+	bool isLocked() const { return m_locked; }
 
 private:
 	float m_offset = 0.f;
 	float m_scrollSpeed = 10.f;
+	bool m_locked = false;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -363,10 +368,15 @@ public:
 	void setOffset(float offset) { m_offset = offset; }
 	float getOffset() const { return m_offset; }
 	float getScrollSpeed() const { return m_scrollSpeed; }
+	
+	void lock() { m_locked = true; }
+	void unlock() { m_locked = false; }
+	bool isLocked() const { return m_locked; }
 
 private:
 	float m_offset = 0.f;
 	float m_scrollSpeed = 10.f;
+	bool m_locked = false;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -458,6 +468,7 @@ private:
 	sf::CircleShape m_rightCircle;
 
 	std::unique_ptr<Text> m_text;
+	std::unique_ptr<ScrollableRow> m_textRow;
 
 	bool m_isClicked = false;
 	bool m_isHovered = false;
@@ -1168,6 +1179,8 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 }
 
 inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
+	if (m_locked) return;
+	
 	if (m_bounds.getGlobalBounds().contains(pos)) {
 		if (horizontalDelta < 0)
 			m_offset -= m_scrollSpeed;
@@ -1454,6 +1467,8 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
 }
 
 inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) {
+	if (m_locked) return;
+	
 	if (m_bounds.getGlobalBounds().contains(pos)) {
 		if (verticalDelta < 0)
 			m_offset -= m_scrollSpeed;
@@ -1614,13 +1629,20 @@ inline Button::Button(
 	if (!textFont.empty()) {
 		m_text = std::make_unique<Text>(
 			Modifier()
-				.setHeight(0.4f)
 				.setColor(textColor)
-				.align(Align::CENTER_X | Align::CENTER_Y),
+				.align(Align::CENTER_Y),
 			buttonText,
 			textFont,
-			"" // No name for internal text element
+			""
 		);
+
+		m_textRow = std::make_unique<ScrollableRow>(
+			Modifier().setColor(sf::Color::Transparent).setHeight(1.f).setWidth(1.f),
+			std::initializer_list<Element*>{ m_text.get() },
+			""
+		);
+		
+		m_textRow->lock(); // Prevent scrolling in button text
 	}
 
 	m_name = name;
@@ -1630,26 +1652,22 @@ inline Button::Button(
 }
 
 inline void Button::update(sf::RectangleShape& parentBounds) {
-	applyModifiers();
-	m_bounds.setSize({
-		m_modifier.getFixedWidth() ? m_modifier.getFixedWidth() : parentBounds.getSize().x * m_modifier.getWidth(),
-		m_modifier.getFixedHeight() ? m_modifier.getFixedHeight() : parentBounds.getSize().y * m_modifier.getHeight()
-	});
-
-	if (m_text) {
-		m_text->update(m_bounds);
-		m_text->m_bounds.setPosition({
-			m_bounds.getPosition().x + (m_bounds.getSize().x / 2.f) - (m_text->m_bounds.getSize().x / 2.f),
-			m_bounds.getPosition().y + (m_bounds.getSize().y / 2.f) - (m_text->m_bounds.getSize().y / 2.f)
-		});
-	}
-
 	Element::update(parentBounds);
+	resize(parentBounds);
+	
+	if (m_textRow) {
+		m_textRow->update(m_bounds);
+		m_textRow->setPosition(m_bodyRect.getPosition());
+	}
 }
 
 inline void Button::render (sf::RenderTarget& target) {
-	if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect)
+	if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect) {
 		target.draw(m_bounds);
+		// Set up bodyRect for text positioning
+		m_bodyRect.setSize(m_bounds.getSize());
+		m_bodyRect.setPosition(m_bounds.getPosition());
+	}
 	else {
 		m_leftCircle.setPointCount(static_cast<unsigned int>(m_bounds.getSize().y * 2));
 		m_rightCircle.setPointCount(static_cast<unsigned int>(m_bounds.getSize().y * 2));
@@ -1681,8 +1699,8 @@ inline void Button::render (sf::RenderTarget& target) {
 		}
 	}
 
-	if (m_text) {
-		m_text->render(target);
+	if (m_textRow) {
+		m_textRow->render(target);
 	}
 }
 
