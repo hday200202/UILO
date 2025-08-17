@@ -662,7 +662,7 @@ private:
 	sf::RenderWindow* m_userWindow = nullptr;
 	bool m_windowOwned = true;
 	int m_pollCount = 10;
-	float m_renderScale = 1.5f;
+	float m_renderScale = 1.f;
 	sf::VideoMode m_defScreenRes;
 	sf::View m_defaultView;
 	sf::RectangleShape m_bounds;
