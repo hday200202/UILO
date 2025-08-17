@@ -468,7 +468,7 @@ private:
 	sf::CircleShape m_rightCircle;
 
 	std::unique_ptr<Text> m_text;
-	std::unique_ptr<ScrollableRow> m_textRow;
+	std::unique_ptr<Row> m_textRow;
 
 	bool m_isClicked = false;
 	bool m_isHovered = false;
@@ -575,7 +575,7 @@ private:
 	sf::CircleShape m_rightCircle;
 
 	std::unique_ptr<Text> m_text;
-	std::unique_ptr<ScrollableRow> m_textRow;
+	std::unique_ptr<Row> m_textRow;
 
 	// if hasStyle(TBStyle::Wrap)
 	std::unique_ptr<ScrollableColumn> m_textColumn;
@@ -1130,11 +1130,6 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 	}
 }
 inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
-	resize(parentBounds);
-	applyModifiers();
-	Element::update(parentBounds);
-
-	// Update layout and positions (but not children yet)
 	Row::update(parentBounds);
 
 	if (!m_elements.empty()) {
@@ -1566,15 +1561,13 @@ inline void Text::render(sf::RenderTarget& target) {
 	float centerX = m_bounds.getPosition().x + m_bounds.getSize().x / 2.f;
 	float centerY = m_bounds.getPosition().y + m_bounds.getSize().y / 2.f;
 	
-	// Get text bounds for horizontal centering
+	// Get text bounds for centering
 	sf::FloatRect localBounds = m_text->getLocalBounds();
 
-	// Use a baseline-corrected approach for vertical centering
-	float fontSize = m_text->getCharacterSize();
-	float baselineOffset = fontSize * 0.15f; // Approximate baseline correction
+	// Use the actual text bounds for proper centering
 	m_text->setOrigin({
 		localBounds.position.x + localBounds.size.x / 2.f,
-		localBounds.position.y + localBounds.size.y / 2.f - baselineOffset
+		localBounds.position.y + localBounds.size.y / 2.f
 	});
 
 	// Position the text at the calculated center
@@ -1630,19 +1623,18 @@ inline Button::Button(
 		m_text = std::make_unique<Text>(
 			Modifier()
 				.setColor(textColor)
-				.align(Align::CENTER_Y),
+				.align(Align::CENTER_Y | Align::CENTER_X)
+				.setHeight(0.8f),
 			buttonText,
 			textFont,
 			""
 		);
 
-		m_textRow = std::make_unique<ScrollableRow>(
+		m_textRow = std::make_unique<Row>(
 			Modifier().setColor(sf::Color::Transparent).setHeight(1.f).setWidth(1.f),
 			std::initializer_list<Element*>{ m_text.get() },
 			""
 		);
-		
-		m_textRow->lock(); // Prevent scrolling in button text
 	}
 
 	m_name = name;
@@ -1672,8 +1664,9 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
 	}
 	
 	if (m_textRow) {
+		// Update ScrollableRow with bodyRect bounds for proper text sizing
 		m_textRow->update(m_bounds);
-		m_textRow->setPosition(m_bodyRect.getPosition());
+		m_textRow->setPosition(m_bounds.getPosition());
 	}
 }
 
@@ -2044,14 +2037,15 @@ inline TextBox::TextBox(
 	m_text = std::make_unique<Text>(
 		Modifier()
 			.setColor(textColor)
-			.align(Align::CENTER_Y),
+			.align(Align::CENTER_Y)
+			.setHeight(0.8f),
 		defaultText,
 		fontPath,
 		""
 	);
 
-	m_textRow = std::make_unique<ScrollableRow>(
-		Modifier().setColor(sf::Color::Transparent).setHeight(1.f).setWidth(1.f),
+	m_textRow = std::make_unique<Row>(
+		Modifier().setColor(sf::Color::Transparent),
 		std::initializer_list<Element*>{ m_text.get() },
 		""
 	);
@@ -2065,8 +2059,24 @@ inline void TextBox::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
 	resize(parentBounds);
 	
+	// Set up m_bodyRect for proper positioning
+	if (hasStyle(m_style, TBStyle::Pill)) {
+		m_bodyRect.setSize({
+			m_bounds.getSize().x - m_bounds.getSize().y,
+			m_bounds.getSize().y
+		});
+		m_bodyRect.setPosition({
+			m_bounds.getPosition().x + (m_bounds.getSize().y / 2),
+			m_bounds.getPosition().y
+		});
+	} else {
+		m_bodyRect.setSize(m_bounds.getSize());
+		m_bodyRect.setPosition(m_bounds.getPosition());
+	}
+	
 	if (m_textRow) {
-		m_textRow->update(m_bounds);
+		m_textRow->update(m_bodyRect);
+		m_textRow->m_bounds.setSize(m_bodyRect.getSize());
 		m_textRow->setPosition(m_bodyRect.getPosition());
 	}
 }
