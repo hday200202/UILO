@@ -1655,6 +1655,22 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
 	resize(parentBounds);
 	
+	// Set up bodyRect for proper text positioning
+	if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect) {
+		m_bodyRect.setSize(m_bounds.getSize());
+		m_bodyRect.setPosition(m_bounds.getPosition());
+	} else {
+		// For pill style buttons
+		m_bodyRect.setSize({
+			m_bounds.getSize().x - m_bounds.getSize().y,
+			m_bounds.getSize().y
+		});
+		m_bodyRect.setPosition({
+			m_bounds.getPosition().x + (m_bounds.getSize().y / 2),
+			m_bounds.getPosition().y
+		});
+	}
+	
 	if (m_textRow) {
 		m_textRow->update(m_bounds);
 		m_textRow->setPosition(m_bodyRect.getPosition());
@@ -1664,9 +1680,6 @@ inline void Button::update(sf::RectangleShape& parentBounds) {
 inline void Button::render (sf::RenderTarget& target) {
 	if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect) {
 		target.draw(m_bounds);
-		// Set up bodyRect for text positioning
-		m_bodyRect.setSize(m_bounds.getSize());
-		m_bodyRect.setPosition(m_bounds.getPosition());
 	}
 	else {
 		m_leftCircle.setPointCount(static_cast<unsigned int>(m_bounds.getSize().y * 2));
@@ -1674,20 +1687,11 @@ inline void Button::render (sf::RenderTarget& target) {
 
 		m_leftCircle.setRadius(m_bounds.getSize().y / 2);
 		m_rightCircle.setRadius(m_bounds.getSize().y / 2);
-		m_bodyRect.setSize(
-		{
-			m_bounds.getSize().x - m_bounds.getSize().y,
-			m_bounds.getSize().y
-		});
+		
 		m_leftCircle.setPosition(m_bounds.getPosition());
 		m_rightCircle.setPosition(
 		{
 			m_bounds.getPosition().x + m_bounds.getSize().x - m_bounds.getSize().y,
-			m_bounds.getPosition().y
-		});
-		m_bodyRect.setPosition(
-		{
-			m_bounds.getPosition().x + m_leftCircle.getRadius(),
 			m_bounds.getPosition().y
 		});
 
