@@ -646,7 +646,7 @@ public:
 	void switchToPage(const std::string& pageName);
 	void forceUpdate();
 	void forceUpdate(sf::View& windowView);
-	void setScale(float scale = 1.5f);
+	void setScale(float scale = 1.f);
 	sf::Vector2f getMousePosition() const;
 	float getVerticalScrollDelta() const;
 	float getHorizontalScrollDelta() const;
