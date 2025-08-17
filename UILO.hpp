@@ -113,6 +113,19 @@ enum class SliderOrientation {
 };
 
 // ---------------------------------------------------------------------------- //
+// Text Box Styles
+// ---------------------------------------------------------------------------- //
+enum class TBStyle : uint8_t {
+	Default		= 0,
+	Pill		= 1 << 0,
+	Wrap		= 1 << 1,
+};
+
+inline TBStyle operator|(TBStyle lhs, TBStyle rhs);
+inline TBStyle operator&(TBStyle lhs, TBStyle rhs);
+inline bool hasStyle(TBStyle value, TBStyle flag);
+
+// ---------------------------------------------------------------------------- //
 // Modifier
 // ---------------------------------------------------------------------------- //
 using funcPtr = std::function<void()>;
@@ -192,6 +205,7 @@ public:
 	void setModifier(const Modifier& modifier);
 	virtual EType getType() const;
 	sf::Vector2f getPosition() const { return m_bounds.getPosition(); }
+	void setPosition(const sf::Vector2f& newPos) { m_bounds.setPosition(newPos); }
 	sf::Vector2f getSize() const { return m_bounds.getSize(); }
 	bool isHovered() const { return m_isHovered; }
 	void setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry);
@@ -390,7 +404,9 @@ public:
 	void render(sf::RenderTarget& target) override;
 
 	void setString(const std::string& newStr);
-	std::string getString() const { return m_text->getString(); }
+	std::string getString() const { return m_text ? std::string(m_text->getString()) : m_string; }
+	float getTextWidth() const { return m_text ? m_text->getLocalBounds().size.x : 0.f; }
+	float getTextHeight() const { return m_text ? m_text->getLocalBounds().size.y : 0.f; }
 
 private:
 	std::string m_string = "";
@@ -519,13 +535,51 @@ inline Dropdown* Dropdown::s_openDropdown = nullptr;
 // ---------------------------------------------------------------------------- //
 // Textbox Element
 // ---------------------------------------------------------------------------- //
-class TextBox : public Text {
+class TextBox : public Element{
 public:
+	TextBox(
+		Modifier modifier = default_mod,
+		TBStyle style = TBStyle::Default,
+		const std::string& fontPath = "",
+		const std::string& defaultText = "",
+		sf::Color textColor = sf::Color::Black,
+		sf::Color activeOutlineColor = sf::Color::Transparent,
+		const std::string& name = ""
+	);
+	~TextBox();
 
+	void update(sf::RectangleShape& parentBounds) override;
+	void render(sf::RenderTarget& target) override;
+	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+
+	inline bool isActive() const { return m_isActive; }
+	inline void setActive(bool active) { m_isActive = active; }
 
 private:
+	TBStyle m_style = TBStyle::Default;
+	sf::RectangleShape m_bodyRect;
 
+	// if hasStyle(TBStyle::Pill)
+	sf::CircleShape m_leftCircle;
+	sf::CircleShape m_rightCircle;
+
+	std::unique_ptr<Text> m_text;
+	std::unique_ptr<ScrollableRow> m_textRow;
+
+	// if hasStyle(TBStyle::Wrap)
+	std::unique_ptr<ScrollableColumn> m_textColumn;
+
+	std::string m_defaultText = "Default Text";
+	std::string m_currentText = "";
+	sf::Color m_textColor = sf::Color::Black;
+
+	bool m_isActive = false;
+
+public:
+	static TextBox* s_activeTextBox;
 };
+// Static pointer to currently active textbox
+inline TextBox* TextBox::s_activeTextBox = nullptr;
 
 // ---------------------------------------------------------------------------- //
 // Image Element
@@ -1475,14 +1529,17 @@ inline void Text::update(sf::RectangleShape& parentBounds) {
 	m_bounds.setPosition(parentBounds.getPosition());
 	float fontSize = m_modifier.getFixedHeight() > 0
 		? m_modifier.getFixedHeight()
-		: m_bounds.getSize().y;
+		: m_bounds.getSize().y * 0.8f; // Use 80% of height for better fit
 
 	m_text.emplace(m_font, m_string);
 	m_text->setCharacterSize(static_cast<unsigned>(fontSize));
 	m_text->setFillColor(m_modifier.getColor());
 
+	// Get proper text bounds for width calculation
 	sf::FloatRect textBounds = m_text->getLocalBounds();
-	m_bounds.setSize({ textBounds.size.x + textBounds.position.x, m_bounds.getSize().y });
+	// Use just the width, ignoring the left bearing position
+	float textWidth = textBounds.size.x;
+	m_bounds.setSize({ textWidth, m_bounds.getSize().y });
 
 	Element::update(parentBounds);
 }
@@ -1490,13 +1547,23 @@ inline void Text::update(sf::RectangleShape& parentBounds) {
 inline void Text::render(sf::RenderTarget& target) {
 	if (!m_text) return;
 
-	sf::FloatRect bounds = m_text->getLocalBounds();
-	m_text->setOrigin({bounds.position.x + bounds.size.x / 2.f, bounds.position.y + bounds.size.y / 2.f});
+	// Calculate proper center position
+	float centerX = m_bounds.getPosition().x + m_bounds.getSize().x / 2.f;
+	float centerY = m_bounds.getPosition().y + m_bounds.getSize().y / 2.f;
+	
+	// Get text bounds for horizontal centering
+	sf::FloatRect localBounds = m_text->getLocalBounds();
 
-	m_text->setPosition(
-		{m_bounds.getPosition().x + m_bounds.getSize().x / 2.f,
-		 m_bounds.getPosition().y + m_bounds.getSize().y / 2.f}
-	);
+	// Use a baseline-corrected approach for vertical centering
+	float fontSize = m_text->getCharacterSize();
+	float baselineOffset = fontSize * 0.15f; // Approximate baseline correction
+	m_text->setOrigin({
+		localBounds.position.x + localBounds.size.x / 2.f,
+		localBounds.position.y + localBounds.size.y / 2.f - baselineOffset
+	});
+
+	// Position the text at the calculated center
+	m_text->setPosition({centerX, centerY});
 
 	target.draw(*m_text);
 }
@@ -1929,6 +1996,143 @@ inline std::string Dropdown::getSelected() const {
 // ---------------------------------------------------------------------------- //
 // Image Implementation
 // ---------------------------------------------------------------------------- //
+inline TextBox::TextBox(
+	Modifier modifier,
+	TBStyle style,
+	const std::string& fontPath,
+	const std::string& defaultText,
+	sf::Color textColor,
+	sf::Color activeOutlineColor,
+	const std::string& name
+) : m_style(style), m_defaultText(defaultText), m_textColor(textColor) {
+	m_modifier = modifier;
+	m_name = name;
+
+	// Initialize body rectangle
+	m_bodyRect.setFillColor(m_modifier.getColor());
+	m_bodyRect.setOutlineColor(activeOutlineColor);
+
+	// Initialize circles for pill style
+	m_leftCircle.setFillColor(m_modifier.getColor());
+	m_leftCircle.setOutlineColor(activeOutlineColor);
+	
+	m_rightCircle.setFillColor(m_modifier.getColor());
+	m_rightCircle.setOutlineColor(activeOutlineColor);
+
+	m_text = std::make_unique<Text>(
+		Modifier()
+			.setColor(textColor)
+			.align(Align::CENTER_Y),
+		defaultText,
+		fontPath,
+		""
+	);
+
+	m_textRow = std::make_unique<ScrollableRow>(
+		Modifier().setColor(sf::Color::Transparent).setHeight(1.f).setWidth(1.f),
+		std::initializer_list<Element*>{ m_text.get() },
+		""
+	);
+
+	m_currentText = "";
+}
+
+inline TextBox::~TextBox() {}
+
+inline void TextBox::update(sf::RectangleShape& parentBounds) {
+	Element::update(parentBounds);
+	resize(parentBounds);
+	
+	if (m_textRow) {
+		m_textRow->update(m_bounds);
+		m_textRow->setPosition(m_bodyRect.getPosition());
+	}
+}
+
+inline void TextBox::render(sf::RenderTarget& target) {
+	if (!m_modifier.isVisible()) return;
+	
+	if (hasStyle(m_style, TBStyle::Pill)) {
+		m_leftCircle.setRadius(m_modifier.getFixedHeight() / 2);
+		m_rightCircle.setRadius(m_modifier.getFixedHeight() / 2);
+
+		m_leftCircle.setPosition(m_bounds.getPosition());
+		m_rightCircle.setPosition({
+			m_bounds.getPosition().x + m_bounds.getSize().x - (m_rightCircle.getRadius() * 2),
+			m_bounds.getPosition().y
+		});
+
+		m_bodyRect.setSize({
+			m_bounds.getSize().x - m_bounds.getSize().y,
+			m_bounds.getSize().y
+		});
+
+		m_bodyRect.setPosition({
+			m_bounds.getPosition().x + (m_bounds.getSize().y / 2),
+			m_bounds.getPosition().y
+		});
+
+		m_leftCircle.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
+		m_rightCircle.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
+		m_bodyRect.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
+
+		target.draw(m_leftCircle);
+		target.draw(m_rightCircle);
+		target.draw(m_bodyRect);
+
+		if (m_isActive) {
+			sf::RectangleShape cleanUpOutline;
+
+			cleanUpOutline.setFillColor(m_modifier.getColor());
+
+			cleanUpOutline.setSize({
+				m_bounds.getSize().y / 10,
+				m_bounds.getSize().y
+			});
+
+			cleanUpOutline.setPosition({
+				m_bodyRect.getPosition().x - m_bounds.getSize().y / 10,
+				m_bodyRect.getPosition().y
+			});
+
+			target.draw(cleanUpOutline);
+			
+			cleanUpOutline.setPosition({
+				m_bodyRect.getPosition().x + m_bodyRect.getSize().x,
+				m_bodyRect.getPosition().y
+			});
+
+			target.draw(cleanUpOutline);
+		}
+		
+		m_textRow->render(target);
+	}
+	else {
+		m_bodyRect.setSize(m_bounds.getSize());
+		m_bodyRect.setPosition(m_bounds.getPosition());
+		m_bodyRect.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
+		target.draw(m_bodyRect);
+		m_textRow->render(target);
+	}
+}
+
+inline bool TextBox::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
+	if (m_bounds.getGlobalBounds().contains(pos)) {
+		// Deactivate any previously active textbox
+		if (s_activeTextBox && s_activeTextBox != this) {
+			s_activeTextBox->setActive(false);
+		}
+		// Activate this textbox
+		setActive(true);
+		s_activeTextBox = this;
+		return true;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------- //
+// Image Implementation
+// ---------------------------------------------------------------------------- //
 inline Image::Image(
 	Modifier modifier,
 	sf::Image& image,
@@ -2090,6 +2294,16 @@ inline Dropdown* dropdown(
 	const std::string& name = ""
 ) { return obj<Dropdown>(modifier, defaultText, options, textFont, textColor, optionBackgroundColor, name); }
 
+inline TextBox* textBox(
+	Modifier modifier = default_mod,
+	TBStyle style = TBStyle::Default,
+	const std::string& fontPath = "",
+	const std::string& defaultText = "",
+	sf::Color textColor = sf::Color::Black,
+	sf::Color activeOutlineColor = sf::Color::Transparent,
+	const std::string& name = ""
+) { return obj<TextBox>(modifier, style, fontPath, defaultText, textColor, activeOutlineColor, name); }
+
 inline Image* image(
 	Modifier modifier = default_mod,
 	sf::Image& image = default_image,
@@ -2238,6 +2452,14 @@ inline bool Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button butto
 		// Fall through to handle the click normally
 	}
 	
+	// Store current active TextBox to potentially deactivate later
+	TextBox* previousActiveTextBox = TextBox::s_activeTextBox;
+	bool clickOnActiveTextBox = false;
+	bool shouldCheckTextBoxDeactivation = true;
+	if (previousActiveTextBox) {
+		clickOnActiveTextBox = previousActiveTextBox->m_bounds.getGlobalBounds().contains(pos);
+	}
+	
 	// Check high priority elements (excluding dropdown options which we handled above)
 	for (auto& e : high_priority_elements) {
 		if (e->m_modifier.isVisible()) {
@@ -2254,18 +2476,46 @@ inline bool Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button butto
 				if (isDropdownOptions) continue; // Skip, already handled above
 			}
 			
-			if (e->checkClick(pos, button))
+			bool handled = e->checkClick(pos, button);
+			if (handled) {
+				// Check TextBox deactivation before returning
+				if (shouldCheckTextBoxDeactivation && previousActiveTextBox && !clickOnActiveTextBox) {
+					previousActiveTextBox->setActive(false);
+					if (TextBox::s_activeTextBox == previousActiveTextBox) {
+						TextBox::s_activeTextBox = nullptr;
+					}
+				}
 				return true;
+			}
 		}
 	}
 	
 	// Then check regular containers with bounds checking
 	for (auto& c : m_containers) {
 		if (c->m_modifier.isVisible() && c->m_bounds.getGlobalBounds().contains(pos)) {
-			if (c->checkClick(pos, button))
+			bool handled = c->checkClick(pos, button);
+			if (handled) {
+				// Check TextBox deactivation before returning
+				if (shouldCheckTextBoxDeactivation && previousActiveTextBox && !clickOnActiveTextBox) {
+					previousActiveTextBox->setActive(false);
+					if (TextBox::s_activeTextBox == previousActiveTextBox) {
+						TextBox::s_activeTextBox = nullptr;
+					}
+				}
 				return true;
+			}
 		}
 	}
+	
+	// Handle TextBox deactivation: if we had an active TextBox and the click wasn't on it,
+	// then deactivate it (unless a new TextBox was activated by the click)
+	if (previousActiveTextBox && !clickOnActiveTextBox) {
+		previousActiveTextBox->setActive(false);
+		if (TextBox::s_activeTextBox == previousActiveTextBox) {
+			TextBox::s_activeTextBox = nullptr;
+		}
+	}
+	
 	return false;
 }
 
@@ -2622,6 +2872,21 @@ inline Align operator&(Align lhs, Align rhs) {
 }
 
 inline bool hasAlign(Align value, Align flag) {
+	return (static_cast<uint8_t>(value) & static_cast<uint8_t>(flag)) != 0;
+}
+
+// ---------------------------------------------------------------------------- //
+// TextBox Style Helpers
+// ---------------------------------------------------------------------------- //
+inline TBStyle operator|(TBStyle lhs, TBStyle rhs) {
+	return static_cast<TBStyle>(static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
+}
+
+inline TBStyle operator&(TBStyle lhs, TBStyle rhs) {
+	return static_cast<TBStyle>(static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
+}
+
+inline bool hasStyle(TBStyle value, TBStyle flag) {
 	return (static_cast<uint8_t>(value) & static_cast<uint8_t>(flag)) != 0;
 }
 
