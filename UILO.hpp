@@ -1624,7 +1624,7 @@ inline Button::Button(
 			Modifier()
 				.setColor(textColor)
 				.align(Align::CENTER_Y | Align::CENTER_X)
-				.setHeight(0.8f),
+				.setHeight(0.5f),
 			buttonText,
 			textFont,
 			""
@@ -1646,6 +1646,11 @@ inline Button::Button(
 inline void Button::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
 	resize(parentBounds);
+	applyModifiers();
+
+	m_bodyRect.setFillColor(m_modifier.getColor());
+	m_leftCircle.setFillColor(m_modifier.getColor());
+	m_rightCircle.setFillColor(m_modifier.getColor());
 	
 	// Set up bodyRect for proper text positioning
 	if (m_buttonStyle == ButtonStyle::Default || m_buttonStyle == ButtonStyle::Rect) {
