@@ -48,6 +48,7 @@ inline static std::vector<std::unique_ptr<Element>> uilo_owned_elements;
 inline static std::vector<std::unique_ptr<Element>> high_priority_elements;
 
 inline static std::unordered_map<std::string, Slider*> sliders;
+inline static Slider* activeDragSlider = nullptr;
 inline static std::unordered_map<std::string, Container*> containers;
 inline static std::unordered_map<std::string, Text*> texts;
 inline static std::unordered_map<std::string, Spacer*> spacers;
@@ -490,6 +491,7 @@ public:
 	void update(sf::RectangleShape& parentBounds) override;
 	void render(sf::RenderTarget& target) override;
 	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+	bool handleDrag(const sf::Vector2f& pos);
 
 	float getValue() const;
 	void setValue(float newVal);
@@ -1828,6 +1830,8 @@ inline void Slider::render(sf::RenderTarget& target) {
 
 inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
 	if (button == sf::Mouse::Button::Left && m_bounds.getGlobalBounds().contains(pos)) {
+		activeDragSlider = this;
+		
 		float t, v;
 		 
 		if (m_orientation == SliderOrientation::Vertical) {
@@ -1850,6 +1854,28 @@ inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 	}
 
 	return false;
+}
+
+inline bool Slider::handleDrag(const sf::Vector2f& pos) {
+	float t, v;
+	 
+	if (m_orientation == SliderOrientation::Vertical) {
+		// Vertical slider (original implementation)
+		float relY = pos.y - m_bounds.getPosition().y;
+		t = 1.f - (relY / m_bounds.getSize().y);
+	} else {
+		// Horizontal slider
+		float relX = pos.x - m_bounds.getPosition().x;
+		t = relX / m_bounds.getSize().x;
+	}
+	 
+	v = m_minVal + t * (m_maxVal - m_minVal);
+
+	if (v < m_minVal) v = m_minVal;
+	if (v > m_maxVal) v = m_maxVal;
+	m_curVal = v;
+
+	return true;
 }
 
 inline float Slider::getValue() const { return m_curVal; }
@@ -2859,6 +2885,12 @@ inline void UILO::pollEvents() {
 
 		if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>()) {
 			m_mousePos = activeWindow->mapPixelToCoords(mouseMoved->position);
+			
+			// Handle slider dragging
+			if (m_mouseDragging && activeDragSlider) {
+				activeDragSlider->handleDrag(m_mousePos);
+				m_shouldUpdate = true;
+			}
 		}
 
 		if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
@@ -2876,6 +2908,7 @@ inline void UILO::pollEvents() {
 
 		if (event->getIf<sf::Event::MouseButtonReleased>()) {
 			m_mouseDragging = false;
+			activeDragSlider = nullptr;
 		}
 	}
 }
