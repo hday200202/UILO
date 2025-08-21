@@ -517,7 +517,7 @@ public:
 	Dropdown(
 		Modifier modifier = default_mod,
 		const std::string& defaultText = "",
-		std::initializer_list<std::string> options = {},
+		const std::vector<std::string>& options = {},
 		const std::string& textFont = "",
 		sf::Color textColor = sf::Color::White,
 		sf::Color optionBackgroundColor = sf::Color(50, 50, 50),
@@ -529,6 +529,7 @@ public:
 	void render(sf::RenderTarget& target) override;
 	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
 	void checkHover(const sf::Vector2f& pos) override;
+	inline void setSelected(const std::string& option) { m_selectedOption = option; }
 
 	std::string getSelected() const;
 
@@ -1890,7 +1891,7 @@ inline void Slider::setValue(float newVal) {
 inline Dropdown::Dropdown(
 	Modifier modifier,
 	const std::string& defaultText,
-	std::initializer_list<std::string> options,
+	const std::vector<std::string>& options,
 	const std::string& textFont,
 	sf::Color textColor,
 	sf::Color optionBackgroundColor,
@@ -2354,7 +2355,7 @@ inline Slider* horizontalSlider(
 inline Dropdown* dropdown(
 	Modifier modifier = default_mod,
 	const std::string& defaultText = "",
-	std::initializer_list<std::string> options = {},
+	const std::vector<std::string>& options = {},
 	const std::string& textFont = "",
 	sf::Color textColor = sf::Color::White,
 	sf::Color optionBackgroundColor = sf::Color(50, 50, 50),
