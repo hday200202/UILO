@@ -1903,7 +1903,11 @@ inline Dropdown::Dropdown(
 	}
 	m_selectedOption = defaultText;
 
-	m_mainButton = obj<Button>(modifier, ButtonStyle::Rect, m_selectedOption, textFont, textColor, "");
+	// Use the original modifier but ensure button fills the dropdown bounds
+	Modifier buttonModifier = modifier;
+	buttonModifier.setWidth(1.0f).setHeight(1.0f);
+	
+	m_mainButton = obj<Button>(buttonModifier, ButtonStyle::Rect, m_selectedOption, textFont, textColor, "");
 	m_mainButton->m_modifier.onLClick([this]() {
 		if (!m_isOpen) {
 			// Close any other open dropdown
