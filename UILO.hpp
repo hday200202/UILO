@@ -55,6 +55,9 @@ inline static std::unordered_map<std::string, Spacer*> spacers;
 inline static std::unordered_map<std::string, Button*> buttons;
 inline static std::unordered_map<std::string, Dropdown*> dropdowns;
 
+// Global render scale for viewport calculations
+inline static float g_renderScale = 1.f;
+
 template <typename T, typename... Args>
 T* obj(Args&&... args) {
 	auto ptr = std::make_unique<T>(std::forward<Args>(args)...);
@@ -192,6 +195,7 @@ public:
 	virtual ~Element();
 
 	virtual void update(sf::RectangleShape& parentBounds);
+	virtual void updateChildren();
 	virtual void render(sf::RenderTarget& target) {
 		sf::RenderStates states;
 		states.transform.translate(m_bounds.getPosition());
@@ -228,6 +232,7 @@ public:
 	void addElement(Element* element);
 	void addElements(std::initializer_list<Element*> elements);
 	virtual void handleEvent(const sf::Event& event) override;
+	virtual void updateChildren() override;
 	const std::vector<Element*>& getElements() const;
 	virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {};
 	void clear();
@@ -749,6 +754,7 @@ inline void Element::update(sf::RectangleShape& parentBounds) {
 	}
 }
 
+inline void Element::updateChildren() {}
 
 inline void Element::handleEvent(const sf::Event& event) {
 	if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
@@ -873,6 +879,15 @@ inline void Container::handleEvent(const sf::Event& event) {
 }
 
 inline const std::vector<Element*>& Container::getElements() const { return m_elements; }
+
+inline void Container::updateChildren() {
+	for (auto& e : m_elements) {
+		if (e->m_modifier.isVisible()) {
+			e->Element::update(e->m_bounds);
+			e->updateChildren();
+		}
+	}
+}
 
 inline void Container::clear() {
 	for (auto& e : m_elements) {
@@ -1094,11 +1109,16 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 		sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
 
 		sf::Vector2u windowSize = target.getSize();
+		// Account for UI scaling in viewport calculation
+		sf::Vector2f effectiveWindowSize = {
+			static_cast<float>(windowSize.x) / g_renderScale,
+			static_cast<float>(windowSize.y) / g_renderScale
+		};
 		sf::FloatRect viewport(
 			{static_cast<float>(pixelPos.x) / windowSize.x,
 			 static_cast<float>(pixelPos.y) / windowSize.y},
-			{clipRect.size.x / windowSize.x,
-			 clipRect.size.y / windowSize.y}
+			{clipRect.size.x / effectiveWindowSize.x,
+			 clipRect.size.y / effectiveWindowSize.y}
 		);
 
 		clippingView.setViewport(viewport);
@@ -1153,11 +1173,13 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 				const sf::Vector2f currentPos = e->m_bounds.getPosition();
 				e->m_bounds.setPosition({currentPos.x + offsetX, currentPos.y});
 				
-				// Only update if visible in container - optimized intersection check
+				// Only update visibility flag and children - elements are already properly sized by Row::update
 				const sf::FloatRect elementBounds = e->m_bounds.getGlobalBounds();
-				if (containerBounds.findIntersection(elementBounds).has_value()) {
-					e->update(e->m_bounds);
-				}
+				const bool isVisible = containerBounds.findIntersection(elementBounds).has_value();
+				e->m_doRender = isVisible;
+				
+				// Update children if element is a container
+				e->updateChildren();
 			}
 		}
 
@@ -1313,11 +1335,16 @@ inline void Column::render(sf::RenderTarget& target) {
 		sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
 
 		sf::Vector2u windowSize = target.getSize();
+		// Account for UI scaling in viewport calculation
+		sf::Vector2f effectiveWindowSize = {
+			static_cast<float>(windowSize.x) / g_renderScale,
+			static_cast<float>(windowSize.y) / g_renderScale
+		};
 		sf::FloatRect viewport(
 			{static_cast<float>(pixelPos.x) / windowSize.x,
 			 static_cast<float>(pixelPos.y) / windowSize.y},
-			{clipRect.size.x / windowSize.x,
-			 clipRect.size.y / windowSize.y}
+			{clipRect.size.x / effectiveWindowSize.x,
+			 clipRect.size.y / effectiveWindowSize.y}
 		);
 
 		clippingView.setViewport(viewport);
@@ -1438,14 +1465,13 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
 				const sf::Vector2f currentPos = e->m_bounds.getPosition();
 				e->m_bounds.setPosition({currentPos.x, currentPos.y + offsetY});
 				
-				// Only update if visible in container - optimized intersection check
+				// Only update visibility flag and children - elements are already properly sized by Column::update
 				const sf::FloatRect elementBounds = e->m_bounds.getGlobalBounds();
 				const bool isVisible = containerBounds.findIntersection(elementBounds).has_value();
 				e->m_doRender = isVisible;
 				
-				if (isVisible) {
-					e->update(e->m_bounds);
-				}
+				// Update children if element is a container
+				e->updateChildren();
 			}
 		}
 
@@ -2843,6 +2869,7 @@ inline void UILO::forceUpdate(sf::View& windowView) {
 
 inline void UILO::setScale(float scale) {
 	m_renderScale = scale;
+	g_renderScale = scale; // Update global scale for viewport calculations
 	initDefaultView();
 	if (m_windowOwned) {
 		m_window.setView(m_defaultView);
