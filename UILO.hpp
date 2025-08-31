@@ -48,7 +48,6 @@ inline static std::vector<std::unique_ptr<Element>> uilo_owned_elements;
 inline static std::vector<std::unique_ptr<Element>> high_priority_elements;
 
 inline static std::unordered_map<std::string, Slider*> sliders;
-inline static Slider* activeDragSlider = nullptr;
 inline static std::unordered_map<std::string, Container*> containers;
 inline static std::unordered_map<std::string, Text*> texts;
 inline static std::unordered_map<std::string, Spacer*> spacers;
@@ -188,6 +187,7 @@ public:
 	bool m_doRender = true;
 	bool m_isHovered = false;
 	std::vector<std::shared_ptr<sf::Drawable>> m_customGeometry;
+	UILO* m_uilo = nullptr;
 
 	std::string m_name = "";
 
@@ -214,6 +214,7 @@ public:
 	sf::Vector2f getSize() const { return m_bounds.getSize(); }
 	bool isHovered() const { return m_isHovered; }
 	void setCustomGeometry(std::vector<std::shared_ptr<sf::Drawable>>& customGeometry);
+	virtual void setUilo(UILO* uilo) { m_uilo = uilo; }
 
 protected:
 	void resize(const sf::RectangleShape& parent = sf::RectangleShape(), const bool inSlot = false);
@@ -236,6 +237,7 @@ public:
 	const std::vector<Element*>& getElements() const;
 	virtual void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {};
 	void clear();
+	virtual void setUilo(UILO* uilo) override;
 
 	inline int getElementIndex(Element* element) const {
 		auto it = std::find(m_elements.begin(), m_elements.end(), element);
@@ -639,6 +641,7 @@ public:
 	void dispatchScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta);
 	void dispatchHover(const sf::Vector2f& pos);
 	void clear();
+	void setUilo(UILO* uilo);
 
 private:
 	std::vector<Container*> m_containers;
@@ -649,7 +652,26 @@ private:
 // UILO Application Core
 // ---------------------------------------------------------------------------- //
 class UILO {
+	// Friend declarations for all UI elements
+	friend class Element;
+	friend class Container;
+	friend class Row;
+	friend class ScrollableRow;
+	friend class Column;
+	friend class ScrollableColumn;
+	friend class FreeColumn;
+	friend class Text;
+	friend class Spacer;
+	friend class Button;
+	friend class Slider;
+	friend class TextBox;
+	friend class Image;
+	friend class Dropdown;
+	friend class Page;
+	
 public:
+	Slider* m_activeDragSlider = nullptr;
+
 	UILO();
 	UILO(const std::string& windowTitle);
 	UILO(sf::RenderWindow& userWindow, sf::View& windowView);
@@ -865,11 +887,20 @@ inline Container::Container(Modifier modifier, std::initializer_list<Element*> e
 
 inline Container::~Container() {}
 
-inline void Container::addElement(Element* element) { m_elements.push_back(element); }
+inline void Container::addElement(Element* element) { 
+	m_elements.push_back(element); 
+	if (m_uilo) {
+		element->setUilo(m_uilo);
+	}
+}
 
 inline void Container::addElements(std::initializer_list<Element*> elements) {
-	for (auto& e : elements)
+	for (auto& e : elements) {
 		m_elements.push_back(e);
+		if (m_uilo) {
+			e->setUilo(m_uilo);
+		}
+	}
 }
 
 inline void Container::handleEvent(const sf::Event& event) {
@@ -899,6 +930,13 @@ inline void Container::clear() {
 
 	m_elements.clear();
 	cleanupMarkedElements();
+}
+
+inline void Container::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	for (auto& element : m_elements) {
+		element->setUilo(uilo);
+	}
 }
 
 inline void cleanupMarkedElements() {
@@ -1110,9 +1148,10 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 
 		sf::Vector2u windowSize = target.getSize();
 		// Account for UI scaling in viewport calculation
+		float renderScale = m_uilo ? m_uilo->m_renderScale : 1.0f;
 		sf::Vector2f effectiveWindowSize = {
-			static_cast<float>(windowSize.x) / g_renderScale,
-			static_cast<float>(windowSize.y) / g_renderScale
+			static_cast<float>(windowSize.x) / renderScale,
+			static_cast<float>(windowSize.y) / renderScale
 		};
 		sf::FloatRect viewport(
 			{static_cast<float>(pixelPos.x) / windowSize.x,
@@ -1336,9 +1375,10 @@ inline void Column::render(sf::RenderTarget& target) {
 
 		sf::Vector2u windowSize = target.getSize();
 		// Account for UI scaling in viewport calculation
+		float renderScale = m_uilo ? m_uilo->m_renderScale : 1.0f;
 		sf::Vector2f effectiveWindowSize = {
-			static_cast<float>(windowSize.x) / g_renderScale,
-			static_cast<float>(windowSize.y) / g_renderScale
+			static_cast<float>(windowSize.x) / renderScale,
+			static_cast<float>(windowSize.y) / renderScale
 		};
 		sf::FloatRect viewport(
 			{static_cast<float>(pixelPos.x) / windowSize.x,
@@ -1857,7 +1897,9 @@ inline void Slider::render(sf::RenderTarget& target) {
 
 inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
 	if (button == sf::Mouse::Button::Left && m_bounds.getGlobalBounds().contains(pos)) {
-		activeDragSlider = this;
+		if (m_uilo) {
+			m_uilo->m_activeDragSlider = this;
+		}
 		
 		float t, v;
 		 
@@ -2638,6 +2680,12 @@ inline void Page::clear() {
 	cleanupMarkedElements();
 }
 
+inline void Page::setUilo(UILO* uilo) {
+	for (auto& container : m_containers) {
+		container->setUilo(uilo);
+	}
+}
+
 inline std::unique_ptr<Page> page(std::initializer_list<Container*> containers = {}) {
 	return std::make_unique<Page>(containers);
 }
@@ -2837,6 +2885,10 @@ inline bool UILO::windowShouldUpdate() const { return m_shouldUpdate; }
 inline void UILO::addPage(std::unique_ptr<Page> page, const std::string& name) {
 	if (!page) return;
 	Page* raw_page_ptr = page.get();
+	
+	// Set UILO instance on all elements in the page
+	raw_page_ptr->setUilo(this);
+	
 	m_pages[name] = raw_page_ptr;
 	m_ownedPages.push_back(std::move(page));
 	if (!m_currentPage) {
@@ -2919,8 +2971,8 @@ inline void UILO::pollEvents() {
 			m_mousePos = activeWindow->mapPixelToCoords(mouseMoved->position);
 			
 			// Handle slider dragging
-			if (m_mouseDragging && activeDragSlider) {
-				activeDragSlider->handleDrag(m_mousePos);
+			if (m_mouseDragging && m_activeDragSlider) {
+				m_activeDragSlider->handleDrag(m_mousePos);
 				m_shouldUpdate = true;
 			}
 		}
@@ -2940,7 +2992,7 @@ inline void UILO::pollEvents() {
 
 		if (event->getIf<sf::Event::MouseButtonReleased>()) {
 			m_mouseDragging = false;
-			activeDragSlider = nullptr;
+			m_activeDragSlider = nullptr;
 		}
 	}
 }
