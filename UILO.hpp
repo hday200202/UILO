@@ -19,10 +19,11 @@
 #include <chrono>
 #include <thread>
 #include <future>
+#include <cmath>
 #include <algorithm>
 #include <optional>
-#include <memory> // Added for std::unique_ptr
-#include <fstream> // For std::ifstream
+#include <memory>
+#include <fstream>
 
 namespace uilo {
 
@@ -502,11 +503,13 @@ public:
 
 	float getValue() const;
 	void setValue(float newVal);
+	void setQuantization(int steps) { m_quantizationSteps = steps; }
 
 private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
 	float m_curVal = 0.75f;
+	int m_quantizationSteps = 0; // 0 = no quantization
 
 	sf::Color m_knobColor = sf::Color::White;
 	sf::Color m_barColor = sf::Color::Black;
@@ -1917,6 +1920,12 @@ inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 
 		if (v < m_minVal) v = m_minVal;
 		if (v > m_maxVal) v = m_maxVal;
+		
+		// Apply quantization if enabled
+		if (m_quantizationSteps > 0) {
+			v = std::round(v * m_quantizationSteps) / m_quantizationSteps;
+		}
+		
 		m_curVal = v;
 
 		return true;
@@ -1942,6 +1951,12 @@ inline bool Slider::handleDrag(const sf::Vector2f& pos) {
 
 	if (v < m_minVal) v = m_minVal;
 	if (v > m_maxVal) v = m_maxVal;
+	
+	// Apply quantization if enabled
+	if (m_quantizationSteps > 0) {
+		v = std::round(v * m_quantizationSteps) / m_quantizationSteps;
+	}
+	
 	m_curVal = v;
 
 	return true;
