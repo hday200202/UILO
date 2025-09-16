@@ -2994,9 +2994,20 @@ inline void UILO::pollEvents() {
 
 		if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
 			m_scrollPosition = activeWindow->mapPixelToCoords(mouseScrolled->position);
+			
+			// Check if shift is held for horizontal scrolling
+			bool shiftHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
+							sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+			
 			if (mouseScrolled->wheel == sf::Mouse::Wheel::Vertical) {
-				m_verticalScrollDelta = mouseScrolled->delta;
-				m_horizontalScrollDelta = 0.f;
+				if (shiftHeld) {
+					// Convert vertical scroll to horizontal when shift is held
+					m_horizontalScrollDelta = mouseScrolled->delta;
+					m_verticalScrollDelta = 0.f;
+				} else {
+					m_verticalScrollDelta = mouseScrolled->delta;
+					m_horizontalScrollDelta = 0.f;
+				}
 			}
 			else if (mouseScrolled->wheel == sf::Mouse::Wheel::Horizontal) {
 				m_horizontalScrollDelta = mouseScrolled->delta;
