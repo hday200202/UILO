@@ -1896,6 +1896,9 @@ inline void Slider::update(sf::RectangleShape& parentBounds) {
 inline void Slider::render(sf::RenderTarget& target) {
 	target.draw(m_barRect);
 	target.draw(m_knobRect);
+	
+	// Render custom geometry
+	Element::render(target);
 }
 
 inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
