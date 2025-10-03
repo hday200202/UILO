@@ -338,12 +338,6 @@ private:
 	float m_offset = 0.f;
 	float m_scrollSpeed = 10.f;
 	bool m_locked = false;
-	
-	// Smooth scrolling variables
-	float m_scrollVelocity = 0.f;
-	float m_targetOffset = 0.f;
-	static constexpr float SCROLL_SMOOTHING = 0.15f;
-	static constexpr float SCROLL_DAMPING = 0.88f;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -392,12 +386,6 @@ private:
 	float m_offset = 0.f;
 	float m_scrollSpeed = 10.f;
 	bool m_locked = false;
-	
-	// Smooth scrolling variables
-	float m_scrollVelocity = 0.f;
-	float m_targetOffset = 0.f;
-	static constexpr float SCROLL_SMOOTHING = 0.15f;
-	static constexpr float SCROLL_DAMPING = 0.88f;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -1256,25 +1244,13 @@ inline void ScrollableRow::checkScroll(const sf::Vector2f& pos, const float vert
 	if (m_locked) return;
 	
 	if (m_bounds.getGlobalBounds().contains(pos)) {
-		if (horizontalDelta < 0) {
-			m_scrollVelocity -= m_scrollSpeed * 0.8f; // Add momentum for smooth scrolling
-		}
-		else if (horizontalDelta > 0) {
-			m_scrollVelocity += m_scrollSpeed * 0.8f; // Add momentum for smooth scrolling
-		}
-		else if (verticalDelta != 0) {
+		if (horizontalDelta < 0)
+			m_offset -= m_scrollSpeed;
+		else if (horizontalDelta > 0)
+			m_offset += m_scrollSpeed;
+		else if (verticalDelta != 0)
 			for (auto& e : m_elements)
 				e->checkScroll(pos, verticalDelta, horizontalDelta);
-		}
-		
-		// Apply velocity with damping for smooth deceleration
-		m_offset += m_scrollVelocity;
-		m_scrollVelocity *= SCROLL_DAMPING; // Gradually reduce velocity
-		
-		// Stop very small velocities to prevent infinite micro-movements
-		if (std::abs(m_scrollVelocity) < 0.1f) {
-			m_scrollVelocity = 0.f;
-		}
 	}
 }
 
@@ -1561,25 +1537,13 @@ inline void ScrollableColumn::checkScroll(const sf::Vector2f& pos, const float v
 	if (m_locked) return;
 	
 	if (m_bounds.getGlobalBounds().contains(pos)) {
-		if (verticalDelta < 0) {
-			m_scrollVelocity -= m_scrollSpeed * 0.8f; // Add momentum for smooth scrolling
-		}
-		else if (verticalDelta > 0) {
-			m_scrollVelocity += m_scrollSpeed * 0.8f; // Add momentum for smooth scrolling
-		}
-		else if (horizontalDelta != 0) {
+		if (verticalDelta < 0)
+			m_offset -= m_scrollSpeed;
+		else if (verticalDelta > 0)
+			m_offset += m_scrollSpeed;
+		else if (horizontalDelta != 0)
 			for (auto& e : m_elements)
 				e->checkScroll(pos, verticalDelta, horizontalDelta);
-		}
-		
-		// Apply velocity with damping for smooth deceleration
-		m_offset += m_scrollVelocity;
-		m_scrollVelocity *= SCROLL_DAMPING; // Gradually reduce velocity
-		
-		// Stop very small velocities to prevent infinite micro-movements
-		if (std::abs(m_scrollVelocity) < 0.1f) {
-			m_scrollVelocity = 0.f;
-		}
 	}
 }
 
