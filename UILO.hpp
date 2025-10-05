@@ -577,7 +577,25 @@ public:
 	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
 
 	inline bool isActive() const { return m_isActive; }
-	inline void setActive(bool active) { m_isActive = active; }
+	inline void setActive(bool active) { 
+		m_isActive = active; 
+		if (active) {
+			m_showCursor = true;
+			m_cursorClock.restart();
+		}
+	}
+	
+	inline std::string getText() const { return m_currentText; }
+	inline void setText(const std::string& text) { 
+		m_currentText = text;
+		// Reset cursor when text changes
+		m_showCursor = true;
+		m_cursorClock.restart();
+		if (m_text) {
+			m_text->setString(m_currentText.empty() ? m_defaultText : m_currentText);
+		}
+	}
+	inline void clearText() { setText(""); }
 
 private:
 	TBStyle m_style = TBStyle::Default;
@@ -598,6 +616,11 @@ private:
 	sf::Color m_textColor = sf::Color::Black;
 
 	bool m_isActive = false;
+	
+	// Cursor functionality
+	bool m_showCursor = false;
+	mutable sf::Clock m_cursorClock;
+	static constexpr float CURSOR_BLINK_INTERVAL = 0.5f; // 500ms
 
 public:
 	static TextBox* s_activeTextBox;
@@ -1633,13 +1656,22 @@ inline void Text::render(sf::RenderTarget& target) {
 	float centerX = m_bounds.getPosition().x + m_bounds.getSize().x / 2.f;
 	float centerY = m_bounds.getPosition().y + m_bounds.getSize().y / 2.f;
 	
-	// Get text bounds for centering
+	// Get text bounds for horizontal centering
 	sf::FloatRect localBounds = m_text->getLocalBounds();
-
-	// Use the actual text bounds for proper centering
+	
+	// Use a reference character to establish consistent vertical alignment
+	// Create a temporary text with "A" to get consistent baseline
+	sf::Text referenceText(m_text->getFont(), "A");
+	referenceText.setCharacterSize(m_text->getCharacterSize());
+	sf::FloatRect refBounds = referenceText.getLocalBounds();
+	
+	// Use the reference character's center for consistent vertical positioning
+	float verticalOrigin = refBounds.position.y + refBounds.size.y / 2.f;
+	
+	// Set origin for centering with consistent vertical baseline
 	m_text->setOrigin({
 		localBounds.position.x + localBounds.size.x / 2.f,
-		localBounds.position.y + localBounds.size.y / 2.f
+		verticalOrigin
 	});
 
 	// Position the text at the calculated center
@@ -2173,6 +2205,8 @@ inline TextBox::TextBox(
 	);
 
 	m_currentText = "";
+	// Update text display to show default or current text
+	setText(m_currentText);
 }
 
 inline TextBox::~TextBox() {}
@@ -2200,6 +2234,41 @@ inline void TextBox::update(sf::RectangleShape& parentBounds) {
 		m_textRow->update(m_bodyRect);
 		m_textRow->m_bounds.setSize(m_bodyRect.getSize());
 		m_textRow->setPosition(m_bodyRect.getPosition());
+		
+		// Update cursor timing for active textbox
+		if (m_isActive && this == s_activeTextBox) {
+			float elapsedTime = m_cursorClock.getElapsedTime().asSeconds();
+			// Calculate which half of the blink cycle we're in
+			float cycleTime = fmod(elapsedTime, CURSOR_BLINK_INTERVAL * 2.0f);
+			m_showCursor = (cycleTime < CURSOR_BLINK_INTERVAL);
+		} else {
+			m_showCursor = false;
+		}
+		
+		// Update text display based on current state
+		if (m_text) {
+			std::string displayText;
+			if (m_currentText.empty()) {
+				if (m_isActive && this == s_activeTextBox) {
+					// Show cursor only when active and empty
+					displayText = (m_showCursor) ? "|" : "";
+				} else {
+					// Show default text when not active and empty
+					displayText = m_defaultText;
+				}
+			} else {
+				displayText = m_currentText;
+				// Add blinking cursor for active textbox with content
+				if (m_isActive && this == s_activeTextBox && m_showCursor) {
+					displayText += "|";
+				}
+			}
+			m_text->setString(displayText);
+			// Use normal text color when active (even if empty), fade default text when inactive
+			sf::Color textColor = (m_currentText.empty() && !(m_isActive && this == s_activeTextBox)) ? 
+				sf::Color(m_textColor.r, m_textColor.g, m_textColor.b, 128) : m_textColor;
+			m_text->m_modifier.setColor(textColor);
+		}
 	}
 }
 
@@ -3023,6 +3092,46 @@ inline void UILO::pollEvents() {
 			m_mouseDragging = false;
 			m_activeDragSlider = nullptr;
 		}
+
+		// Handle text input for active TextBox
+		if (TextBox::s_activeTextBox && TextBox::s_activeTextBox->isActive()) {
+			if (const auto* textEntered = event->getIf<sf::Event::TextEntered>()) {
+				char inputChar = static_cast<char>(textEntered->unicode);
+				// Only accept printable characters (ASCII 32-126)
+				if (inputChar >= 32 && inputChar < 127) {
+					std::string currentText = TextBox::s_activeTextBox->getText();
+					currentText += inputChar;
+					TextBox::s_activeTextBox->setText(currentText);
+					m_shouldUpdate = true;
+				}
+			}
+			
+			if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
+				std::string currentText = TextBox::s_activeTextBox->getText();
+				bool textChanged = false;
+				
+				if (keyPressed->code == sf::Keyboard::Key::Backspace && !currentText.empty()) {
+					currentText.pop_back();
+					textChanged = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Delete) {
+					// For now, just clear all text on Delete
+					currentText.clear();
+					textChanged = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Enter || keyPressed->code == sf::Keyboard::Key::Escape) {
+					// Deactivate textbox on Enter or Escape
+					TextBox::s_activeTextBox->setActive(false);
+					TextBox::s_activeTextBox = nullptr;
+					m_shouldUpdate = true;
+				}
+				
+				if (textChanged) {
+					TextBox::s_activeTextBox->setText(currentText);
+					m_shouldUpdate = true;
+				}
+			}
+		}
 	}
 }
 
@@ -3072,6 +3181,10 @@ inline TBStyle operator&(TBStyle lhs, TBStyle rhs) {
 inline bool hasStyle(TBStyle value, TBStyle flag) {
 	return (static_cast<uint8_t>(value) & static_cast<uint8_t>(flag)) != 0;
 }
+
+// ---------------------------------------------------------------------------- //
+// Helper Functions for UI Element Creation
+// ---------------------------------------------------------------------------- //
 
 using contains = std::initializer_list<uilo::Element*>;
 
