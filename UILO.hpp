@@ -426,6 +426,33 @@ public:
 	std::string getString() const { return m_text ? std::string(m_text->getString()) : m_string; }
 	float getTextWidth() const { return m_text ? m_text->getLocalBounds().size.x : 0.f; }
 	float getTextHeight() const { return m_text ? m_text->getLocalBounds().size.y : 0.f; }
+	
+	// Get the exact position where a character would be positioned (for cursor placement)
+	sf::Vector2f getCharacterPosition(size_t index) const {
+		if (!m_text || index > m_string.length()) {
+			return {0.f, 0.f};
+		}
+		// SFML's findCharacterPos gives us the exact position of any character (relative to text)
+		return m_text->findCharacterPos(index);
+	}
+	
+	// Get absolute screen coordinates for character positions (used for click detection)
+	sf::Vector2f getAbsoluteCharacterPosition(size_t index) const {
+		if (!m_text || index > m_string.length()) {
+			return {0.f, 0.f};
+		}
+		// SFML's findCharacterPos gives us the position relative to the text object
+		// We need to add the text's actual position to get screen coordinates
+		sf::Vector2f relativePos = m_text->findCharacterPos(index);
+		sf::Vector2f textPos = m_text->getPosition();
+		return sf::Vector2f(relativePos.x + textPos.x, relativePos.y + textPos.y);
+	}
+	
+	// Get the rendered position of the text (where it actually appears on screen)
+	sf::Vector2f getRenderedPosition() const {
+		if (!m_text) return {0.f, 0.f};
+		return m_text->getPosition();
+	}
 
 private:
 	std::string m_string = "";
@@ -493,6 +520,7 @@ public:
 		sf::Color knobColor = sf::Color::White,
 		sf::Color barColor = sf::Color::Black,
 		SliderOrientation orientation = SliderOrientation::Vertical,
+		float initialValue = 0.75f,
 		const std::string& name = ""
 	);
 
@@ -509,6 +537,7 @@ private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
 	float m_curVal = 0.75f;
+	float m_initVal = 0.75f;
 	int m_quantizationSteps = 0; // 0 = no quantization
 
 	sf::Color m_knobColor = sf::Color::White;
@@ -517,6 +546,8 @@ private:
 
 	sf::RectangleShape m_knobRect;
 	sf::RectangleShape m_barRect;
+
+	sf::Clock doubleClickTimer;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -580,6 +611,7 @@ public:
 	inline void setActive(bool active) { 
 		m_isActive = active; 
 		if (active) {
+			m_cursorPosition = m_currentText.length(); // Place cursor at end by default
 			m_showCursor = true;
 			m_cursorClock.restart();
 		}
@@ -589,6 +621,7 @@ public:
 	inline void setText(const std::string& text) { 
 		m_currentText = text;
 		// Reset cursor when text changes
+		m_cursorPosition = m_currentText.length(); // Place cursor at end
 		m_showCursor = true;
 		m_cursorClock.restart();
 		if (m_text) {
@@ -597,6 +630,63 @@ public:
 	}
 	inline void clearText() { setText(""); }
 
+	// Cursor control methods
+	inline size_t getCursorPosition() const { return m_cursorPosition; }
+	inline void setCursorPosition(size_t pos) { 
+		m_cursorPosition = std::min(pos, m_currentText.length()); 
+		m_showCursor = true;
+		m_cursorClock.restart();
+	}
+	inline void moveCursorLeft() { 
+		if (m_cursorPosition > 0) {
+			m_cursorPosition--; 
+			m_showCursor = true;
+			m_cursorClock.restart();
+		}
+	}
+	inline void moveCursorRight() { 
+		if (m_cursorPosition < m_currentText.length()) {
+			m_cursorPosition++; 
+			m_showCursor = true;
+			m_cursorClock.restart();
+		}
+	}
+	inline void insertAtCursor(char c) {
+		size_t insertPos = std::min(m_cursorPosition, m_currentText.length());
+		m_currentText.insert(insertPos, 1, c);
+		m_cursorPosition = insertPos + 1;
+		if (m_text) {
+			m_text->setString(m_currentText.empty() ? m_defaultText : m_currentText);
+		}
+		m_showCursor = true;
+		m_cursorClock.restart();
+	}
+	inline void deleteAtCursor() {
+		if (!m_currentText.empty() && m_cursorPosition < m_currentText.length()) {
+			m_currentText.erase(m_cursorPosition, 1);
+			if (m_text) {
+				m_text->setString(m_currentText.empty() ? m_defaultText : m_currentText);
+			}
+			m_showCursor = true;
+			m_cursorClock.restart();
+		}
+	}
+	inline void backspaceAtCursor() {
+		if (!m_currentText.empty() && m_cursorPosition > 0) {
+			size_t deletePos = m_cursorPosition - 1;
+			m_currentText.erase(deletePos, 1);
+			m_cursorPosition = deletePos;
+			if (m_text) {
+				m_text->setString(m_currentText.empty() ? m_defaultText : m_currentText);
+			}
+			m_showCursor = true;
+			m_cursorClock.restart();
+		}
+	}
+
+	// Public cursor position for external access
+	size_t m_cursorPosition = 0; // Character index for cursor position
+
 private:
 	TBStyle m_style = TBStyle::Default;
 	sf::RectangleShape m_bodyRect;
@@ -604,6 +694,9 @@ private:
 	// if hasStyle(TBStyle::Pill)
 	sf::CircleShape m_leftCircle;
 	sf::CircleShape m_rightCircle;
+
+	// Cursor rectangle for visual cursor
+	sf::RectangleShape m_cursorRect;
 
 	std::unique_ptr<Text> m_text;
 	std::unique_ptr<Row> m_textRow;
@@ -621,6 +714,40 @@ private:
 	bool m_showCursor = false;
 	mutable sf::Clock m_cursorClock;
 	static constexpr float CURSOR_BLINK_INTERVAL = 0.5f; // 500ms
+
+	// Helper method to render cursor at correct position
+	void renderCursor(sf::RenderTarget& target) {
+		if (!m_text) return;
+		
+		// Calculate cursor position
+		float cursorX, cursorY;
+		float cursorHeight = m_bounds.getSize().y * 0.6f; // 60% of textbox height
+		float cursorWidth = 2.0f; // 2 pixels wide
+		
+		if (m_currentText.empty()) {
+			// When no text, position cursor at the center of where text would appear
+			sf::Vector2f textElementPos = m_text->m_bounds.getPosition();
+			sf::Vector2f textElementSize = m_text->m_bounds.getSize();
+			cursorX = textElementPos.x + textElementSize.x / 2.0f;
+		} else {
+			// Use SFML's precise character positioning
+			// Clamp cursor position to valid range
+			size_t safePos = std::min(m_cursorPosition, m_currentText.length());
+			sf::Vector2f charPos = m_text->getCharacterPosition(safePos);
+			cursorX = charPos.x;
+		}
+		
+		// Center cursor vertically in the TextBox
+		cursorY = m_bounds.getPosition().y + (m_bounds.getSize().y - cursorHeight) * 0.5f;
+		
+		// Set cursor rectangle properties
+		m_cursorRect.setPosition({cursorX, cursorY});
+		m_cursorRect.setSize({cursorWidth, cursorHeight});
+		m_cursorRect.setFillColor(m_textColor); // Same color as text
+		
+		// Draw the cursor
+		target.draw(m_cursorRect);
+	}
 
 public:
 	static TextBox* s_activeTextBox;
@@ -1854,8 +1981,9 @@ inline Slider::Slider(
 	sf::Color knobColor,
 	sf::Color barColor,
 	SliderOrientation orientation,
+	float initialValue,
 	const std::string& name
-) : m_knobColor(knobColor), m_barColor(barColor), m_orientation(orientation) {
+) : m_knobColor(knobColor), m_barColor(barColor), m_orientation(orientation), m_initVal(initialValue), m_curVal(initialValue) {
 	m_modifier = modifier;
 	m_knobRect.setFillColor(m_knobColor);
 	m_barRect.setFillColor(m_barColor);
@@ -1938,6 +2066,15 @@ inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 		if (m_uilo) {
 			m_uilo->m_activeDragSlider = this;
 		}
+
+		if (doubleClickTimer.isRunning()) {
+			if (doubleClickTimer.getElapsedTime().asMilliseconds() <= 250) {
+				m_curVal = m_initVal;
+				doubleClickTimer.stop();
+				return true;
+			}
+		}
+		doubleClickTimer.restart();
 		
 		float t, v;
 		 
@@ -2250,18 +2387,15 @@ inline void TextBox::update(sf::RectangleShape& parentBounds) {
 			std::string displayText;
 			if (m_currentText.empty()) {
 				if (m_isActive && this == s_activeTextBox) {
-					// Show cursor only when active and empty
-					displayText = (m_showCursor) ? "|" : "";
+					// Show empty string when active and empty (cursor will be drawn separately)
+					displayText = "";
 				} else {
 					// Show default text when not active and empty
 					displayText = m_defaultText;
 				}
 			} else {
+				// Just show the current text without cursor character
 				displayText = m_currentText;
-				// Add blinking cursor for active textbox with content
-				if (m_isActive && this == s_activeTextBox && m_showCursor) {
-					displayText += "|";
-				}
 			}
 			m_text->setString(displayText);
 			// Use normal text color when active (even if empty), fade default text when inactive
@@ -2329,6 +2463,11 @@ inline void TextBox::render(sf::RenderTarget& target) {
 		}
 		
 		m_textRow->render(target);
+		
+		// Render cursor rectangle if active and should show cursor
+		if (m_isActive && this == s_activeTextBox && m_showCursor) {
+			renderCursor(target);
+		}
 	}
 	else {
 		m_bodyRect.setSize(m_bounds.getSize());
@@ -2336,6 +2475,11 @@ inline void TextBox::render(sf::RenderTarget& target) {
 		m_bodyRect.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
 		target.draw(m_bodyRect);
 		m_textRow->render(target);
+		
+		// Render cursor rectangle if active and should show cursor
+		if (m_isActive && this == s_activeTextBox && m_showCursor) {
+			renderCursor(target);
+		}
 	}
 }
 
@@ -2348,6 +2492,44 @@ inline bool TextBox::checkClick(const sf::Vector2f& pos, sf::Mouse::Button butto
 		// Activate this textbox
 		setActive(true);
 		s_activeTextBox = this;
+		
+		// Calculate cursor position from click coordinates
+		if (m_text) {
+			if (m_currentText.empty()) {
+				// For empty text, cursor goes to position 0
+				m_cursorPosition = 0;
+			} else {
+				// Convert click coordinates to text coordinate space
+				float clickX = pos.x;
+				size_t bestPosition = 0;
+				
+				// Get the text element's actual screen position
+				sf::Vector2f textElementPos = m_text->m_bounds.getPosition();
+				sf::Vector2f textElementSize = m_text->m_bounds.getSize();
+				
+				// Calculate where the text content actually starts (centered within text element)
+				float textWidth = m_text->getTextWidth();
+				float textStartX = textElementPos.x + (textElementSize.x - textWidth) / 2.0f;
+				
+				float minDistance = std::abs(clickX - (textStartX + m_text->getCharacterPosition(0).x));
+				
+				// Check each possible cursor position (including one past the end)
+				for (size_t i = 0; i <= m_currentText.length(); ++i) {
+					// Get relative character position and convert to screen coordinates
+					sf::Vector2f relativeCharPos = m_text->getCharacterPosition(i);
+					float screenCharX = textStartX + relativeCharPos.x;
+					float distance = std::abs(clickX - screenCharX);
+					
+					if (distance < minDistance) {
+						minDistance = distance;
+						bestPosition = i;
+					}
+				}
+				
+				m_cursorPosition = bestPosition;
+			}
+		}
+		
 		return true;
 	}
 	return false;
@@ -2490,22 +2672,25 @@ inline Slider* slider(
 	sf::Color knobColor = sf::Color::White,
 	sf::Color barColor = sf::Color::Black,
 	SliderOrientation orientation = SliderOrientation::Vertical,
+	float initialValue = 0.75f,
 	const std::string& name = ""
-) { return obj<Slider>(modifier, knobColor, barColor, orientation, name); }
+) { return obj<Slider>(modifier, knobColor, barColor, orientation, initialValue, name); }
 
 inline Slider* verticalSlider(
 	Modifier modifier = default_mod,
 	sf::Color knobColor = sf::Color::White,
 	sf::Color barColor = sf::Color::Black,
+	float initialValue = 0.75f,
 	const std::string& name = ""
-) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Vertical, name); }
+) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Vertical, initialValue, name); }
 
 inline Slider* horizontalSlider(
 	Modifier modifier = default_mod,
 	sf::Color knobColor = sf::Color::White,
 	sf::Color barColor = sf::Color::Black,
+	float initialValue = 0.75f,
 	const std::string& name = ""
-) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Horizontal, name); }
+) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Horizontal, initialValue, name); }
 
 inline Dropdown* dropdown(
 	Modifier modifier = default_mod,
@@ -3099,35 +3284,40 @@ inline void UILO::pollEvents() {
 				char inputChar = static_cast<char>(textEntered->unicode);
 				// Only accept printable characters (ASCII 32-126)
 				if (inputChar >= 32 && inputChar < 127) {
-					std::string currentText = TextBox::s_activeTextBox->getText();
-					currentText += inputChar;
-					TextBox::s_activeTextBox->setText(currentText);
+					TextBox::s_activeTextBox->insertAtCursor(inputChar);
 					m_shouldUpdate = true;
 				}
 			}
 			
 			if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-				std::string currentText = TextBox::s_activeTextBox->getText();
-				bool textChanged = false;
-				
-				if (keyPressed->code == sf::Keyboard::Key::Backspace && !currentText.empty()) {
-					currentText.pop_back();
-					textChanged = true;
+				if (keyPressed->code == sf::Keyboard::Key::Backspace) {
+					TextBox::s_activeTextBox->backspaceAtCursor();
+					m_shouldUpdate = true;
 				}
 				else if (keyPressed->code == sf::Keyboard::Key::Delete) {
-					// For now, just clear all text on Delete
-					currentText.clear();
-					textChanged = true;
+					TextBox::s_activeTextBox->deleteAtCursor();
+					m_shouldUpdate = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Left) {
+					TextBox::s_activeTextBox->moveCursorLeft();
+					m_shouldUpdate = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Right) {
+					TextBox::s_activeTextBox->moveCursorRight();
+					m_shouldUpdate = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::Home) {
+					TextBox::s_activeTextBox->setCursorPosition(0);
+					m_shouldUpdate = true;
+				}
+				else if (keyPressed->code == sf::Keyboard::Key::End) {
+					TextBox::s_activeTextBox->setCursorPosition(TextBox::s_activeTextBox->getText().length());
+					m_shouldUpdate = true;
 				}
 				else if (keyPressed->code == sf::Keyboard::Key::Enter || keyPressed->code == sf::Keyboard::Key::Escape) {
 					// Deactivate textbox on Enter or Escape
 					TextBox::s_activeTextBox->setActive(false);
 					TextBox::s_activeTextBox = nullptr;
-					m_shouldUpdate = true;
-				}
-				
-				if (textChanged) {
-					TextBox::s_activeTextBox->setText(currentText);
 					m_shouldUpdate = true;
 				}
 			}
