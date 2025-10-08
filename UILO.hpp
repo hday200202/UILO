@@ -123,6 +123,8 @@ enum class TBStyle : uint8_t {
 	Default		= 0,
 	Pill		= 1 << 0,
 	Wrap		= 1 << 1,
+	CenterText	= 1 << 2,
+	Password	= 1 << 3,
 };
 
 inline TBStyle operator|(TBStyle lhs, TBStyle rhs);
@@ -728,13 +730,43 @@ private:
 			// When no text, position cursor at the center of where text would appear
 			sf::Vector2f textElementPos = m_text->m_bounds.getPosition();
 			sf::Vector2f textElementSize = m_text->m_bounds.getSize();
-			cursorX = textElementPos.x + textElementSize.x / 2.0f;
+			if (hasStyle(m_style, TBStyle::CenterText)) {
+				cursorX = textElementPos.x + textElementSize.x / 2.0f;
+			} else {
+				cursorX = textElementPos.x;
+			}
 		} else {
 			// Use SFML's precise character positioning
 			// Clamp cursor position to valid range
 			size_t safePos = std::min(m_cursorPosition, m_currentText.length());
-			sf::Vector2f charPos = m_text->getCharacterPosition(safePos);
-			cursorX = charPos.x;
+			
+			if (hasStyle(m_style, TBStyle::CenterText)) {
+				// For centered text, we need to calculate the cursor position manually
+				// since the text alignment affects where characters are positioned
+				sf::Vector2f textElementPos = m_text->m_bounds.getPosition();
+				sf::Vector2f textElementSize = m_text->m_bounds.getSize();
+				
+				// Get the actual displayed text for width calculations
+				std::string displayText = hasStyle(m_style, TBStyle::Password) ? 
+					std::string(m_currentText.length(), '*') : m_currentText;
+				
+				// Calculate text width up to cursor position
+				std::string textToCursor = displayText.substr(0, safePos);
+				float textToCursorWidth = 0.f;
+				float totalTextWidth = m_text->getTextWidth();
+				
+				// If we have partial text, calculate its width proportionally
+				if (!displayText.empty() && !textToCursor.empty()) {
+					textToCursorWidth = totalTextWidth * (float(textToCursor.length()) / float(displayText.length()));
+				}
+				
+				// Calculate centered text start position
+				float textStartX = textElementPos.x + (textElementSize.x - totalTextWidth) / 2.0f;
+				cursorX = textStartX + textToCursorWidth;
+			} else {
+				sf::Vector2f charPos = m_text->getCharacterPosition(safePos);
+				cursorX = charPos.x;
+			}
 		}
 		
 		// Center cursor vertically in the TextBox
@@ -2328,7 +2360,7 @@ inline TextBox::TextBox(
 	m_text = std::make_unique<Text>(
 		Modifier()
 			.setColor(textColor)
-			.align(Align::CENTER_Y)
+			.align(hasStyle(style, TBStyle::CenterText) ? (Align::CENTER_Y | Align::CENTER_X) : Align::CENTER_Y)
 			.setHeight(0.8f),
 		defaultText,
 		fontPath,
@@ -2394,8 +2426,11 @@ inline void TextBox::update(sf::RectangleShape& parentBounds) {
 					displayText = m_defaultText;
 				}
 			} else {
-				// Just show the current text without cursor character
-				displayText = m_currentText;
+				if (hasStyle(m_style, TBStyle::Password)) {
+					displayText = std::string(m_currentText.length(), '*');
+				} else {
+					displayText = m_currentText;
+				}
 			}
 			m_text->setString(displayText);
 			// Use normal text color when active (even if empty), fade default text when inactive
