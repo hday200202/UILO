@@ -975,6 +975,7 @@ public:
 	void forceUpdate();
 	void forceUpdate(sf::View& windowView);
 	void setScale(float scale = 1.f);
+	float getScale() const;
 	sf::Vector2f getMousePosition() const;
 	float getVerticalScrollDelta() const;
 	float getHorizontalScrollDelta() const;
@@ -3670,6 +3671,8 @@ inline void UILO::setScale(float scale) {
 	// Force update to apply new scaling
 	m_shouldUpdate = true;
 }
+
+inline float UILO::getScale() const { return m_renderScale; }
 
 inline sf::Vector2f UILO::getMousePosition() const { return m_mousePos; }
 inline float UILO::getVerticalScrollDelta() const { return m_verticalScrollDelta; }
