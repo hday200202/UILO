@@ -11,6 +11,7 @@
 #define UILO_HPP
 
 #include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -41,6 +42,7 @@ class Page;
 class UILO;
 class Slider;
 class Text;
+class TextBox;
 class Spacer;
 class Button;
 class Dropdown;
@@ -51,13 +53,13 @@ class Dropdown;
 inline static std::vector<std::unique_ptr<Element>> uilo_owned_elements;
 inline static std::vector<std::unique_ptr<Element>> high_priority_elements;
 
-inline static std::unordered_map<std::string, Slider*> sliders;
-inline static std::unordered_map<std::string, Container*> containers;
-inline static std::unordered_map<std::string, Text*> texts;
-inline static std::unordered_map<std::string, Spacer*> spacers;
-inline static std::unordered_map<std::string, Button*> buttons;
-inline static std::unordered_map<std::string, Dropdown*> dropdowns;
-inline static std::unordered_map<std::string, Grid*> grids;
+// inline static std::unordered_map<std::string, Slider*> sliders;
+// inline static std::unordered_map<std::string, Container*> containers;
+// inline static std::unordered_map<std::string, Text*> texts;
+// inline static std::unordered_map<std::string, Spacer*> spacers;
+// inline static std::unordered_map<std::string, Button*> buttons;
+// inline static std::unordered_map<std::string, Dropdown*> dropdowns;
+// inline static std::unordered_map<std::string, Grid*> grids;
 
 // Global render scale for viewport calculations
 inline static float g_renderScale = 1.f;
@@ -451,6 +453,8 @@ public:
 	void unlockVertical() { m_verticalLocked = false; }
 	bool isHorizontalLocked() const { return m_horizontalLocked; }
 	bool isVerticalLocked() const { return m_verticalLocked; }
+	
+	void setUilo(UILO* uilo) override;
 
 private:
 	float m_cellWidth = 100.f;
@@ -530,6 +534,8 @@ public:
 		return m_text->getPosition();
 	}
 
+	void setUilo(UILO* uilo) override;
+
 private:
 	std::string m_string = "";
 	sf::Font m_font;
@@ -543,6 +549,7 @@ class Spacer : public Element {
 public:
 	Spacer(Modifier& modifier, const std::string& name = "");
 	void update(sf::RectangleShape& parentBounds) override;
+	void setUilo(UILO* uilo) override;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -580,6 +587,8 @@ public:
 	bool isHovered() const { return m_isHovered; }
 
 	void setClicked(bool clicked) { m_isClicked = clicked; }
+	
+	void setUilo(UILO* uilo) override;
 
 private:
 	ButtonStyle m_buttonStyle = ButtonStyle::Default;
@@ -617,6 +626,8 @@ public:
 	float getValue() const;
 	void setValue(float newVal);
 	void setQuantization(int steps) { m_quantizationSteps = steps; }
+	
+	void setUilo(UILO* uilo) override;
 
 private:
 	float m_minVal = 0.f;
@@ -658,6 +669,8 @@ public:
 	inline void setSelected(const std::string& option) { m_selectedOption = option; }
 
 	std::string getSelected() const;
+	
+	void setUilo(UILO* uilo) override;
 
 	static Dropdown* s_openDropdown;
 
@@ -789,6 +802,7 @@ public:
 
 	// Public cursor position for external access
 	size_t m_cursorPosition = 0; // Character index for cursor position
+	void setUilo(UILO* uilo) override;
 
 private:
 	TBStyle m_style = TBStyle::Default;
@@ -932,6 +946,7 @@ public:
 private:
 	std::vector<Container*> m_containers;
 	sf::RectangleShape m_bounds;
+	UILO* m_uilo = nullptr;
 };
 
 // ---------------------------------------------------------------------------- //
@@ -955,6 +970,7 @@ class UILO {
 	friend class Image;
 	friend class Dropdown;
 	friend class Page;
+	friend void cleanupMarkedElements();
 	
 public:
 	Slider* m_activeDragSlider = nullptr;
@@ -985,6 +1001,16 @@ public:
 	bool isInputBlocked() const;
 	bool isMouseDragging() const;
 	inline void setFullClean(bool doFullClean) { m_fullClean = doFullClean; }
+
+	Row* getRow(const std::string& name);
+	Column* getColumn(const std::string& name);
+	Spacer* getSpacer(const std::string& name);
+	Button* getButton(const std::string& name);
+	Text* getText(const std::string& name);
+	Slider* getSlider(const std::string& name);
+	Dropdown* getDropdown(const std::string& name);
+	Grid* getGrid(const std::string& name);
+	TextBox* getTextBox(const std::string& name);
 
 private:
 	sf::RenderWindow m_window;
@@ -1017,6 +1043,15 @@ private:
 
 	std::vector<sf::RectangleShape> m_elementBoundsCache;
 	bool m_cacheIsInitialized = false;
+
+	std::unordered_map<std::string, Slider*> m_sliders;
+	std::unordered_map<std::string, Container*> m_containers;
+	std::unordered_map<std::string, Text*> m_texts;
+	std::unordered_map<std::string, Spacer*> m_spacers;
+	std::unordered_map<std::string, Button*> m_buttons;
+	std::unordered_map<std::string, Dropdown*> m_dropdowns;
+	std::unordered_map<std::string, Grid*> m_grids;
+	std::unordered_map<std::string, TextBox*> m_textboxes;
 
 	void pollEvents();
 	void initDefaultView();
@@ -1157,8 +1192,8 @@ inline Container::Container(std::initializer_list<Element*> elements, const std:
 
 	m_name = name;
 
-	if (!m_name.empty())
-		containers[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_containers[m_name] = this;
 }
 
 inline Container::Container(Modifier modifier, std::initializer_list<Element*> elements, const std::string& name) {
@@ -1169,8 +1204,8 @@ inline Container::Container(Modifier modifier, std::initializer_list<Element*> e
 
 	m_name = name;
 
-	if (!m_name.empty())
-		containers[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_containers[m_name] = this;
 }
 
 inline Container::~Container() {}
@@ -1222,6 +1257,11 @@ inline void Container::clear() {
 
 inline void Container::setUilo(UILO* uilo) {
 	Element::setUilo(uilo);
+	
+	// Register this container if it has a name
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_containers[m_name] = this;
+	
 	for (auto& element : m_elements) {
 		element->setUilo(uilo);
 	}
@@ -1232,30 +1272,36 @@ inline void cleanupMarkedElements() {
 	while (it != uilo_owned_elements.end()) {
 		Element* element = it->get();
 		if (element->m_markedForDeletion) {
-			if (!element->m_name.empty()) {
-				auto buttonIt = buttons.find(element->m_name);
-				if (buttonIt != buttons.end() && buttonIt->second == element)
-					buttons.erase(buttonIt);
+			if (!element->m_name.empty() && element->m_uilo) {
+				UILO* uilo = element->m_uilo;
+				
+				auto buttonIt = uilo->m_buttons.find(element->m_name);
+				if (buttonIt != uilo->m_buttons.end() && buttonIt->second == element)
+					uilo->m_buttons.erase(buttonIt);
 
-				auto sliderIt = sliders.find(element->m_name);
-				if (sliderIt != sliders.end() && sliderIt->second == element)
-					sliders.erase(sliderIt);
+				auto sliderIt = uilo->m_sliders.find(element->m_name);
+				if (sliderIt != uilo->m_sliders.end() && sliderIt->second == element)
+					uilo->m_sliders.erase(sliderIt);
 
-				auto textIt = texts.find(element->m_name);
-				if (textIt != texts.end() && textIt->second == element)
-					texts.erase(textIt);
+				auto textIt = uilo->m_texts.find(element->m_name);
+				if (textIt != uilo->m_texts.end() && textIt->second == element)
+					uilo->m_texts.erase(textIt);
 
-				auto spacerIt = spacers.find(element->m_name);
-				if (spacerIt != spacers.end() && spacerIt->second == element)
-					spacers.erase(spacerIt);
+				auto spacerIt = uilo->m_spacers.find(element->m_name);
+				if (spacerIt != uilo->m_spacers.end() && spacerIt->second == element)
+					uilo->m_spacers.erase(spacerIt);
 
-				auto containerIt = containers.find(element->m_name);
-				if (containerIt != containers.end() && containerIt->second == element)
-					containers.erase(containerIt);
+				auto containerIt = uilo->m_containers.find(element->m_name);
+				if (containerIt != uilo->m_containers.end() && containerIt->second == element)
+					uilo->m_containers.erase(containerIt);
 
-				auto gridIt = grids.find(element->m_name);
-				if (gridIt != grids.end() && gridIt->second == element)
-					grids.erase(gridIt);
+				auto gridIt = uilo->m_grids.find(element->m_name);
+				if (gridIt != uilo->m_grids.end() && gridIt->second == element)
+					uilo->m_grids.erase(gridIt);
+					
+				auto dropdownIt = uilo->m_dropdowns.find(element->m_name);
+				if (dropdownIt != uilo->m_dropdowns.end() && dropdownIt->second == element)
+					uilo->m_dropdowns.erase(dropdownIt);
 			}
 			it = uilo_owned_elements.erase(it);
 		} else {
@@ -1431,29 +1477,28 @@ inline void Row::applyVerticalAlignment(Element* e, const sf::RectangleShape& pa
 inline void ScrollableRow::render(sf::RenderTarget& target) {
 	// Only ScrollableRow gets this clipped render
 	if (getType() == EType::ScrollableRow) {
-		sf::View originalView = target.getView();
+		// Use scissor test for clipping instead of views to avoid coordinate space issues
 		sf::FloatRect clipRect = m_bounds.getGlobalBounds();
-		sf::View clippingView(clipRect);
-
-		sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
-		sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
-
+		sf::View currentView = target.getView();
+		
+		// Convert world coordinates to pixel coordinates for scissor rect
+		sf::Vector2f topLeft = {clipRect.position.x, clipRect.position.y};
+		sf::Vector2f bottomRight = {clipRect.position.x + clipRect.size.x, 
+		                             clipRect.position.y + clipRect.size.y};
+		
+		sf::Vector2i topLeftPixel = target.mapCoordsToPixel(topLeft, currentView);
+		sf::Vector2i bottomRightPixel = target.mapCoordsToPixel(bottomRight, currentView);
+		
+		// SFML's scissor coordinates are from bottom-left, need to flip Y
 		sf::Vector2u windowSize = target.getSize();
-		// Account for UI scaling in viewport calculation
-		float renderScale = m_uilo ? m_uilo->m_renderScale : 1.0f;
-		sf::Vector2f effectiveWindowSize = {
-			static_cast<float>(windowSize.x) / renderScale,
-			static_cast<float>(windowSize.y) / renderScale
-		};
-		sf::FloatRect viewport(
-			{static_cast<float>(pixelPos.x) / windowSize.x,
-			 static_cast<float>(pixelPos.y) / windowSize.y},
-			{clipRect.size.x / effectiveWindowSize.x,
-			 clipRect.size.y / effectiveWindowSize.y}
-		);
-
-		clippingView.setViewport(viewport);
-		target.setView(clippingView);
+		int scissorX = topLeftPixel.x;
+		int scissorY = windowSize.y - bottomRightPixel.y;  // Flip Y
+		int scissorWidth = bottomRightPixel.x - topLeftPixel.x;
+		int scissorHeight = bottomRightPixel.y - topLeftPixel.y;
+		
+		// Enable scissor test
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
 		target.draw(m_bounds);
 
@@ -1477,7 +1522,8 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 				e->render(target);
 			}
 
-		target.setView(originalView);
+		// Disable scissor test
+		glDisable(GL_SCISSOR_TEST);
 	} else {
 		// fallback to Row render (should never hit)
 		Row::render(target);
@@ -1658,29 +1704,28 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 
 inline void Column::render(sf::RenderTarget& target) {
 	if (getType() == EType::ScrollableColumn) {
-		sf::View originalView = target.getView();
+		// Use scissor test for clipping instead of views to avoid coordinate space issues
 		sf::FloatRect clipRect = m_bounds.getGlobalBounds();
-		sf::View clippingView(clipRect);
-
-		sf::Vector2f worldPos = {clipRect.position.x, clipRect.position.y};
-		sf::Vector2i pixelPos = target.mapCoordsToPixel(worldPos, originalView);
-
+		sf::View currentView = target.getView();
+		
+		// Convert world coordinates to pixel coordinates for scissor rect
+		sf::Vector2f topLeft = {clipRect.position.x, clipRect.position.y};
+		sf::Vector2f bottomRight = {clipRect.position.x + clipRect.size.x, 
+		                             clipRect.position.y + clipRect.size.y};
+		
+		sf::Vector2i topLeftPixel = target.mapCoordsToPixel(topLeft, currentView);
+		sf::Vector2i bottomRightPixel = target.mapCoordsToPixel(bottomRight, currentView);
+		
+		// SFML's scissor coordinates are from bottom-left, need to flip Y
 		sf::Vector2u windowSize = target.getSize();
-		// Account for UI scaling in viewport calculation
-		float renderScale = m_uilo ? m_uilo->m_renderScale : 1.0f;
-		sf::Vector2f effectiveWindowSize = {
-			static_cast<float>(windowSize.x) / renderScale,
-			static_cast<float>(windowSize.y) / renderScale
-		};
-		sf::FloatRect viewport(
-			{static_cast<float>(pixelPos.x) / windowSize.x,
-			 static_cast<float>(pixelPos.y) / windowSize.y},
-			{clipRect.size.x / effectiveWindowSize.x,
-			 clipRect.size.y / effectiveWindowSize.y}
-		);
-
-		clippingView.setViewport(viewport);
-		target.setView(clippingView);
+		int scissorX = topLeftPixel.x;
+		int scissorY = windowSize.y - bottomRightPixel.y;  // Flip Y
+		int scissorWidth = bottomRightPixel.x - topLeftPixel.x;
+		int scissorHeight = bottomRightPixel.y - topLeftPixel.y;
+		
+		// Enable scissor test
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
 		target.draw(m_bounds);
 		 
@@ -1704,7 +1749,8 @@ inline void Column::render(sf::RenderTarget& target) {
 				e->render(target);
 			}
 
-		target.setView(originalView);
+		// Disable scissor test
+		glDisable(GL_SCISSOR_TEST);
 	}
 	else {
 		target.draw(m_bounds);
@@ -1853,8 +1899,14 @@ inline Grid::Grid(
 	m_modifier = modifier;
 	m_name = name;
 	
-	if (!m_name.empty())
-		grids[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_grids[m_name] = this;
+}
+
+inline void Grid::setUilo(UILO* uilo) {
+	Container::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_grids[m_name] = this;
 }
 
 inline void Grid::update(sf::RectangleShape& parentBounds) {
@@ -2075,16 +2127,16 @@ inline Text::Text(Modifier modifier, const std::string& str, sf::Font font, cons
 	m_modifier = modifier;
 	m_name = name;
 
-	if (!m_name.empty())
-		texts[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_texts[m_name] = this;
 }
 
 inline Text::Text(Modifier modifier, const std::string& str, const std::string& fontPath, const std::string& name)
 : m_string(str) {
 	m_modifier = modifier;
 	m_name = name;
-	if (!m_name.empty())
-		texts[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_texts[m_name] = this;
 
 	bool fontLoaded = false;
 	if (!fontPath.empty()) {
@@ -2152,6 +2204,12 @@ inline void Text::setString(const std::string& newStr) {
 	m_isDirty = true;
 }
 
+inline void Text::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_texts[m_name] = this;
+}
+
 // ---------------------------------------------------------------------------- //
 // Spacer Implementation
 // ---------------------------------------------------------------------------- //
@@ -2159,8 +2217,14 @@ inline Spacer::Spacer(Modifier& modifier, const std::string& name) {
 	m_modifier = modifier;
 	m_name = name;
 
-	if (!m_name.empty())
-		spacers[m_name] = this;
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_spacers[m_name] = this;
+}
+
+inline void Spacer::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_spacers[m_name] = this;
 }
 
 inline void Spacer::update(sf::RectangleShape& parentBounds) {
@@ -2206,8 +2270,8 @@ inline Button::Button(
 	);
 
 	m_name = name;
-	if (!m_name.empty()) {
-		buttons[m_name] = this;
+	if (!m_name.empty() && m_uilo) {
+		m_uilo->m_buttons[m_name] = this;
 	}
 }
 
@@ -2243,8 +2307,8 @@ inline Button::Button(
 	);
 
 	m_name = name;
-	if (!m_name.empty()) {
-		buttons[m_name] = this;
+	if (!m_name.empty() && m_uilo) {
+		m_uilo->m_buttons[m_name] = this;
 	}
 }
 
@@ -2347,6 +2411,12 @@ inline std::string Button::getText() const {
 	return "";
 }
 
+inline void Button::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_buttons[m_name] = this;
+}
+
 // ---------------------------------------------------------------------------- //
 // Slider Implementation
 // ---------------------------------------------------------------------------- //
@@ -2363,8 +2433,8 @@ inline Slider::Slider(
 	m_barRect.setFillColor(m_barColor);
 
 	m_name = name;
-	if (!m_name.empty()) {
-		sliders[m_name] = this;
+	if (!m_name.empty() && m_uilo) {
+		m_uilo->m_sliders[m_name] = this;
 	}
 }
 
@@ -2514,6 +2584,12 @@ inline void Slider::setValue(float newVal) {
 	m_curVal = newVal < m_minVal ? m_minVal : (newVal > m_maxVal ? m_maxVal : newVal);
 }
 
+inline void Slider::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_sliders[m_name] = this;
+}
+
 // ---------------------------------------------------------------------------- //
 // Dropdown Implementation
 // ---------------------------------------------------------------------------- //
@@ -2528,8 +2604,8 @@ inline Dropdown::Dropdown(
 ) {
 	m_modifier = modifier;
 	m_name = name;
-	if (!m_name.empty()) {
-		dropdowns[m_name] = this;
+	if (!m_name.empty() && m_uilo) {
+		m_uilo->m_dropdowns[m_name] = this;
 	}
 	m_selectedOption = defaultText;
 
@@ -2673,6 +2749,12 @@ inline std::string Dropdown::getSelected() const {
 	return m_selectedOption;
 }
 
+inline void Dropdown::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_dropdowns[m_name] = this;
+}
+
 // ---------------------------------------------------------------------------- //
 // Image Implementation
 // ---------------------------------------------------------------------------- //
@@ -2687,6 +2769,9 @@ inline TextBox::TextBox(
 ) : m_style(style), m_defaultText(defaultText), m_textColor(textColor) {
 	m_modifier = modifier;
 	m_name = name;
+	
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_textboxes[m_name] = this;
 
 	// Initialize body rectangle
 	m_bodyRect.setFillColor(m_modifier.getColor());
@@ -2731,6 +2816,9 @@ inline TextBox::TextBox(
 ) : m_style(style), m_defaultText(defaultText), m_textColor(textColor) {
 	m_modifier = modifier;
 	m_name = name;
+	
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_textboxes[m_name] = this;
 
 	// Initialize body rectangle
 	m_bodyRect.setFillColor(m_modifier.getColor());
@@ -2765,6 +2853,12 @@ inline TextBox::TextBox(
 }
 
 inline TextBox::~TextBox() {}
+
+inline void TextBox::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_textboxes[m_name] = this;
+}
 
 inline void TextBox::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
@@ -3183,80 +3277,6 @@ inline static Button* default_button = button();
 inline static Text* default_text = text();
 inline static Slider* default_slider = slider();
 
-// ---------------------------------------------------------------------------- //
-// Global Element Getters
-// ---------------------------------------------------------------------------- //
-inline Row* getRow(const std::string& name) {
-	if (containers.count(name))
-		return dynamic_cast<Row*>(containers[name]);
-	else {
-		std::cerr << "[UILO] Error: Row element \"" << name << "\" not found.\n";
-		return default_row;
-	}
-}
-
-inline Column* getColumn(const std::string& name) {
-	if (containers.count(name))
-		return dynamic_cast<Column*>(containers[name]);
-	else {
-		std::cerr << "[UILO] Error: Column element \"" << name << "\" not found.\n";
-		return default_column;
-	}
-}
-
-inline Spacer* getSpacer(const std::string& name) {
-	if (spacers.count(name))
-		return spacers[name];
-	else {
-		std::cerr << "[UILO] Error: Spacer element \"" << name << "\" not found.\n";
-		return default_spacer;
-	}
-}
-
-inline Button* getButton(const std::string& name) {
-	if (buttons.count(name))
-		return buttons[name];
-	else {
-		std::cerr << "[UILO] Error: Button element \"" << name << "\" not found.\n";
-		return default_button;
-	}
-}
-
-inline Text* getText(const std::string& name) {
-	if (texts.count(name))
-		return texts[name];
-	else {
-		std::cerr << "[UILO] Error: Text element \"" << name << "\" not found.\n";
-		return default_text;
-	}
-}
-
-inline Slider* getSlider(const std::string& name) {
-	if (sliders.count(name))
-		return sliders[name];
-	else {
-		std::cerr << "[UILO] Error: Slider element \"" << name << "\" not found.\n";
-		return default_slider;
-	}
-}
-
-inline Dropdown* getDropdown(const std::string& name) {
-	if (dropdowns.count(name))
-		return dropdowns[name];
-	else {
-		std::cerr << "[UILO] Error: Dropdown element \"" << name << "\" not found.\n";
-		return nullptr; // Or a default dropdown if you create one
-	}
-}
-
-inline Grid* getGrid(const std::string& name) {
-	if (grids.count(name))
-		return grids[name];
-	else {
-		std::cerr << "[UILO] Error: Grid element \"" << name << "\" not found.\n";
-		return nullptr;
-	}
-}
 
 // ---------------------------------------------------------------------------- //
 // Page Implementation
@@ -3341,10 +3361,12 @@ inline bool Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button butto
 			if (e->getType() == EType::FreeColumn) {
 				// Check if this is a dropdown options column
 				bool isDropdownOptions = false;
-				for (const auto& [name, dropdown] : dropdowns) {
-					if (dropdown->m_optionsColumn == e.get()) {
-						isDropdownOptions = true;
-						break;
+				if (m_uilo) {
+					for (const auto& [name, dropdown] : m_uilo->m_dropdowns) {
+						if (dropdown->m_optionsColumn == e.get()) {
+							isDropdownOptions = true;
+							break;
+						}
 					}
 				}
 				if (isDropdownOptions) continue; // Skip, already handled above
@@ -3419,6 +3441,7 @@ inline void Page::clear() {
 }
 
 inline void Page::setUilo(UILO* uilo) {
+	m_uilo = uilo;
 	for (auto& container : m_containers) {
 		container->setUilo(uilo);
 	}
@@ -3500,7 +3523,7 @@ inline void UILO::_internal_update(sf::RenderWindow& target, sf::View& view) {
 
 	static bool firstFrame = true;
 	if (!firstFrame) {
-		for (auto& [name, btn] : uilo::buttons) {
+		for (auto& [name, btn] : m_buttons) {
 			btn->setClicked(false);
 		}
 	}
@@ -3534,11 +3557,13 @@ inline void UILO::_internal_update(sf::RenderWindow& target, sf::View& view) {
 			(float)currentSize.y / m_renderScale
 		};
 		view.setSize(scaledSize);
+		
+		// Ensure view's top-left corner is always at (0, 0)
+		view.setCenter({scaledSize.x / 2.f, scaledSize.y / 2.f});
+		
 		m_bounds.setSize(view.getSize());
-		m_bounds.setPosition({
-			view.getCenter().x - view.getSize().x * 0.5f,
-			view.getCenter().y - view.getSize().y * 0.5f
-		});
+		// Bounds position reflects where the view shows (starts at 0,0 since view is centered at size/2)
+		m_bounds.setPosition({0.f, 0.f});
 		target.setView(view);
 
 		if (m_currentPage) {
@@ -3686,6 +3711,88 @@ inline void UILO::setInputBlocked(bool blocked) { m_inputBlocked = blocked; }
 inline bool UILO::isInputBlocked() const { return m_inputBlocked; }
 inline bool UILO::isMouseDragging() const { return m_mouseDragging;}
 
+// Element getters
+inline Row* UILO::getRow(const std::string& name) {
+	if (m_containers.count(name))
+		return dynamic_cast<Row*>(m_containers[name]);
+	else {
+		std::cerr << "[UILO] Error: Row element \"" << name << "\" not found.\n";
+		return default_row;
+	}
+}
+
+inline Column* UILO::getColumn(const std::string& name) {
+	if (m_containers.count(name))
+		return dynamic_cast<Column*>(m_containers[name]);
+	else {
+		std::cerr << "[UILO] Error: Column element \"" << name << "\" not found.\n";
+		return default_column;
+	}
+}
+
+inline Spacer* UILO::getSpacer(const std::string& name) {
+	if (m_spacers.count(name))
+		return m_spacers[name];
+	else {
+		std::cerr << "[UILO] Error: Spacer element \"" << name << "\" not found.\n";
+		return default_spacer;
+	}
+}
+
+inline Button* UILO::getButton(const std::string& name) {
+	if (m_buttons.count(name))
+		return m_buttons[name];
+	else {
+		std::cerr << "[UILO] Error: Button element \"" << name << "\" not found.\n";
+		return default_button;
+	}
+}
+
+inline Text* UILO::getText(const std::string& name) {
+	if (m_texts.count(name))
+		return m_texts[name];
+	else {
+		std::cerr << "[UILO] Error: Text element \"" << name << "\" not found.\n";
+		return default_text;
+	}
+}
+
+inline Slider* UILO::getSlider(const std::string& name) {
+	if (m_sliders.count(name))
+		return m_sliders[name];
+	else {
+		std::cerr << "[UILO] Error: Slider element \"" << name << "\" not found.\n";
+		return default_slider;
+	}
+}
+
+inline Dropdown* UILO::getDropdown(const std::string& name) {
+	if (m_dropdowns.count(name))
+		return m_dropdowns[name];
+	else {
+		std::cerr << "[UILO] Error: Dropdown element \"" << name << "\" not found.\n";
+		return nullptr;
+	}
+}
+
+inline Grid* UILO::getGrid(const std::string& name) {
+	if (m_grids.count(name))
+		return m_grids[name];
+	else {
+		std::cerr << "[UILO] Error: Grid element \"" << name << "\" not found.\n";
+		return nullptr;
+	}
+}
+
+inline TextBox* UILO::getTextBox(const std::string& name) {
+	if (m_textboxes.count(name))
+		return m_textboxes[name];
+	else {
+		std::cerr << "[UILO] Error: TextBox element \"" << name << "\" not found.\n";
+		return nullptr;
+	}
+}
+
 inline void UILO::pollEvents() {
 	sf::RenderWindow* activeWindow = m_windowOwned ? &m_window : m_userWindow;
 	if (!activeWindow) return;
@@ -3802,10 +3909,21 @@ inline void UILO::initDefaultView() {
 		(float)m_defScreenRes.size.x,
 		(float)m_defScreenRes.size.y
 	});
+	
+	// Ensure view's top-left corner is at (0, 0)
+	m_defaultView.setCenter({
+		(float)m_defScreenRes.size.x / 2.f,
+		(float)m_defScreenRes.size.y / 2.f
+	});
 }
 
 inline void UILO::setView(const sf::View& view) {
 	m_defaultView = view;
+	
+	// Normalize the view to ensure its top-left corner is at (0, 0)
+	sf::Vector2f viewSize = m_defaultView.getSize();
+	m_defaultView.setCenter({viewSize.x / 2.f, viewSize.y / 2.f});
+	
 	if (!m_windowOwned)
 		m_userWindow->setView(m_defaultView);
 }
