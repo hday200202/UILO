@@ -66,7 +66,7 @@ private:
     TextBox* m_searchBox;
     Grid* m_fileGrid;
 
-    FileTree fileTree;
+    uilo::FileTree fileTree;
     std::vector<Entry*> m_searchResults;
     std::string m_lastSearchText;
     std::filesystem::path m_currentDirectory;
@@ -222,7 +222,7 @@ inline void FileBrowser::update() {
     m_ui->resetScrollDeltas();
 }
 
-void FileBrowser::loadIcons() {
+inline void FileBrowser::loadIcons() {
     // Load icons from files or use embedded versions
     if (!m_folderIcon.loadFromFile("assets/icons/folder.png")) {
         [[maybe_unused]] bool loaded = m_folderIcon.loadFromMemory(EMBEDDED_FOLDER_ICON.data(), EMBEDDED_FOLDER_ICON.size());
@@ -233,7 +233,7 @@ void FileBrowser::loadIcons() {
     }
 }
 
-void FileBrowser::compileFilters() {
+inline void FileBrowser::compileFilters() {
     m_filterRegexes.clear();
     for (const auto& filter : m_fileFilters) {
         std::string regexPattern;
@@ -258,7 +258,7 @@ void FileBrowser::compileFilters() {
     }
 }
 
-bool FileBrowser::matchesFilter(const std::filesystem::path& path) const {
+inline bool FileBrowser::matchesFilter(const std::filesystem::path& path) const {
     if (std::filesystem::is_directory(path)) {
         return true;
     }
@@ -277,7 +277,7 @@ bool FileBrowser::matchesFilter(const std::filesystem::path& path) const {
     return false;
 }
 
-void FileBrowser::handleSelectButton() {
+inline void FileBrowser::handleSelectButton() {
     if (m_selectedPath.empty()) return;
     
     if (m_mode == BrowserMode::SELECT_FILE && std::filesystem::is_regular_file(m_selectedPath)) {
@@ -287,7 +287,7 @@ void FileBrowser::handleSelectButton() {
     }
 }
 
-void FileBrowser::initWindow() {
+inline void FileBrowser::initWindow() {
     m_screenRes = sf::VideoMode::getDesktopMode();
     m_screenRes.size.x /= 2.f;
     m_screenRes.size.y /= 2.f;
@@ -298,7 +298,7 @@ void FileBrowser::initWindow() {
     m_window.requestFocus();
 }
 
-void FileBrowser::buildUI() {
+inline void FileBrowser::buildUI() {
     m_lastWindowSize = m_window.getSize();
     
     float windowWidth = static_cast<float>(m_lastWindowSize.x);
@@ -407,7 +407,7 @@ void FileBrowser::buildUI() {
     m_ui->addPage(page({baseColumn}), "main");
 }
 
-void FileBrowser::updateGridLayout() {
+inline void FileBrowser::updateGridLayout() {
     if (!m_fileGrid) return;
     
     float windowWidth = static_cast<float>(m_lastWindowSize.x);
@@ -423,14 +423,14 @@ void FileBrowser::updateGridLayout() {
     m_fileGrid->setGridDimensions(columns, 0);
 }
 
-void FileBrowser::updateCurrentDirectoryDisplay() {
+inline void FileBrowser::updateCurrentDirectoryDisplay() {
     if (m_searchBox && fileTree.getRootDir()) {
         m_currentDirectory = fileTree.getRootDir()->getPath();
         m_searchBox->setPlaceholder(m_currentDirectory.string());
     }
 }
 
-void FileBrowser::navigateToDirectory(const std::filesystem::path& path) {
+inline void FileBrowser::navigateToDirectory(const std::filesystem::path& path) {
     if (m_isLoading) return;
     
     std::filesystem::path resolvedPath = path;
@@ -468,12 +468,12 @@ void FileBrowser::navigateToDirectory(const std::filesystem::path& path) {
         fileTree.setRootDir(resolvedPath);
         
         if (fileTree.getRootDir()) {
-            std::vector<Entry*> entries;
+            std::vector<uilo::Entry*> entries;
             for (const auto& entry : fileTree.getRootDir()->getEntries()) {
                 entries.push_back(entry.get());
             }
             
-            std::sort(entries.begin(), entries.end(), [](Entry* a, Entry* b) {
+            std::sort(entries.begin(), entries.end(), [](uilo::Entry* a, Entry* b) {
                 bool aIsDir = a->isDirectory();
                 bool bIsDir = b->isDirectory();
                 if (aIsDir != bIsDir) return aIsDir;
@@ -483,7 +483,7 @@ void FileBrowser::navigateToDirectory(const std::filesystem::path& path) {
             // Store all paths
             {
                 std::lock_guard<std::mutex> lock(m_pathsMutex);
-                for (Entry* entry : entries) {
+                for (uilo::Entry* entry : entries) {
                     if (matchesFilter(entry->getPath())) {
                         m_allEntryPaths.push_back(entry->getPath());
                     }
@@ -493,7 +493,7 @@ void FileBrowser::navigateToDirectory(const std::filesystem::path& path) {
     });
 }
 
-void FileBrowser::navigateToParent() {
+inline void FileBrowser::navigateToParent() {
     if (m_isNavigating) return;
     
     if (fileTree.getRootDir()) {
@@ -507,7 +507,7 @@ void FileBrowser::navigateToParent() {
     }
 }
 
-void FileBrowser::performSearch(const std::string& searchText) {
+inline void FileBrowser::performSearch(const std::string& searchText) {
     if (m_isLoading) return;
     
     m_searchResults.clear();
@@ -525,10 +525,10 @@ void FileBrowser::performSearch(const std::string& searchText) {
         m_isLoading = true;
         
         m_loadingFuture = std::async(std::launch::async, [this, searchText]() {
-            std::vector<Entry*> results;
+            std::vector<uilo::Entry*> results;
             fileTree.find(searchText, results);
             
-            std::sort(results.begin(), results.end(), [](Entry* a, Entry* b) {
+            std::sort(results.begin(), results.end(), [](uilo::Entry* a, Entry* b) {
                 bool aIsDir = a->isDirectory();
                 bool bIsDir = b->isDirectory();
                 if (aIsDir != bIsDir) return aIsDir;
@@ -537,7 +537,7 @@ void FileBrowser::performSearch(const std::string& searchText) {
             
             {
                 std::lock_guard<std::mutex> lock(m_pathsMutex);
-                for (Entry* entry : results) {
+                for (uilo::Entry* entry : results) {
                     if (matchesFilter(entry->getPath())) {
                         m_allEntryPaths.push_back(entry->getPath());
                     }
@@ -553,7 +553,7 @@ void FileBrowser::performSearch(const std::string& searchText) {
     }
 }
 
-void FileBrowser::updateVisibleEntries(bool forceUpdate) {
+inline void FileBrowser::updateVisibleEntries(bool forceUpdate) {
     if (!m_fileGrid) return;
     
     std::lock_guard<std::mutex> lock(m_pathsMutex);
@@ -599,7 +599,7 @@ void FileBrowser::updateVisibleEntries(bool forceUpdate) {
     }
 }
 
-Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
+inline Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
     bool isDirectory = std::filesystem::is_directory(path);
     std::string fileName = path.filename().string();
     
@@ -663,7 +663,7 @@ Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
     return entryColumn;
 }
 
-void FileBrowser::handleEntryAction(const std::filesystem::path& path, bool isDirectory) {
+inline void FileBrowser::handleEntryAction(const std::filesystem::path& path, bool isDirectory) {
     if (m_isNavigating) return;
     
     switch (m_mode) {
