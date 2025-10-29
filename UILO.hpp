@@ -974,6 +974,7 @@ class UILO {
 	
 public:
 	Slider* m_activeDragSlider = nullptr;
+	Page* m_currentPage = nullptr;
 
 	UILO();
 	UILO(const std::string& windowTitle);
@@ -1024,7 +1025,6 @@ private:
 	std::string m_windowTitle = "";
 
 	std::unordered_map<std::string, Page*> m_pages;
-	Page* m_currentPage = nullptr;
 
 	bool m_running = false;
 	bool m_shouldUpdate = true;
