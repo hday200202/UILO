@@ -69,6 +69,7 @@ public:
     void refresh() override;
 
     std::vector<std::unique_ptr<Entry>>& getEntries() { return m_entries; }
+    bool isExpanded() const { return m_expanded; }
 
 private:
     std::vector<std::unique_ptr<Entry>> m_entries;

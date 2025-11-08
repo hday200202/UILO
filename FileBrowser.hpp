@@ -223,14 +223,9 @@ inline void FileBrowser::update() {
 }
 
 inline void FileBrowser::loadIcons() {
-    // Load icons from files or use embedded versions
-    if (!m_folderIcon.loadFromFile("assets/icons/folder.png")) {
-        [[maybe_unused]] bool loaded = m_folderIcon.loadFromMemory(EMBEDDED_FOLDER_ICON.data(), EMBEDDED_FOLDER_ICON.size());
-    }
-    
-    if (!m_fileIcon.loadFromFile("assets/icons/file.png")) {
-        [[maybe_unused]] bool loaded = m_fileIcon.loadFromMemory(EMBEDDED_FILE_ICON.data(), EMBEDDED_FILE_ICON.size());
-    }
+    // Use embedded icons only - don't try to load from disk
+    [[maybe_unused]] bool folderLoaded = m_folderIcon.loadFromMemory(EMBEDDED_FOLDER_ICON.data(), EMBEDDED_FOLDER_ICON.size());
+    [[maybe_unused]] bool fileLoaded = m_fileIcon.loadFromMemory(EMBEDDED_FILE_ICON.data(), EMBEDDED_FILE_ICON.size());
 }
 
 inline void FileBrowser::compileFilters() {
@@ -687,7 +682,9 @@ inline void FileBrowser::handleEntryAction(const std::filesystem::path& path, bo
             
         case BrowserMode::SELECT_DIRECTORY:
             if (isDirectory) {
-                m_window.close();
+                m_isNavigating = true;
+                m_selectedPath.clear();
+                navigateToDirectory(path);
             }
             break;
     }

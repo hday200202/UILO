@@ -31,6 +31,73 @@
 namespace uilo {
 
 // ---------------------------------------------------------------------------- //
+// Rounded Rectangle Helper
+// ---------------------------------------------------------------------------- //
+inline sf::ConvexShape createRoundedRect(const sf::Vector2f& size, float radius, const sf::Color& color, unsigned int cornerPoints = 8) {
+	sf::ConvexShape shape;
+	
+	if (radius <= 0.f || size.x <= 0.f || size.y <= 0.f) {
+		// No rounding, create simple rectangle
+		shape.setPointCount(4);
+		shape.setPoint(0, {0.f, 0.f});
+		shape.setPoint(1, {size.x, 0.f});
+		shape.setPoint(2, {size.x, size.y});
+		shape.setPoint(3, {0.f, size.y});
+		shape.setFillColor(color);
+		return shape;
+	}
+	
+	// Clamp radius to half of smallest dimension
+	radius = std::min(radius, std::min(size.x, size.y) * 0.5f);
+	
+	// Total points: 4 corners * cornerPoints each
+	const unsigned int totalPoints = cornerPoints * 4;
+	shape.setPointCount(totalPoints);
+	
+	unsigned int index = 0;
+	const float pi = 3.14159265f;
+	
+	// Top-right corner
+	for (unsigned int i = 0; i < cornerPoints; ++i) {
+		float angle = -pi * 0.5f + (pi * 0.5f * i) / (cornerPoints - 1);
+		shape.setPoint(index++, {
+			size.x - radius + radius * std::cos(angle),
+			radius + radius * std::sin(angle)
+		});
+	}
+	
+	// Bottom-right corner
+	for (unsigned int i = 0; i < cornerPoints; ++i) {
+		float angle = 0.f + (pi * 0.5f * i) / (cornerPoints - 1);
+		shape.setPoint(index++, {
+			size.x - radius + radius * std::cos(angle),
+			size.y - radius + radius * std::sin(angle)
+		});
+	}
+	
+	// Bottom-left corner
+	for (unsigned int i = 0; i < cornerPoints; ++i) {
+		float angle = pi * 0.5f + (pi * 0.5f * i) / (cornerPoints - 1);
+		shape.setPoint(index++, {
+			radius + radius * std::cos(angle),
+			size.y - radius + radius * std::sin(angle)
+		});
+	}
+	
+	// Top-left corner
+	for (unsigned int i = 0; i < cornerPoints; ++i) {
+		float angle = pi + (pi * 0.5f * i) / (cornerPoints - 1);
+		shape.setPoint(index++, {
+			radius + radius * std::cos(angle),
+			radius + radius * std::sin(angle)
+		});
+	}
+	
+	shape.setFillColor(color);
+	return shape;
+}
+
+// ---------------------------------------------------------------------------- //
 // Forward Declarations
 // ---------------------------------------------------------------------------- //
 class Element;
@@ -157,9 +224,6 @@ inline TBStyle operator|(TBStyle lhs, TBStyle rhs);
 inline TBStyle operator&(TBStyle lhs, TBStyle rhs);
 inline bool hasStyle(TBStyle value, TBStyle flag);
 
-// ---------------------------------------------------------------------------- //
-// Modifier
-// ---------------------------------------------------------------------------- //
 using funcPtr = std::function<void()>;
 
 class Modifier {
@@ -175,6 +239,10 @@ public:
 	Modifier& onRClick(funcPtr cb);
 	Modifier& setVisible(bool visible);
 	Modifier& setHighPriority(bool highPriority);
+	Modifier& setRounded(float radius);
+	Modifier& setPadding(float padding);
+	Modifier& fitContentWidth(bool fit);
+	Modifier& fitContentHeight(bool fit);
 
 	float getWidth() const;
 	float getHeight() const;
@@ -186,14 +254,22 @@ public:
 	const funcPtr& getOnRClick() const;
 	bool isVisible() const;
 	bool isHighPriority() const;
+	float getRounded() const;
+	float getPadding() const;
+	bool getFitContentWidth() const;
+	bool getFitContentHeight() const;
 
 private:
 	float m_widthPct = 1.f;
 	float m_heightPct = 1.f;
 	float m_fixedWidth = 0.f;
 	float m_fixedHeight = 0.f;
+	float m_rounded = 0.f;
+	float m_padding = 0.f;
 	bool m_isVisible = true;
 	bool m_highPriority = false;
+	bool m_fitContentWidth = false;
+	bool m_fitContentHeight = false;
 	Align m_alignment = Align::NONE;
 	sf::Color m_color = sf::Color::Transparent;
 	std::function<void()> m_onLClick = nullptr;
@@ -1072,6 +1148,10 @@ inline Modifier& Modifier::onLClick(funcPtr cb) { m_onLClick = std::move(cb); re
 inline Modifier& Modifier::onRClick(funcPtr cb) { m_onRClick = std::move(cb); return *this; }
 inline Modifier& Modifier::setVisible(bool visible) { m_isVisible = visible; return *this; }
 inline Modifier& Modifier::setHighPriority(bool highPriority) { m_highPriority = highPriority; return *this; }
+inline Modifier& Modifier::setRounded(float radius) { m_rounded = radius; return *this; }
+inline Modifier& Modifier::setPadding(float padding) { m_padding = padding; return *this; }
+inline Modifier& Modifier::fitContentWidth(bool fit) { m_fitContentWidth = fit; return *this; }
+inline Modifier& Modifier::fitContentHeight(bool fit) { m_fitContentHeight = fit; return *this; }
 
 inline float Modifier::getWidth() const { return m_widthPct; }
 inline float Modifier::getHeight() const { return m_heightPct; }
@@ -1083,6 +1163,10 @@ inline const funcPtr& Modifier::getOnLClick() const { return m_onLClick; }
 inline const funcPtr& Modifier::getOnRClick() const { return m_onRClick; }
 inline bool Modifier::isVisible() const { return m_isVisible; }
 inline bool Modifier::isHighPriority() const { return m_highPriority; }
+inline float Modifier::getRounded() const { return m_rounded; }
+inline float Modifier::getPadding() const { return m_padding; }
+inline bool Modifier::getFitContentWidth() const { return m_fitContentWidth; }
+inline bool Modifier::getFitContentHeight() const { return m_fitContentHeight; }
 
 // ---------------------------------------------------------------------------- //
 // Element Implementation
@@ -1137,21 +1221,24 @@ inline void Element::setModifier(const Modifier& modifier) { m_modifier = modifi
 inline EType Element::getType() const { return EType::Element; }
 
 inline void Element::resize(const sf::RectangleShape& parent, const bool inSlot) {
+	const float padding = m_modifier.getPadding();
+	const float doublePadding = padding * 2.f;
+	
 	if (m_modifier.getFixedWidth() != 0) {
 		m_bounds.setSize({
-			m_modifier.getFixedWidth(),
+			m_modifier.getFixedWidth() - doublePadding,
 			m_bounds.getSize().y
 		});
 	}
 	else {
 		if (inSlot)
 			m_bounds.setSize({
-				parent.getSize().x,
+				parent.getSize().x - doublePadding,
 				m_bounds.getSize().y
 			});
 		else
 			m_bounds.setSize({
-				m_modifier.getWidth() * parent.getSize().x,
+				m_modifier.getWidth() * parent.getSize().x - doublePadding,
 				m_bounds.getSize().y
 			});
 	}
@@ -1159,19 +1246,19 @@ inline void Element::resize(const sf::RectangleShape& parent, const bool inSlot)
 	if (m_modifier.getFixedHeight() != 0) {
 		m_bounds.setSize({
 			m_bounds.getSize().x,
-			m_modifier.getFixedHeight()
+			m_modifier.getFixedHeight() - doublePadding
 		});
 	}
 	else {
 		if (inSlot)
 			m_bounds.setSize({
 				m_bounds.getSize().x,
-				parent.getSize().y
+				parent.getSize().y - doublePadding
 			});
 		else
 			m_bounds.setSize({
 				m_bounds.getSize().x,
-				m_modifier.getHeight() * parent.getSize().y
+				m_modifier.getHeight() * parent.getSize().y - doublePadding
 			});
 	}
 }
@@ -1315,8 +1402,26 @@ inline void cleanupMarkedElements() {
 // ---------------------------------------------------------------------------- //
 inline void Row::update(sf::RectangleShape& parentBounds) {
 	resize(parentBounds);
+	
+	// If fitContentWidth is enabled, calculate total width of children and resize
+	if (m_modifier.getFitContentWidth()) {
+		float totalWidth = 0.f;
+		const float padding = m_modifier.getPadding();
+		for (const auto& e : m_elements) {
+			if (e->m_modifier.isVisible()) {
+				const float fixedWidth = e->m_modifier.getFixedWidth();
+				const float elemPadding = e->m_modifier.getPadding();
+				totalWidth += (fixedWidth > 0.f ? fixedWidth : 0.f) + elemPadding * 2.f;
+			}
+		}
+		m_bounds.setSize({totalWidth + padding * 2.f, m_bounds.getSize().y});
+	}
+	
 	applyModifiers();
 	Element::update(parentBounds);
+
+	const float padding = m_modifier.getPadding();
+	const float doublePadding = padding * 2.f;
 
 	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
@@ -1335,7 +1440,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	
 	if (visibleCount == 0) return; // Early exit if no visible elements
 	
-	const float remainingSpace = m_bounds.getSize().x - totalFixed;
+	const float remainingSpace = m_bounds.getSize().x - totalFixed - doublePadding;
 	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
 	const sf::Vector2f boundsSize = m_bounds.getSize();
 	
@@ -1344,7 +1449,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const float fixedWidth = e->m_modifier.getFixedWidth();
 			const float width = (fixedWidth > 0.f) ? fixedWidth : (e->m_modifier.getWidth() * percentScale * remainingSpace);
-			const sf::RectangleShape slot({width, boundsSize.y});
+			const sf::RectangleShape slot({width, boundsSize.y - doublePadding});
 			e->update(const_cast<sf::RectangleShape&>(slot));
 		}
 	}
@@ -1361,16 +1466,17 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const Align alignment = e->m_modifier.getAlignment();
 			const float elementWidth = e->m_bounds.getSize().x;
+			const float elemPadding = e->m_modifier.getPadding();
 			
 			if (hasAlign(alignment, Align::RIGHT)) {
 				right.push_back(e);
-				rightWidth += elementWidth;
+				rightWidth += elementWidth + elemPadding * 2.f;
 			} else if (hasAlign(alignment, Align::CENTER_X)) {
 				center.push_back(e);
-				centerWidth += elementWidth;
+				centerWidth += elementWidth + elemPadding * 2.f;
 			} else {
 				left.push_back(e);
-				leftWidth += elementWidth;
+				leftWidth += elementWidth + elemPadding * 2.f;
 			}
 		}
 	}
@@ -1380,39 +1486,42 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	const float boundsWidth = boundsSize.x;
 	
 	// Left aligned elements
-	float xPos = boundsPos.x;
+	float xPos = boundsPos.x + padding;
 	for (const auto& e : left) {
-		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
-		xPos += e->m_bounds.getSize().x;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({xPos + elemPadding, e->m_bounds.getPosition().y});
+		xPos += e->m_bounds.getSize().x + elemPadding * 2.f;
 	}
 
 	// Center aligned elements
 	xPos = boundsPos.x + (boundsWidth - centerWidth) * 0.5f;
 	for (const auto& e : center) {
-		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
-		xPos += e->m_bounds.getSize().x;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({xPos + elemPadding, e->m_bounds.getPosition().y});
+		xPos += e->m_bounds.getSize().x + elemPadding * 2.f;
 	}
 
 	// Right aligned elements
-	xPos = boundsPos.x + boundsWidth - rightWidth;
+	xPos = boundsPos.x + boundsWidth - rightWidth - padding;
 	for (const auto& e : right) {
-		e->m_bounds.setPosition({xPos, e->m_bounds.getPosition().y});
-		xPos += e->m_bounds.getSize().x;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({xPos + elemPadding, e->m_bounds.getPosition().y});
+		xPos += e->m_bounds.getSize().x + elemPadding * 2.f;
 	}
 
 	// Apply vertical alignment in final pass
 	for (const auto& e : m_elements) {
 		if (e->m_modifier.isVisible()) {
 			const Align alignment = e->m_modifier.getAlignment();
+			const float elemPadding = e->m_modifier.getPadding();
 			sf::Vector2f pos = e->m_bounds.getPosition();
 
-			if (hasAlign(alignment, Align::CENTER_Y)) {
-				pos.y = boundsPos.y + (boundsSize.y - e->m_bounds.getSize().y) * 0.5f;
-			} else if (hasAlign(alignment, Align::BOTTOM)) {
-				pos.y = boundsPos.y + boundsSize.y - e->m_bounds.getSize().y;
-			} else {
-				pos.y = boundsPos.y;
-			}
+			if (hasAlign(alignment, Align::CENTER_Y))
+				pos.y = boundsPos.y + padding + elemPadding + (boundsSize.y - doublePadding - e->m_bounds.getSize().y - elemPadding * 2.f) * 0.5f;
+			else if (hasAlign(alignment, Align::BOTTOM))
+				pos.y = boundsPos.y + boundsSize.y - e->m_bounds.getSize().y - padding - elemPadding;
+			else
+				pos.y = boundsPos.y + padding + elemPadding;
 
 			e->m_bounds.setPosition(pos);
 		}
@@ -1420,7 +1529,14 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 }
 
 inline void Row::render(sf::RenderTarget& target) {
-	target.draw(m_bounds);
+	// Render background with optional rounded corners
+	if (m_modifier.getRounded() > 0.f) {
+		auto rounded = createRoundedRect(m_bounds.getSize(), m_modifier.getRounded(), m_bounds.getFillColor());
+		rounded.setPosition(m_bounds.getPosition());
+		target.draw(rounded);
+	} else {
+		target.draw(m_bounds);
+	}
 
 	// Render normal priority elements first
 	for (auto& e : m_elements)
@@ -1500,7 +1616,14 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
-		target.draw(m_bounds);
+		// Render background with optional rounded corners
+		if (m_modifier.getRounded() > 0.f) {
+			auto rounded = createRoundedRect(m_bounds.getSize(), m_modifier.getRounded(), m_bounds.getFillColor());
+			rounded.setPosition(m_bounds.getPosition());
+			target.draw(rounded);
+		} else {
+			target.draw(m_bounds);
+		}
 
 		sf::RenderStates states;
 		states.transform.translate(m_bounds.getPosition());
@@ -1563,13 +1686,17 @@ inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 		// Boundary checking with cached positions
 		if (firstElement && lastElement) {
 			const float containerLeft = m_bounds.getPosition().x;
-			const float lastElementRight = lastElement->m_bounds.getPosition().x;
+			const float containerRight = m_bounds.getPosition().x + m_bounds.getSize().x;
+			const float lastElementRight = lastElement->m_bounds.getPosition().x + lastElement->m_bounds.getSize().x;
 			const float firstElementLeft = firstElement->m_bounds.getPosition().x;
 			
-			if (lastElementRight <= containerLeft) {
-				m_offset += containerLeft - lastElementRight;
-			} else if (firstElementLeft >= containerLeft) {
+			// First, ensure left alignment (priority)
+			if (firstElementLeft >= containerLeft) {
 				m_offset -= firstElementLeft - containerLeft;
+			}
+			// Then, if there's overflow and we've scrolled past the right, align to right
+			else if (lastElementRight <= containerRight) {
+				m_offset += containerRight - lastElementRight;
 			}
 		}
 	}
@@ -1598,8 +1725,29 @@ inline EType ScrollableRow::getType() const {
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
 	resize(parentBounds);
+	
+	// Calculate content height if fitContentHeight is enabled
+	if (m_modifier.getFitContentHeight()) {
+		float totalHeight = 0.f;
+		const float padding = m_modifier.getPadding();
+		
+		for (const auto& e : m_elements) {
+			if (e->m_modifier.isVisible()) {
+				const float fixedHeight = e->m_modifier.getFixedHeight();
+				const float elemPadding = e->m_modifier.getPadding();
+				totalHeight += (fixedHeight > 0.f ? fixedHeight : 0.f) + elemPadding * 2.f;
+			}
+		}
+		
+		const float width = m_bounds.getSize().x;
+		m_bounds.setSize({width, totalHeight + padding * 2.f});
+	}
+	
 	applyModifiers();
 	Element::update(parentBounds);
+
+	const float padding = m_modifier.getPadding();
+	const float doublePadding = padding * 2.f;
 
 	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
@@ -1618,7 +1766,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 
 	if (visibleCount == 0) return; // Early exit if no visible elements
 
-	const float remainingSpace = m_bounds.getSize().y - totalFixed;
+	const float remainingSpace = m_bounds.getSize().y - totalFixed - doublePadding;
 	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
 	const sf::Vector2f boundsSize = m_bounds.getSize();
 
@@ -1627,7 +1775,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const float fixedHeight = e->m_modifier.getFixedHeight();
 			const float height = (fixedHeight > 0.f) ? fixedHeight : (e->m_modifier.getHeight() * percentScale * remainingSpace);
-			const sf::RectangleShape slot({boundsSize.x, height});
+			const sf::RectangleShape slot({boundsSize.x - doublePadding, height});
 			e->update(const_cast<sf::RectangleShape&>(slot));
 		}
 	}
@@ -1644,16 +1792,17 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const Align alignment = e->m_modifier.getAlignment();
 			const float elementHeight = e->m_bounds.getSize().y;
+			const float elemPadding = e->m_modifier.getPadding();
 
 			if (hasAlign(alignment, Align::BOTTOM)) {
 				bottom.push_back(e);
-				bottomHeight += elementHeight;
+				bottomHeight += elementHeight + elemPadding * 2.f;
 			} else if (hasAlign(alignment, Align::CENTER_Y)) {
 				center.push_back(e);
-				centerHeight += elementHeight;
+				centerHeight += elementHeight + elemPadding * 2.f;
 			} else {
 				top.push_back(e);
-				topHeight += elementHeight;
+				topHeight += elementHeight + elemPadding * 2.f;
 			}
 		}
 	}
@@ -1663,38 +1812,42 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 	const float boundsHeight = boundsSize.y;
 
 	// Top aligned elements
-	float yPos = boundsPos.y;
+	float yPos = boundsPos.y + padding;
 	for (const auto& e : top) {
-		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
-		yPos += e->m_bounds.getSize().y;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos + elemPadding});
+		yPos += e->m_bounds.getSize().y + elemPadding * 2.f;
 	}
 
 	// Center aligned elements
 	yPos = boundsPos.y + (boundsHeight - centerHeight) * 0.5f;
 	for (const auto& e : center) {
-		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
-		yPos += e->m_bounds.getSize().y;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos + elemPadding});
+		yPos += e->m_bounds.getSize().y + elemPadding * 2.f;
 	}
 
 	// Bottom aligned elements
-	yPos = boundsPos.y + boundsHeight - bottomHeight;
+	yPos = boundsPos.y + boundsHeight - bottomHeight - padding;
 	for (const auto& e : bottom) {
-		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos});
-		yPos += e->m_bounds.getSize().y;
+		const float elemPadding = e->m_modifier.getPadding();
+		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos + elemPadding});
+		yPos += e->m_bounds.getSize().y + elemPadding * 2.f;
 	}
 
 	// Apply horizontal alignment in final pass
 	for (const auto& e : m_elements) {
 		if (e->m_modifier.isVisible()) {
 			const Align alignment = e->m_modifier.getAlignment();
+			const float elemPadding = e->m_modifier.getPadding();
 			sf::Vector2f pos = e->m_bounds.getPosition();
 
 			if (hasAlign(alignment, Align::CENTER_X)) {
-				pos.x = boundsPos.x + (boundsSize.x - e->m_bounds.getSize().x) * 0.5f;
+				pos.x = boundsPos.x + padding + elemPadding + (boundsSize.x - doublePadding - e->m_bounds.getSize().x - elemPadding * 2.f) * 0.5f;
 			} else if (hasAlign(alignment, Align::RIGHT)) {
-				pos.x = boundsPos.x + boundsSize.x - e->m_bounds.getSize().x;
+				pos.x = boundsPos.x + boundsSize.x - e->m_bounds.getSize().x - padding - elemPadding;
 			} else {
-				pos.x = boundsPos.x;
+				pos.x = boundsPos.x + padding + elemPadding;
 			}
 
 			e->m_bounds.setPosition(pos);
@@ -1727,7 +1880,14 @@ inline void Column::render(sf::RenderTarget& target) {
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
-		target.draw(m_bounds);
+		// Render background with optional rounded corners
+		if (m_modifier.getRounded() > 0.f) {
+			auto rounded = createRoundedRect(m_bounds.getSize(), m_modifier.getRounded(), m_bounds.getFillColor());
+			rounded.setPosition(m_bounds.getPosition());
+			target.draw(rounded);
+		} else {
+			target.draw(m_bounds);
+		}
 		 
 		sf::RenderStates states;
 		states.transform.translate(m_bounds.getPosition());
@@ -1753,7 +1913,14 @@ inline void Column::render(sf::RenderTarget& target) {
 		glDisable(GL_SCISSOR_TEST);
 	}
 	else {
-		target.draw(m_bounds);
+		// Render background with optional rounded corners
+		if (m_modifier.getRounded() > 0.f) {
+			auto rounded = createRoundedRect(m_bounds.getSize(), m_modifier.getRounded(), m_bounds.getFillColor());
+			rounded.setPosition(m_bounds.getPosition());
+			target.draw(rounded);
+		} else {
+			target.draw(m_bounds);
+		}
 		 
 		// Render normal priority elements first
 		for (auto& e : m_elements)
@@ -1856,13 +2023,17 @@ inline void ScrollableColumn::update(sf::RectangleShape& parentBounds) {
 		// Boundary checking with cached positions
 		if (firstElement && lastElement) {
 			const float containerTop = m_bounds.getPosition().y;
-			const float lastElementBottom = lastElement->m_bounds.getPosition().y;
+			const float containerBottom = m_bounds.getPosition().y + m_bounds.getSize().y;
+			const float lastElementBottom = lastElement->m_bounds.getPosition().y + lastElement->m_bounds.getSize().y;
 			const float firstElementTop = firstElement->m_bounds.getPosition().y;
 			
-			if (lastElementBottom <= containerTop) {
-				m_offset += containerTop - lastElementBottom;
-			} else if (firstElementTop >= containerTop) {
+			// First, ensure top alignment (priority)
+			if (firstElementTop >= containerTop) {
 				m_offset -= firstElementTop - containerTop;
+			}
+			// Then, if there's overflow and we've scrolled past the bottom, align to bottom
+			else if (lastElementBottom <= containerBottom) {
+				m_offset += containerBottom - lastElementBottom;
 			}
 		}
 	}
@@ -2163,7 +2334,7 @@ inline void Text::update(sf::RectangleShape& parentBounds) {
 		? m_modifier.getFixedHeight()
 		: m_bounds.getSize().y * 0.8f;
 
-	m_text.emplace(m_font, m_string);
+	m_text.emplace(m_font, sf::String::fromUtf8(m_string.begin(), m_string.end()));
 	m_text->setCharacterSize(static_cast<unsigned>(fontSize));
 	m_text->setFillColor(m_modifier.getColor());
 
@@ -2199,8 +2370,10 @@ inline void Text::render(sf::RenderTarget& target) {
 
 inline void Text::setString(const std::string& newStr) {
 	m_string = newStr;
-	if (m_text)
-		m_text->setString(newStr);
+	if (m_text) {
+		// Use sf::String::fromUtf8 to properly decode UTF-8 multi-byte characters
+		m_text->setString(sf::String::fromUtf8(newStr.begin(), newStr.end()));
+	}
 	m_isDirty = true;
 }
 
@@ -2402,7 +2575,7 @@ inline void Button::checkHover(const sf::Vector2f& pos) {
 
 inline void Button::setText(const std::string& newStr) {
 	if (m_text)
-		m_text->setString(newStr);
+		m_text->setString(sf::String::fromUtf8(newStr.begin(), newStr.end()));
 }
 
 inline std::string Button::getText() const {
@@ -3293,8 +3466,10 @@ inline void Page::update(const sf::RectangleShape& parentBounds) {
 
 	for (auto& c : m_containers) {
 		if (c->m_modifier.isVisible()) {
-			if (!(c->getType() == EType::FreeColumn))
-				c->m_bounds.setPosition(m_bounds.getPosition());
+			if (!(c->getType() == EType::FreeColumn)) {
+				const float padding = c->m_modifier.getPadding();
+				c->m_bounds.setPosition(m_bounds.getPosition() + sf::Vector2f(padding, padding));
+			}
 			c->update(m_bounds);
 		}
 	}
