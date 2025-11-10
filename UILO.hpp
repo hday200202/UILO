@@ -130,7 +130,7 @@ inline static std::vector<std::unique_ptr<Element>> high_priority_elements;
 
 // Global render scale for viewport calculations
 inline static float g_renderScale = 1.f;
-inline static sf::Font* g_defaultFont = nullptr;
+extern sf::Font* g_defaultFont;
 
 inline void setDefaultFont(sf::Font& font) {
 	g_defaultFont = &font;
@@ -142,8 +142,12 @@ inline sf::Font* getDefaultFont() {
 		static sf::Font embeddedFont;
 		static bool initialized = false;
 		if (!initialized) {
-			[[maybe_unused]] bool fontLoaded = embeddedFont.openFromMemory(EMBEDDED_FONT.data(), EMBEDDED_FONT.size());
-			g_defaultFont = &embeddedFont;
+			bool fontLoaded = embeddedFont.openFromMemory(EMBEDDED_FONT.data(), EMBEDDED_FONT.size());
+			if (fontLoaded) {
+				g_defaultFont = &embeddedFont;
+			} else {
+				std::cerr << "UILO Error: Failed to load embedded font from memory!\n";
+			}
 			initialized = true;
 		}
 	}
@@ -1440,7 +1444,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	
 	if (visibleCount == 0) return; // Early exit if no visible elements
 	
-	const float remainingSpace = m_bounds.getSize().x - totalFixed - doublePadding;
+	const float remainingSpace = m_bounds.getSize().x - totalFixed;
 	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
 	const sf::Vector2f boundsSize = m_bounds.getSize();
 	
@@ -1486,7 +1490,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	const float boundsWidth = boundsSize.x;
 	
 	// Left aligned elements
-	float xPos = boundsPos.x + padding;
+	float xPos = boundsPos.x;
 	for (const auto& e : left) {
 		const float elemPadding = e->m_modifier.getPadding();
 		e->m_bounds.setPosition({xPos + elemPadding, e->m_bounds.getPosition().y});
@@ -1502,7 +1506,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	}
 
 	// Right aligned elements
-	xPos = boundsPos.x + boundsWidth - rightWidth - padding;
+	xPos = boundsPos.x + boundsWidth - rightWidth;
 	for (const auto& e : right) {
 		const float elemPadding = e->m_modifier.getPadding();
 		e->m_bounds.setPosition({xPos + elemPadding, e->m_bounds.getPosition().y});
@@ -1517,11 +1521,11 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 			sf::Vector2f pos = e->m_bounds.getPosition();
 
 			if (hasAlign(alignment, Align::CENTER_Y))
-				pos.y = boundsPos.y + padding + elemPadding + (boundsSize.y - doublePadding - e->m_bounds.getSize().y - elemPadding * 2.f) * 0.5f;
+				pos.y = boundsPos.y + elemPadding + (boundsSize.y - e->m_bounds.getSize().y - elemPadding * 2.f) * 0.5f;
 			else if (hasAlign(alignment, Align::BOTTOM))
-				pos.y = boundsPos.y + boundsSize.y - e->m_bounds.getSize().y - padding - elemPadding;
+				pos.y = boundsPos.y + boundsSize.y - e->m_bounds.getSize().y - elemPadding;
 			else
-				pos.y = boundsPos.y + padding + elemPadding;
+				pos.y = boundsPos.y + elemPadding;
 
 			e->m_bounds.setPosition(pos);
 		}
@@ -1543,7 +1547,7 @@ inline void Row::render(sf::RenderTarget& target) {
 		if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
 			e->render(target);
 
-	// Render custom geometry (clipped by parent view)
+	// Render custom geometry
 	sf::RenderStates states;
 	states.transform.translate(m_bounds.getPosition());
 	for (auto& d : m_customGeometry) {
@@ -1612,7 +1616,32 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 		int scissorWidth = bottomRightPixel.x - topLeftPixel.x;
 		int scissorHeight = bottomRightPixel.y - topLeftPixel.y;
 		
-		// Enable scissor test
+		// Save current scissor state
+		GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+		GLint oldScissor[4];
+		if (scissorWasEnabled) {
+			glGetIntegerv(GL_SCISSOR_BOX, oldScissor);
+			
+			// Intersect with parent's scissor region
+			int parentX = oldScissor[0];
+			int parentY = oldScissor[1];
+			int parentRight = parentX + oldScissor[2];
+			int parentTop = parentY + oldScissor[3];
+			
+			int childRight = scissorX + scissorWidth;
+			int childTop = scissorY + scissorHeight;
+			
+			// Calculate intersection
+			scissorX = std::max(scissorX, parentX);
+			scissorY = std::max(scissorY, parentY);
+			int right = std::min(childRight, parentRight);
+			int top = std::min(childTop, parentTop);
+			
+			scissorWidth = std::max(0, right - scissorX);
+			scissorHeight = std::max(0, top - scissorY);
+		}
+		
+		// Enable scissor test with new bounds
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
@@ -1645,13 +1674,18 @@ inline void ScrollableRow::render(sf::RenderTarget& target) {
 				e->render(target);
 			}
 
-		// Disable scissor test
-		glDisable(GL_SCISSOR_TEST);
+		// Restore previous scissor state
+		if (scissorWasEnabled) {
+			glScissor(oldScissor[0], oldScissor[1], oldScissor[2], oldScissor[3]);
+		} else {
+			glDisable(GL_SCISSOR_TEST);
+		}
 	} else {
 		// fallback to Row render (should never hit)
 		Row::render(target);
 	}
 }
+
 inline void ScrollableRow::update(sf::RectangleShape& parentBounds) {
 	Row::update(parentBounds);
 
@@ -1766,7 +1800,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 
 	if (visibleCount == 0) return; // Early exit if no visible elements
 
-	const float remainingSpace = m_bounds.getSize().y - totalFixed - doublePadding;
+	const float remainingSpace = m_bounds.getSize().y - totalFixed;
 	const float percentScale = (totalPercent <= 0.f) ? 1.f : (1.f / totalPercent);
 	const sf::Vector2f boundsSize = m_bounds.getSize();
 
@@ -1775,7 +1809,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const float fixedHeight = e->m_modifier.getFixedHeight();
 			const float height = (fixedHeight > 0.f) ? fixedHeight : (e->m_modifier.getHeight() * percentScale * remainingSpace);
-			const sf::RectangleShape slot({boundsSize.x - doublePadding, height});
+			const sf::RectangleShape slot({boundsSize.x, height});
 			e->update(const_cast<sf::RectangleShape&>(slot));
 		}
 	}
@@ -1812,7 +1846,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 	const float boundsHeight = boundsSize.y;
 
 	// Top aligned elements
-	float yPos = boundsPos.y + padding;
+	float yPos = boundsPos.y;
 	for (const auto& e : top) {
 		const float elemPadding = e->m_modifier.getPadding();
 		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos + elemPadding});
@@ -1828,7 +1862,7 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 	}
 
 	// Bottom aligned elements
-	yPos = boundsPos.y + boundsHeight - bottomHeight - padding;
+	yPos = boundsPos.y + boundsHeight - bottomHeight;
 	for (const auto& e : bottom) {
 		const float elemPadding = e->m_modifier.getPadding();
 		e->m_bounds.setPosition({e->m_bounds.getPosition().x, yPos + elemPadding});
@@ -1843,11 +1877,11 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 			sf::Vector2f pos = e->m_bounds.getPosition();
 
 			if (hasAlign(alignment, Align::CENTER_X)) {
-				pos.x = boundsPos.x + padding + elemPadding + (boundsSize.x - doublePadding - e->m_bounds.getSize().x - elemPadding * 2.f) * 0.5f;
+				pos.x = boundsPos.x + elemPadding + (boundsSize.x - e->m_bounds.getSize().x - elemPadding * 2.f) * 0.5f;
 			} else if (hasAlign(alignment, Align::RIGHT)) {
-				pos.x = boundsPos.x + boundsSize.x - e->m_bounds.getSize().x - padding - elemPadding;
+				pos.x = boundsPos.x + boundsSize.x - e->m_bounds.getSize().x - elemPadding;
 			} else {
-				pos.x = boundsPos.x + padding + elemPadding;
+				pos.x = boundsPos.x + elemPadding;
 			}
 
 			e->m_bounds.setPosition(pos);
@@ -1876,7 +1910,32 @@ inline void Column::render(sf::RenderTarget& target) {
 		int scissorWidth = bottomRightPixel.x - topLeftPixel.x;
 		int scissorHeight = bottomRightPixel.y - topLeftPixel.y;
 		
-		// Enable scissor test
+		// Save current scissor state
+		GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+		GLint oldScissor[4];
+		if (scissorWasEnabled) {
+			glGetIntegerv(GL_SCISSOR_BOX, oldScissor);
+			
+			// Intersect with parent's scissor region
+			int parentX = oldScissor[0];
+			int parentY = oldScissor[1];
+			int parentRight = parentX + oldScissor[2];
+			int parentTop = parentY + oldScissor[3];
+			
+			int childRight = scissorX + scissorWidth;
+			int childTop = scissorY + scissorHeight;
+			
+			// Calculate intersection
+			scissorX = std::max(scissorX, parentX);
+			scissorY = std::max(scissorY, parentY);
+			int right = std::min(childRight, parentRight);
+			int top = std::min(childTop, parentTop);
+			
+			scissorWidth = std::max(0, right - scissorX);
+			scissorHeight = std::max(0, top - scissorY);
+		}
+		
+		// Enable scissor test with new bounds
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
 
@@ -1909,8 +1968,12 @@ inline void Column::render(sf::RenderTarget& target) {
 				e->render(target);
 			}
 
-		// Disable scissor test
-		glDisable(GL_SCISSOR_TEST);
+		// Restore previous scissor state
+		if (scissorWasEnabled) {
+			glScissor(oldScissor[0], oldScissor[1], oldScissor[2], oldScissor[3]);
+		} else {
+			glDisable(GL_SCISSOR_TEST);
+		}
 	}
 	else {
 		// Render background with optional rounded corners
@@ -1927,7 +1990,7 @@ inline void Column::render(sf::RenderTarget& target) {
 			if (e->m_modifier.isVisible() && e->m_doRender && !e->m_modifier.isHighPriority())
 				e->render(target);
 
-		// Render custom geometry (not clipped)
+		// Render custom geometry
 		sf::RenderStates states;
 		states.transform.translate(m_bounds.getPosition());
 		for (auto& d : m_customGeometry) {
@@ -2322,6 +2385,8 @@ inline Text::Text(Modifier modifier, const std::string& str, const std::string& 
 		sf::Font* defaultFont = getDefaultFont();
 		if (defaultFont) {
 			m_font = *defaultFont;
+		} else {
+			std::cerr << "Text Warning: No default font available when creating Text with string: \"" << str << "\"\n";
 		}
 	}
 }
