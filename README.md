@@ -1,6 +1,6 @@
------
+![UILO](git_images/uilo-logo.png)
 
-# UILO – Retained-Mode UI for SFML
+-----
 
 UILO is a lightweight, header-only **retained-mode** UI library for C++ and SFML. It provides simple, composable layout primitives including rows, columns, buttons, sliders, and text. The library features a declarative API controlled via method chaining with modifiers and alignment flags.
 
@@ -45,7 +45,7 @@ A UILO application follows these fundamental steps:
 5.  **Add the `Page` to the `UILO` instance.**
 6.  **Run the main loop** by calling `app.update()` and `app.render()`.
 
-### Hello, UILO\! (A Complete Example)
+### Complete Usage Example
 
 This example creates a window with centered text and a button that prints to the console when clicked.
 
