@@ -108,6 +108,7 @@ class Grid;
 class Page;
 class UILO;
 class Slider;
+class Knob;
 class Text;
 class TextBox;
 class Spacer;
@@ -227,6 +228,22 @@ enum class TBStyle : uint8_t {
 inline TBStyle operator|(TBStyle lhs, TBStyle rhs);
 inline TBStyle operator&(TBStyle lhs, TBStyle rhs);
 inline bool hasStyle(TBStyle value, TBStyle flag);
+
+// ---------------------------------------------------------------------------- //
+// Cursor Type Enum
+// ---------------------------------------------------------------------------- //
+enum class CursorType {
+	Arrow,              // Default arrow
+	Hand,               // Pointing hand
+	IBeam,              // Text selection
+	SizeHorizontal,     // Horizontal resize
+	SizeVertical,       // Vertical resize
+	SizeNWSE,           // Diagonal resize (top-left to bottom-right)
+	SizeNESW,           // Diagonal resize (top-right to bottom-left)
+	SizeAll,            // Move/drag all directions
+	Cross,              // Crosshair
+	NotAllowed,         // Not allowed/forbidden
+};
 
 using funcPtr = std::function<void()>;
 
@@ -557,9 +574,9 @@ public:
 
 	using Column::Column;
 	using Column::render;
-	using Column::checkClick;
 	using Column::checkHover;
 
+	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
 	void update(sf::RectangleShape& parentBounds) override;
 	void checkScroll(const sf::Vector2f& pos, const float verticalDelta, const float horizontalDelta) override {}
 	virtual EType getType() const override;
@@ -701,7 +718,7 @@ public:
 	void update(sf::RectangleShape& parentBounds) override;
 	void render(sf::RenderTarget& target) override;
 	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
-	bool handleDrag(const sf::Vector2f& pos);
+	virtual bool handleDrag(const sf::Vector2f& pos);
 
 	float getValue() const;
 	void setValue(float newVal);
@@ -723,6 +740,52 @@ private:
 	sf::RectangleShape m_knobRect;
 	sf::RectangleShape m_barRect;
 
+	sf::Clock doubleClickTimer;
+};
+
+// ---------------------------------------------------------------------------- //
+// Knob Element
+// ---------------------------------------------------------------------------- //
+class Knob : public Element {
+public:
+	Knob(
+		Modifier modifier = default_mod,
+		sf::Color knobColor = sf::Color::White,
+		sf::Color trackColor = sf::Color(100, 100, 100),
+		sf::Color arcColor = sf::Color(0, 150, 255),
+		float initialValue = 0.5f,
+		const std::string& name = ""
+	);
+
+	void update(sf::RectangleShape& parentBounds) override;
+	void render(sf::RenderTarget& target) override;
+	bool checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) override;
+	bool handleDrag(const sf::Vector2f& pos);
+
+	float getValue() const;
+	void setValue(float newVal);
+	void setQuantization(int steps) { m_quantizationSteps = steps; }
+	
+	void setUilo(UILO* uilo) override;
+
+private:
+	float m_minVal = 0.f;
+	float m_maxVal = 1.f;
+	float m_curVal = 0.5f;
+	float m_initVal = 0.5f;
+	int m_quantizationSteps = 0; // 0 = no quantization
+
+	sf::Color m_knobColor = sf::Color::White;
+	sf::Color m_trackColor = sf::Color(100, 100, 100);
+	sf::Color m_arcColor = sf::Color(0, 150, 255);
+
+	sf::Vector2f m_center;
+	float m_radius = 0.f;
+	
+	// Delta-based dragging
+	sf::Vector2f m_lastMousePos;
+	bool m_isDragging = false;
+	
 	sf::Clock doubleClickTimer;
 };
 
@@ -1046,6 +1109,7 @@ class UILO {
 	friend class Spacer;
 	friend class Button;
 	friend class Slider;
+	friend class Knob;
 	friend class TextBox;
 	friend class Image;
 	friend class Dropdown;
@@ -1054,6 +1118,7 @@ class UILO {
 	
 public:
 	Slider* m_activeDragSlider = nullptr;
+	Knob* m_activeDragKnob = nullptr;
 	Page* m_currentPage = nullptr;
 
 	UILO();
@@ -1082,6 +1147,10 @@ public:
 	bool isInputBlocked() const;
 	bool isMouseDragging() const;
 	inline void setFullClean(bool doFullClean) { m_fullClean = doFullClean; }
+	
+	void setCursor(CursorType cursorType);
+	CursorType getCurrentCursor() const;
+	void resetCursor();
 
 	Row* getRow(const std::string& name);
 	Column* getColumn(const std::string& name);
@@ -1132,11 +1201,25 @@ private:
 	std::unordered_map<std::string, Dropdown*> m_dropdowns;
 	std::unordered_map<std::string, Grid*> m_grids;
 	std::unordered_map<std::string, TextBox*> m_textboxes;
+	
+	// Cursor management
+	CursorType m_currentCursorType = CursorType::Arrow;
+	std::optional<sf::Cursor> m_arrowCursor;
+	std::optional<sf::Cursor> m_handCursor;
+	std::optional<sf::Cursor> m_iBeamCursor;
+	std::optional<sf::Cursor> m_sizeHorizontalCursor;
+	std::optional<sf::Cursor> m_sizeVerticalCursor;
+	std::optional<sf::Cursor> m_sizeNWSECursor;
+	std::optional<sf::Cursor> m_sizeNESWCursor;
+	std::optional<sf::Cursor> m_sizeAllCursor;
+	std::optional<sf::Cursor> m_crossCursor;
+	std::optional<sf::Cursor> m_notAllowedCursor;
 
 	void pollEvents();
 	void initDefaultView();
 	void setView(const sf::View& view);
 	void _internal_update(sf::RenderWindow& target, sf::View& view);
+	void initCursors(); // Initialize all cursor types
 };
 
 // ---------------------------------------------------------------------------- //
@@ -2333,6 +2416,32 @@ inline void FreeColumn::update(sf::RectangleShape& parentBounds) {
 	Element::update(parentBounds);
 }
 
+inline bool FreeColumn::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
+	// First check if click is within this FreeColumn's bounds
+	bool withinBounds = getBounds().contains(pos);
+	
+	if (!withinBounds)
+		return false;
+	
+	// Check children first
+	for (auto& e : m_elements) {
+		if (e && e->m_modifier.isVisible() && e->m_bounds.getGlobalBounds().contains(pos)) {
+			if (e->checkClick(pos, button))
+				return true;
+		}
+	}
+	
+	// Click is within FreeColumn bounds - call callbacks if any and consume the click
+	if (button == sf::Mouse::Button::Left) {
+		if (m_modifier.getOnLClick()) m_modifier.getOnLClick()();
+	} else if (button == sf::Mouse::Button::Right) {
+		if (m_modifier.getOnRClick()) m_modifier.getOnRClick()();
+	}
+	
+	// Always return true if click is within bounds to prevent passthrough
+	return true;
+}
+
 inline EType FreeColumn::getType() const { return EType::FreeColumn; }
 
 inline void FreeColumn::setPosition(sf::Vector2f pos) { m_customPosition = pos; }
@@ -2400,11 +2509,16 @@ inline void Text::update(sf::RectangleShape& parentBounds) {
 		: m_bounds.getSize().y * 0.8f;
 
 	m_text.emplace(m_font, sf::String::fromUtf8(m_string.begin(), m_string.end()));
-	m_text->setCharacterSize(static_cast<unsigned>(fontSize));
+	
+	// text supersampling
+	const float supersampleFactor = 4.0f;
+	m_text->setCharacterSize(static_cast<unsigned>(fontSize * supersampleFactor));
+	m_text->setScale({1.0f / supersampleFactor, 1.0f / supersampleFactor});
+	
 	m_text->setFillColor(m_modifier.getColor());
 
 	sf::FloatRect textBounds = m_text->getLocalBounds();
-	float textWidth = textBounds.size.x;
+	float textWidth = textBounds.size.x / supersampleFactor;
 	m_bounds.setSize({ textWidth, m_bounds.getSize().y });
 
 	Element::update(parentBounds);
@@ -2829,6 +2943,190 @@ inline void Slider::setUilo(UILO* uilo) {
 }
 
 // ---------------------------------------------------------------------------- //
+// Knob Implementation
+// ---------------------------------------------------------------------------- //
+inline Knob::Knob(
+	Modifier modifier,
+	sf::Color knobColor,
+	sf::Color trackColor,
+	sf::Color arcColor,
+	float initialValue,
+	const std::string& name
+) : m_knobColor(knobColor), m_trackColor(trackColor), m_arcColor(arcColor), m_initVal(initialValue), m_curVal(initialValue) {
+	m_modifier = modifier;
+	m_name = name;
+	if (!m_name.empty() && m_uilo) {
+		m_uilo->m_sliders[m_name] = (Slider*)this; // Store as slider for now
+	}
+}
+
+inline void Knob::update(sf::RectangleShape& parentBounds) {
+	resize(parentBounds);
+	applyModifiers();
+
+	// Calculate center and radius based on bounds
+	float size = std::min(m_bounds.getSize().x, m_bounds.getSize().y);
+	m_radius = size * 0.4f;
+	m_center = sf::Vector2f(
+		m_bounds.getPosition().x + m_bounds.getSize().x / 2.f,
+		m_bounds.getPosition().y + m_bounds.getSize().y / 2.f
+	);
+
+	Element::update(parentBounds);
+}
+
+inline void Knob::render(sf::RenderTarget& target) {
+	const int segments = 60;
+	// SFML coords: Y-down, so angles are: 0°=right, 90°=down, 180°=left, 270°=up
+	// 7 o'clock = 135° (bottom-left), 12 o'clock = 270° (top), 5 o'clock = 45° (bottom-right)
+	// To go CLOCKWISE from 135° through 270° to 45°, we add 360° to end: 405°
+	const float startAngle = 135.f * 3.14159f / 180.f;   // 7 o'clock (bottom-left) - value 0
+	const float endAngle = 405.f * 3.14159f / 180.f;     // 5 o'clock (45° + 360°) - value 1  
+	const float angleRange = endAngle - startAngle;      // +270° = clockwise sweep
+	
+	// Draw inner circle filled with modifier color
+	float innerCircleRadius = m_radius - 3.f;
+	sf::CircleShape innerCircle(innerCircleRadius);
+	innerCircle.setOrigin({innerCircleRadius, innerCircleRadius});
+	innerCircle.setPosition(m_center);
+	innerCircle.setFillColor(m_modifier.getColor());
+	target.draw(innerCircle);
+	
+	// Draw full track arc from start to end in trackColor
+	sf::VertexArray trackArc(sf::PrimitiveType::TriangleStrip);
+	for (int i = 0; i <= segments; ++i) {
+		float t = float(i) / float(segments);
+		float angle = startAngle + angleRange * t;
+		
+		float innerRadius = m_radius - 3.f;
+		float outerRadius = m_radius + 3.f;
+		
+		sf::Vector2f inner(m_center.x + std::cos(angle) * innerRadius,
+		                   m_center.y + std::sin(angle) * innerRadius);
+		sf::Vector2f outer(m_center.x + std::cos(angle) * outerRadius,
+		                   m_center.y + std::sin(angle) * outerRadius);
+		
+		trackArc.append({inner, m_trackColor});
+		trackArc.append({outer, m_trackColor});
+	}
+	target.draw(trackArc);
+	
+	// Draw value arc from start position clockwise to current value position
+	sf::VertexArray arc(sf::PrimitiveType::TriangleStrip);
+	
+	// Calculate the angle span from start (7 o'clock) to current value
+	float arcSpan = angleRange * m_curVal;
+	
+	const int arcSegments = std::max(1, int(segments * m_curVal));
+	
+	for (int i = 0; i <= arcSegments; ++i) {
+		float t = float(i) / float(arcSegments);
+		// Interpolate from startAngle clockwise by arcSpan
+		float angle = startAngle + arcSpan * t;
+		
+		float innerRadius = m_radius - 3.f;
+		float outerRadius = m_radius + 3.f;
+		
+		sf::Vector2f inner(m_center.x + std::cos(angle) * innerRadius,
+		                   m_center.y + std::sin(angle) * innerRadius);
+		sf::Vector2f outer(m_center.x + std::cos(angle) * outerRadius,
+		                   m_center.y + std::sin(angle) * outerRadius);
+		
+		arc.append({inner, m_arcColor});
+		arc.append({outer, m_arcColor});
+	}
+	target.draw(arc);
+	
+	// Draw indicator dot at current value position (1/6 radius)
+	// Position inside the arc with one full dot radius gap between arc inner edge and dot
+	float indicatorAngle = startAngle + angleRange * m_curVal;
+	float dotRadius = m_radius / 6.f;
+	float arcInnerEdge = m_radius - 3.f;
+	float dotCenterDistance = arcInnerEdge - dotRadius - dotRadius;
+	
+	sf::Vector2f dotCenter(
+		m_center.x + std::cos(indicatorAngle) * dotCenterDistance,
+		m_center.y + std::sin(indicatorAngle) * dotCenterDistance
+	);
+	
+	sf::CircleShape dot(dotRadius);
+	dot.setOrigin({dotRadius, dotRadius});
+	dot.setPosition(dotCenter);
+	dot.setFillColor(m_knobColor);
+	target.draw(dot);
+	
+	// Render custom geometry
+	Element::render(target);
+}
+
+inline bool Knob::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
+	if (button == sf::Mouse::Button::Left && m_bounds.getGlobalBounds().contains(pos)) {
+		if (m_uilo) {
+			m_uilo->m_activeDragKnob = this;
+		}
+
+		if (doubleClickTimer.isRunning()) {
+			if (doubleClickTimer.getElapsedTime().asMilliseconds() <= 250) {
+				m_curVal = m_initVal;
+				doubleClickTimer.stop();
+				return true;
+			}
+		}
+		doubleClickTimer.restart();
+		
+		// Initialize delta-based dragging
+		m_isDragging = true;
+		m_lastMousePos = pos;
+
+		return true;
+	}
+
+	return false;
+}
+
+inline bool Knob::handleDrag(const sf::Vector2f& pos) {
+	if (!m_isDragging) {
+		return false;
+	}
+	
+	float deltaY = m_lastMousePos.y - pos.y;
+	
+	// Sensitivity and smoothing
+	const float sensitivity = 0.005f;
+	const float threshold = 0.5f;
+	
+	// Only update if movement exceeds threshold
+	if (std::abs(deltaY) < threshold)
+		return true;
+	
+	// Apply delta to current value
+	float delta = deltaY * sensitivity;
+	m_curVal += delta;
+	m_curVal = std::max(0.f, std::min(1.f, m_curVal));
+	
+	// Apply quantization if enabled
+	if (m_quantizationSteps > 0) {
+		m_curVal = std::round(m_curVal * m_quantizationSteps) / m_quantizationSteps;
+	}
+	
+	m_lastMousePos = pos;
+
+	return true;
+}
+
+inline float Knob::getValue() const { return m_curVal; }
+
+inline void Knob::setValue(float newVal) {
+	m_curVal = newVal < m_minVal ? m_minVal : (newVal > m_maxVal ? m_maxVal : newVal);
+}
+
+inline void Knob::setUilo(UILO* uilo) {
+	Element::setUilo(uilo);
+	if (!m_name.empty() && m_uilo)
+		m_uilo->m_sliders[m_name] = (Slider*)this;
+}
+
+// ---------------------------------------------------------------------------- //
 // Dropdown Implementation
 // ---------------------------------------------------------------------------- //
 inline Dropdown::Dropdown(
@@ -3214,25 +3512,75 @@ inline void TextBox::render(sf::RenderTarget& target) {
 
 			target.draw(cleanUpOutline);
 		}
-		
-		m_textRow->render(target);
-		
-		// Render cursor rectangle if active and should show cursor
-		if (m_isActive && this == s_activeTextBox && m_showCursor) {
-			renderCursor(target);
-		}
 	}
 	else {
 		m_bodyRect.setSize(m_bounds.getSize());
 		m_bodyRect.setPosition(m_bounds.getPosition());
 		m_bodyRect.setOutlineThickness((m_isActive ? m_bounds.getSize().y / 10 : 0));
 		target.draw(m_bodyRect);
-		m_textRow->render(target);
+	}
+	
+	// NOW setup scissor test for clipping text content to textbox bounds
+	sf::FloatRect clipRect = m_bounds.getGlobalBounds();
+	sf::View currentView = target.getView();
+	
+	// Convert world coordinates to pixel coordinates for scissor rect
+	sf::Vector2f topLeft = {clipRect.position.x, clipRect.position.y};
+	sf::Vector2f bottomRight = {clipRect.position.x + clipRect.size.x, 
+	                             clipRect.position.y + clipRect.size.y};
+	
+	sf::Vector2i topLeftPixel = target.mapCoordsToPixel(topLeft, currentView);
+	sf::Vector2i bottomRightPixel = target.mapCoordsToPixel(bottomRight, currentView);
+	
+	// SFML's scissor coordinates are from bottom-left, need to flip Y
+	sf::Vector2u windowSize = target.getSize();
+	int scissorX = topLeftPixel.x;
+	int scissorY = windowSize.y - bottomRightPixel.y;  // Flip Y
+	int scissorWidth = bottomRightPixel.x - topLeftPixel.x;
+	int scissorHeight = bottomRightPixel.y - topLeftPixel.y;
+	
+	// Save current scissor state
+	GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+	GLint oldScissor[4];
+	if (scissorWasEnabled) {
+		glGetIntegerv(GL_SCISSOR_BOX, oldScissor);
 		
-		// Render cursor rectangle if active and should show cursor
-		if (m_isActive && this == s_activeTextBox && m_showCursor) {
-			renderCursor(target);
-		}
+		// Intersect with parent's scissor region
+		int parentX = oldScissor[0];
+		int parentY = oldScissor[1];
+		int parentRight = parentX + oldScissor[2];
+		int parentTop = parentY + oldScissor[3];
+		
+		int childRight = scissorX + scissorWidth;
+		int childTop = scissorY + scissorHeight;
+		
+		// Calculate intersection
+		scissorX = std::max(scissorX, parentX);
+		scissorY = std::max(scissorY, parentY);
+		int right = std::min(childRight, parentRight);
+		int top = std::min(childTop, parentTop);
+		
+		scissorWidth = std::max(0, right - scissorX);
+		scissorHeight = std::max(0, top - scissorY);
+	}
+	
+	// Enable scissor test with new bounds
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(scissorX, scissorY, scissorWidth, scissorHeight);
+	
+	// Render text content (clipped)
+	m_textRow->render(target);
+	
+	// Render cursor rectangle if active and should show cursor (clipped)
+	if (m_isActive && this == s_activeTextBox && m_showCursor) {
+		renderCursor(target);
+	}
+	
+	// Restore previous scissor state
+	if (scissorWasEnabled) {
+		glScissor(oldScissor[0], oldScissor[1], oldScissor[2], oldScissor[3]);
+	} else {
+		glDisable(GL_SCISSOR_TEST);
 	}
 }
 
@@ -3471,6 +3819,15 @@ inline Slider* horizontalSlider(
 	const std::string& name = ""
 ) { return obj<Slider>(modifier, knobColor, barColor, SliderOrientation::Horizontal, initialValue, name); }
 
+inline Knob* knob(
+	Modifier modifier = default_mod,
+	sf::Color knobColor = sf::Color::White,
+	sf::Color trackColor = sf::Color(100, 100, 100),
+	sf::Color arcColor = sf::Color(0, 150, 255),
+	float initialValue = 0.5f,
+	const std::string& name = ""
+) { return obj<Knob>(modifier, knobColor, trackColor, arcColor, initialValue, name); }
+
 inline Dropdown* dropdown(
 	Modifier modifier = default_mod,
 	const std::string& defaultText = "",
@@ -3559,7 +3916,20 @@ inline void Page::handleEvent(const sf::Event& event) {
 }
 
 inline bool Page::dispatchClick(const sf::Vector2f& pos, sf::Mouse::Button button) {
-	// First, handle dropdown logic if any dropdown is open
+	// First, check all FreeColumns (for context menus, dropdowns, etc.) before bound-checking containers
+	for (auto& c : m_containers) {
+		if (c->getType() == EType::FreeColumn) {
+			FreeColumn* freeCol = dynamic_cast<FreeColumn*>(c);
+			if (freeCol && freeCol->m_modifier.isVisible()) {
+				if (freeCol->getBounds().contains(pos)) {
+					bool handled = freeCol->checkClick(pos, button);
+					if (handled) return true;
+				}
+			}
+		}
+	}
+	
+	// Then, handle dropdown logic if any dropdown is open
 	if (Dropdown::s_openDropdown) {
 		Dropdown* openDropdown = Dropdown::s_openDropdown;
 		
@@ -3696,6 +4066,7 @@ inline std::unique_ptr<Page> page(std::initializer_list<Container*> containers =
 // ---------------------------------------------------------------------------- //
 inline UILO::UILO() {
 	initDefaultView();
+	initCursors();
 	sf::ContextSettings settings;
 	settings.antiAliasingLevel = 4;
 
@@ -3717,6 +4088,7 @@ inline UILO::UILO() {
 inline UILO::UILO(const std::string& windowTitle)
 : m_windowTitle(windowTitle) {
 	initDefaultView();
+	initCursors();
 	sf::ContextSettings settings;
 	settings.antiAliasingLevel = 4;
 
@@ -3735,6 +4107,7 @@ inline UILO::UILO(const std::string& windowTitle)
 }
 
 inline UILO::UILO(sf::RenderWindow& userWindow, sf::View& windowView) {
+	initCursors();
 	m_userWindow = &userWindow;
 	m_windowOwned = false;
 	
@@ -4062,6 +4435,12 @@ inline void UILO::pollEvents() {
 				m_activeDragSlider->handleDrag(m_mousePos);
 				m_shouldUpdate = true;
 			}
+			
+			// Handle knob dragging
+			if (m_mouseDragging && m_activeDragKnob) {
+				m_activeDragKnob->handleDrag(m_mousePos);
+				m_shouldUpdate = true;
+			}
 		}
 
 		if (const auto* mouseScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
@@ -4091,6 +4470,7 @@ inline void UILO::pollEvents() {
 		if (event->getIf<sf::Event::MouseButtonReleased>()) {
 			m_mouseDragging = false;
 			m_activeDragSlider = nullptr;
+			m_activeDragKnob = nullptr;
 		}
 
 		// Handle text input for active TextBox
@@ -4166,6 +4546,74 @@ inline void UILO::setView(const sf::View& view) {
 	
 	if (!m_windowOwned)
 		m_userWindow->setView(m_defaultView);
+}
+
+// ---------------------------------------------------------------------------- //
+// Cursor Management Implementation
+// ---------------------------------------------------------------------------- //
+inline void UILO::initCursors() {
+	// SFML cursors must be created using loadFromSystem
+	// We'll create them on-demand in setCursor instead
+}
+
+inline void UILO::setCursor(CursorType cursorType) {
+	if (m_currentCursorType == cursorType) return; // Already set
+	
+	m_currentCursorType = cursorType;
+	sf::RenderWindow* activeWindow = m_windowOwned ? &m_window : m_userWindow;
+	if (!activeWindow) return;
+	
+	auto ensureCursor = [](std::optional<sf::Cursor>& cursor, sf::Cursor::Type type) -> sf::Cursor* {
+		if (!cursor.has_value())
+			cursor = sf::Cursor::createFromSystem(type);
+		return cursor.has_value() ? &cursor.value() : nullptr;
+	};
+	
+	sf::Cursor* cursorPtr = nullptr;
+	switch (cursorType) {
+		case CursorType::Arrow:
+			cursorPtr = ensureCursor(m_arrowCursor, sf::Cursor::Type::Arrow);
+			break;
+		case CursorType::Hand:
+			cursorPtr = ensureCursor(m_handCursor, sf::Cursor::Type::Hand);
+			break;
+		case CursorType::IBeam:
+			cursorPtr = ensureCursor(m_iBeamCursor, sf::Cursor::Type::Text);
+			break;
+		case CursorType::SizeHorizontal:
+			cursorPtr = ensureCursor(m_sizeHorizontalCursor, sf::Cursor::Type::SizeHorizontal);
+			break;
+		case CursorType::SizeVertical:
+			cursorPtr = ensureCursor(m_sizeVerticalCursor, sf::Cursor::Type::SizeVertical);
+			break;
+		case CursorType::SizeNWSE:
+			cursorPtr = ensureCursor(m_sizeNWSECursor, sf::Cursor::Type::SizeTopLeftBottomRight);
+			break;
+		case CursorType::SizeNESW:
+			cursorPtr = ensureCursor(m_sizeNESWCursor, sf::Cursor::Type::SizeBottomLeftTopRight);
+			break;
+		case CursorType::SizeAll:
+			cursorPtr = ensureCursor(m_sizeAllCursor, sf::Cursor::Type::SizeAll);
+			break;
+		case CursorType::Cross:
+			cursorPtr = ensureCursor(m_crossCursor, sf::Cursor::Type::Cross);
+			break;
+		case CursorType::NotAllowed:
+			cursorPtr = ensureCursor(m_notAllowedCursor, sf::Cursor::Type::NotAllowed);
+			break;
+	}
+	
+	if (cursorPtr) {
+		activeWindow->setMouseCursor(*cursorPtr);
+	}
+}
+
+inline CursorType UILO::getCurrentCursor() const {
+	return m_currentCursorType;
+}
+
+inline void UILO::resetCursor() {
+	setCursor(CursorType::Arrow);
 }
 
 // ---------------------------------------------------------------------------- //
