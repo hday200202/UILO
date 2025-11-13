@@ -726,6 +726,8 @@ public:
 	
 	void setUilo(UILO* uilo) override;
 
+	bool m_isDragging = false;
+
 private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
@@ -768,6 +770,8 @@ public:
 	
 	void setUilo(UILO* uilo) override;
 
+	bool m_isDragging = false;
+
 private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
@@ -784,7 +788,6 @@ private:
 	
 	// Delta-based dragging
 	sf::Vector2f m_lastMousePos;
-	bool m_isDragging = false;
 	
 	sf::Clock doubleClickTimer;
 };
@@ -1536,7 +1539,7 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 		if (e->m_modifier.isVisible()) {
 			const float fixedWidth = e->m_modifier.getFixedWidth();
 			const float width = (fixedWidth > 0.f) ? fixedWidth : (e->m_modifier.getWidth() * percentScale * remainingSpace);
-			const sf::RectangleShape slot({width, boundsSize.y - doublePadding});
+			const sf::RectangleShape slot({width, boundsSize.y});
 			e->update(const_cast<sf::RectangleShape&>(slot));
 		}
 	}
@@ -2862,6 +2865,8 @@ inline bool Slider::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button
 		if (m_uilo) {
 			m_uilo->m_activeDragSlider = this;
 		}
+		
+		m_isDragging = true;
 
 		if (doubleClickTimer.isRunning()) {
 			if (doubleClickTimer.getElapsedTime().asMilliseconds() <= 250) {
@@ -3068,6 +3073,7 @@ inline bool Knob::checkClick(const sf::Vector2f& pos, sf::Mouse::Button button) 
 		if (doubleClickTimer.isRunning()) {
 			if (doubleClickTimer.getElapsedTime().asMilliseconds() <= 250) {
 				m_curVal = m_initVal;
+				m_isDragging = true;  // Mark as dragging so sync knows this is user interaction
 				doubleClickTimer.stop();
 				return true;
 			}
@@ -4469,8 +4475,14 @@ inline void UILO::pollEvents() {
 
 		if (event->getIf<sf::Event::MouseButtonReleased>()) {
 			m_mouseDragging = false;
-			m_activeDragSlider = nullptr;
-			m_activeDragKnob = nullptr;
+			if (m_activeDragSlider) {
+				m_activeDragSlider->m_isDragging = false;
+				m_activeDragSlider = nullptr;
+			}
+			if (m_activeDragKnob) {
+				m_activeDragKnob->m_isDragging = false;
+				m_activeDragKnob = nullptr;
+			}
 		}
 
 		// Handle text input for active TextBox
