@@ -131,7 +131,7 @@ inline static std::vector<std::unique_ptr<Element>> high_priority_elements;
 
 // Global render scale for viewport calculations
 inline static float g_renderScale = 1.f;
-extern sf::Font* g_defaultFont;
+inline sf::Font* g_defaultFont = nullptr;
 
 inline void setDefaultFont(sf::Font& font) {
 	g_defaultFont = &font;
@@ -731,13 +731,13 @@ public:
 private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
-	float m_curVal = 0.75f;
-	float m_initVal = 0.75f;
 	int m_quantizationSteps = 0; // 0 = no quantization
 
 	sf::Color m_knobColor = sf::Color::White;
 	sf::Color m_barColor = sf::Color::Black;
 	SliderOrientation m_orientation = SliderOrientation::Vertical;
+	float m_initVal = 0.75f;
+	float m_curVal = 0.75f;
 
 	sf::RectangleShape m_knobRect;
 	sf::RectangleShape m_barRect;
@@ -775,13 +775,13 @@ public:
 private:
 	float m_minVal = 0.f;
 	float m_maxVal = 1.f;
-	float m_curVal = 0.5f;
-	float m_initVal = 0.5f;
 	int m_quantizationSteps = 0; // 0 = no quantization
 
 	sf::Color m_knobColor = sf::Color::White;
 	sf::Color m_trackColor = sf::Color(100, 100, 100);
 	sf::Color m_arcColor = sf::Color(0, 150, 255);
+	float m_initVal = 0.5f;
+	float m_curVal = 0.5f;
 
 	sf::Vector2f m_center;
 	float m_radius = 0.f;
@@ -1492,11 +1492,11 @@ inline void cleanupMarkedElements() {
 // ---------------------------------------------------------------------------- //
 inline void Row::update(sf::RectangleShape& parentBounds) {
 	resize(parentBounds);
+	const float padding = m_modifier.getPadding();
 	
 	// If fitContentWidth is enabled, calculate total width of children and resize
 	if (m_modifier.getFitContentWidth()) {
 		float totalWidth = 0.f;
-		const float padding = m_modifier.getPadding();
 		for (const auto& e : m_elements) {
 			if (e->m_modifier.isVisible()) {
 				const float fixedWidth = e->m_modifier.getFixedWidth();
@@ -1509,9 +1509,6 @@ inline void Row::update(sf::RectangleShape& parentBounds) {
 	
 	applyModifiers();
 	Element::update(parentBounds);
-
-	const float padding = m_modifier.getPadding();
-	const float doublePadding = padding * 2.f;
 
 	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
@@ -1845,11 +1842,11 @@ inline EType ScrollableRow::getType() const {
 // ---------------------------------------------------------------------------- //
 inline void Column::update(sf::RectangleShape& parentBounds) {
 	resize(parentBounds);
+	const float padding = m_modifier.getPadding();
 	
 	// Calculate content height if fitContentHeight is enabled
 	if (m_modifier.getFitContentHeight()) {
 		float totalHeight = 0.f;
-		const float padding = m_modifier.getPadding();
 		
 		for (const auto& e : m_elements) {
 			if (e->m_modifier.isVisible()) {
@@ -1865,9 +1862,6 @@ inline void Column::update(sf::RectangleShape& parentBounds) {
 	
 	applyModifiers();
 	Element::update(parentBounds);
-
-	const float padding = m_modifier.getPadding();
-	const float doublePadding = padding * 2.f;
 
 	// Pre-calculate totals with single pass
 	float totalPercent = 0.f, totalFixed = 0.f;
