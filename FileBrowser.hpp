@@ -100,6 +100,14 @@ private:
     static constexpr int DOUBLE_CLICK_MS = 250;
     
     std::unordered_map<std::string, Container*> m_entryContainers;
+    std::unordered_map<std::string, sf::Image> m_thumbnailCache;
+
+    static bool isImageFile(const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || 
+               ext == ".bmp" || ext == ".gif" || ext == ".tga";
+    }
 
     void initWindow();
     void buildUI();
@@ -191,7 +199,7 @@ inline void FileBrowser::update() {
         if (m_loadingFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
             m_loadingFuture.get();
             m_isLoading = false;
-            updateVisibleEntries();
+            updateVisibleEntries(true);
         }
     }
     
@@ -451,6 +459,19 @@ inline void FileBrowser::navigateToDirectory(const std::filesystem::path& path) 
     m_lastSearchText = "";
     m_currentDirectory = resolvedPath;
     
+    // Reset rendering cache so updateVisibleEntries doesn't skip
+    m_lastRenderedStart = 0;
+    m_lastRenderedEnd = 0;
+    m_lastScrollOffset = 0.f;
+    m_entryContainers.clear();
+    m_thumbnailCache.clear();
+    
+    // Reset grid scroll position
+    if (m_fileGrid) {
+        m_fileGrid->setVerticalOffset(0.f);
+        m_fileGrid->setHorizontalOffset(0.f);
+    }
+    
     if (m_searchBox) {
         m_searchBox->setPlaceholder(m_currentDirectory.string());
         m_searchBox->clearText();
@@ -603,6 +624,35 @@ inline Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
     
     sf::Image& iconImage = isDirectory ? m_folderIcon : m_fileIcon;
     sf::Color iconColor = isDirectory ? m_theme.folderIconColor : m_theme.fileIconColor;
+    bool useRecolor = true;
+    float iconWidth = 180.f;
+    float iconHeight = 180.f;
+    
+    // Use actual image thumbnail for image files
+    if (!isDirectory && isImageFile(path)) {
+        auto cacheIt = m_thumbnailCache.find(path.string());
+        if (cacheIt == m_thumbnailCache.end()) {
+            sf::Image thumb;
+            if (thumb.loadFromFile(path.string())) {
+                m_thumbnailCache[path.string()] = std::move(thumb);
+                cacheIt = m_thumbnailCache.find(path.string());
+            }
+        }
+        if (cacheIt != m_thumbnailCache.end()) {
+            iconImage = cacheIt->second;
+            useRecolor = false;
+            // Maintain aspect ratio based on width
+            auto sz = cacheIt->second.getSize();
+            if (sz.x > 0 && sz.y > 0) {
+                iconHeight = iconWidth * (static_cast<float>(sz.y) / static_cast<float>(sz.x));
+                // Clamp height so it doesn't overflow the cell
+                if (iconHeight > boxHeight - 40.f) {
+                    iconHeight = boxHeight - 40.f;
+                    iconWidth = iconHeight * (static_cast<float>(sz.x) / static_cast<float>(sz.y));
+                }
+            }
+        }
+    }
     bool isSelected = (path == m_selectedPath);
     sf::Color bgColor = isSelected ? m_theme.entrySelectedColor : m_theme.entryBackgroundColor;
     
@@ -626,20 +676,18 @@ inline Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
             .align(Align::CENTER_X | Align::CENTER_Y)
             .onLClick(clickHandler),
         contains{
+            spacer(Modifier()),  // flex top
             image(
                 Modifier()
-                    .setfixedWidth(180.f)
-                    .setfixedHeight(180.f)
+                    .setfixedWidth(iconWidth)
+                    .setfixedHeight(iconHeight)
                     .setColor(iconColor)
-                    .align(Align::CENTER_X | Align::TOP)
+                    .align(Align::CENTER_X)
                     .onLClick(clickHandler),
                 iconImage,
-                true
+                useRecolor
             ),
-            spacer(
-                Modifier()
-                    .setfixedHeight(10.f)
-            ),
+            spacer(Modifier().setfixedHeight(10.f)),
             text(
                 Modifier()
                     .setColor(m_theme.textColor)
@@ -648,7 +696,8 @@ inline Container* FileBrowser::buildEntryUI(const std::filesystem::path& path) {
                     .onLClick(clickHandler),
                 fileName.length() > 15 ? fileName.substr(0, 12) + "..." : fileName,
                 ""
-            )
+            ),
+            spacer(Modifier())  // flex bottom
         },
         fileName + "_entry"
     );
