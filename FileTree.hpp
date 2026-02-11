@@ -104,11 +104,19 @@ inline Directory::Directory(const std::filesystem::path& path) { m_path = path; 
 inline void Directory::expand() {
     if (m_expanded) return; // Already expanded, use cached entries
     
-    for (const auto& entry : std::filesystem::directory_iterator(m_path)) {
-        if (std::filesystem::is_directory(entry))
-            m_entries.push_back(std::make_unique<Directory>(entry.path()));
-        else
-            m_entries.push_back(std::make_unique<File>(entry.path()));
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(m_path, std::filesystem::directory_options::skip_permission_denied)) {
+            try {
+                if (std::filesystem::is_directory(entry))
+                    m_entries.push_back(std::make_unique<Directory>(entry.path()));
+                else
+                    m_entries.push_back(std::make_unique<File>(entry.path()));
+            } catch (const std::filesystem::filesystem_error&) {
+                // Skip entries we can't access
+            }
+        }
+    } catch (const std::filesystem::filesystem_error&) {
+        // Can't iterate this directory (permissions, etc.)
     }
     
     m_expanded = true;
