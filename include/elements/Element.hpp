@@ -1,32 +1,74 @@
 #pragma once
 
-#include <vector>
-#include "Bounds.hpp"
+#include <string>
+
 #include "Modifier.hpp"
-#include "../renderer/Renderer.hpp"
-#include "../input/Input.hpp"
+#include "Bounds.hpp"
+#include "../graphics/Renderer.hpp"
 
 namespace uilo {
 
+class UILO;
+
+enum class ElementType {
+    // Used for base classes of elements
+        NONE,
+
+    // Container
+        Column,
+        Row,
+        ScrollableColumn,
+        ScrollableRow,
+        FreeColumn,
+        FreeRow,
+        Grid,
+    
+    // Decor
+        Spacer,
+        Text,
+        Image,
+
+    // Interactible
+        Button,
+        Slider,
+        Textbox,
+};
+
 class Element {
 public:
-    Element() = default;
-    virtual ~Element() = default;
+    Element()                   = default;
+    virtual ~Element()          = default;
 
-    void setModifier(Modifier& modifier) { m_modifier = modifier; }
+    Bounds getBounds() const;   // stores position and size
+    Modifier& getModifier();    // stores color, alignment, visibility, ...
+    bool isDirty() const;       // should this element be updated
+    virtual void setUilo(UILO& uiloRef);
 
-    Bounds getBounds() const { return m_bounds; }
-    Modifier& getModifier() { return m_modifier; }
+    virtual void update(Bounds& parentBounds, float dt) = 0;
+    virtual void render(Renderer& renderer) = 0;
+    virtual bool checkRightClick(const Vec2f& mousePosition) = 0;
+    virtual bool checkLeftClick(const Vec2f& mousePosition) = 0;
+    virtual bool checkHover(const Vec2f& mousePosition) = 0;
+    virtual bool checkScroll(const Vec2f& mousePosition, float delta) = 0;
+    void resize(const Bounds& parent);
+
+    ElementType getType() const;
 
 protected:
-    Bounds m_bounds;
-    Modifier m_modifier;
+    UILO* m_uiloRef             = nullptr;
+    std::string m_name          = "";
 
-    virtual void update(const float dt) {}
-    virtual void render(Renderer& renderer) {}
-    virtual void checkHover(const Vec2f& mousePosition) {}
-    virtual void checkClick(const Vec2f& mousePosition) {}
-    virtual void checkScoll(const Vec2f& mousePosition, float vDelta) {}
+    Bounds m_bounds             = {{0, 0}, {0, 0}};
+    Bounds m_pastBounds         = {{0, 0}, {0, 0}};
+
+    bool m_dirty                = false;
+    bool m_markedForDeletion    = false;
+    bool m_hovered              = false;
+    
+    ElementType m_type          = ElementType::NONE;
+    Modifier m_modifier         = Modifier();
+
+    friend class UILO;
 };
 
 }

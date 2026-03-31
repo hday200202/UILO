@@ -3,16 +3,17 @@
 namespace uilo {
 
 struct Dimension {
-    float value;
-    bool percent; // true = percentage (0-100), false = pixels
-};
+    float value = 0;
+    bool percent = false;
 
-inline Dimension px(float v)  { return {v, false}; }
-inline Dimension pct(float v) { return {v, true}; }
+    float resolve(float parent) const {
+        return percent ? (value * 0.01f * parent) : value;
+    }
+};
 
 inline Dimension operator""_px(long double v)       { return {static_cast<float>(v), false}; }
 inline Dimension operator""_px(unsigned long long v) { return {static_cast<float>(v), false}; }
 inline Dimension operator""_pct(long double v)       { return {static_cast<float>(v), true}; }
-inline Dimension operator""_pct(unsigned long long v){ return {static_cast<float>(v), true}; }
+inline Dimension operator""_pct(unsigned long long v) { return {static_cast<float>(v), true}; }
 
 }
