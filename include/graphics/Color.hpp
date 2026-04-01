@@ -13,7 +13,7 @@ struct Color {
     Color(const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a) 
     : r(r), g(g), b(b), a(a) {}
 
-    Color inverted() const { return {255 - r, 255 - g, 255 - b, a}; }
+    Color inverted() const { return {static_cast<uint8_t>(255 - r), static_cast<uint8_t>(255 - g), static_cast<uint8_t>(255 - b), a}; }
 };
 
 namespace Colors {

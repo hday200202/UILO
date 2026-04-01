@@ -10,25 +10,11 @@ Container::Container(
     const std::string& name
 ) {
     m_modifier = modifier;
+    m_name = name;
     m_children.reserve(children.size());
 
     for (auto& child : children)
         m_children.push_back(child);
-}
-
-bool Container::checkRightClick(const Vec2f& mousePosition) {
-    bool childClicked = false;
-
-    for (auto& child : m_children)
-        if (child->getBounds().intersects(mousePosition))
-            childClicked |= child->checkRightClick(mousePosition);
-
-    if (!childClicked && m_bounds.intersects(mousePosition)) {
-        m_modifier.getOnRightClick()();
-        return true;
-    }
-
-    return childClicked;
 }
 
 bool Container::checkLeftClick(const Vec2f& mousePosition) {
@@ -39,7 +25,22 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
             childClicked |= child->checkLeftClick(mousePosition);
 
     if (!childClicked && m_bounds.intersects(mousePosition)) {
-        m_modifier.getOnLeftClick()();
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+        return true;
+    }
+
+    return childClicked;
+}
+
+bool Container::checkRightClick(const Vec2f& mousePosition) {
+    bool childClicked = false;
+
+    for (auto& child : m_children)
+        if (child->getBounds().intersects(mousePosition))
+            childClicked |= child->checkRightClick(mousePosition);
+
+    if (!childClicked && m_bounds.intersects(mousePosition)) {
+        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
         return true;
     }
 
@@ -72,7 +73,7 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
             childScrolled |= child->checkScroll(mousePosition, delta);
 
     if (!childScrolled && m_bounds.intersects(mousePosition)) {
-        m_modifier.getOnScroll()(delta);
+        if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
         return true;
     }
 

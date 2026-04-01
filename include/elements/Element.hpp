@@ -61,7 +61,7 @@ protected:
     Bounds m_bounds             = {{0, 0}, {0, 0}};
     Bounds m_pastBounds         = {{0, 0}, {0, 0}};
 
-    bool m_dirty                = false;
+    bool m_dirty                = true;
     bool m_markedForDeletion    = false;
     bool m_hovered              = false;
     

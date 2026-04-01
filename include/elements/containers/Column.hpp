@@ -6,7 +6,10 @@ namespace uilo {
 
 class Column : public Container {
 public:
+    using Container::Container;
 
+    void update(Bounds& parentBounds, float dt) override;
+    void render(Renderer& renderer) override;
 
 protected:
 
