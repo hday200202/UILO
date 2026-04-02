@@ -49,6 +49,33 @@ namespace uilo {
 
     ElementType Element::getType() const { return m_type; }
 
+    bool Element::checkRightClick(const Vec2f& mousePosition) {
+        if (!m_bounds.intersects({mousePosition, {1, 1}})) return false;
+        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
+        return true;
+    }
+
+    bool Element::checkLeftClick(const Vec2f& mousePosition) {
+        if (!m_bounds.intersects({mousePosition, {1, 1}})) return false;
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+        return true;
+    }
+
+    bool Element::checkHover(const Vec2f& mousePosition) {
+        if (!m_bounds.intersects({mousePosition, {1, 1}})) { m_hovered = false; return false; }
+        if (!m_hovered) {
+            m_hovered = true;
+            if (m_modifier.getOnHover()) m_modifier.getOnHover()();
+        }
+        return true;
+    }
+
+    bool Element::checkScroll(const Vec2f& mousePosition, float delta) {
+        if (!m_bounds.intersects({mousePosition, {1, 1}})) return false;
+        if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
+        return true;
+    }
+
     void Element::setUilo(UILO& uiloRef) {
         m_uiloRef = &uiloRef;
         uiloRef.m_elementPool.emplace_back(this);

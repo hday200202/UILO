@@ -8,7 +8,8 @@ SRCS     := ../include/UILO.cpp \
             ../include/elements/containers/Container.cpp \
             ../include/elements/containers/Column.cpp \
             ../include/elements/containers/Row.cpp \
-            ../include/elements/decor/Spacer.cpp
+            ../include/elements/decor/Spacer.cpp \
+            ../include/elements/decor/Text.cpp
 
 # SFML basic (new UILO)
 SFML_BASIC_TARGET  := bin/sfml_basic
@@ -34,7 +35,7 @@ metal_basic: $(METAL_BASIC_TARGET)
 
 $(SFML_BASIC_TARGET): $(SFML_BASIC_SRC) $(SRCS) $(HDRS)
 	mkdir -p bin
-	$(CXX) $(CXXFLAGS) $(SFML_BASIC_CFLAGS) $^ $(SFML_BASIC_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(SFML_BASIC_CFLAGS) $(SFML_BASIC_SRC) $(SRCS) $(SFML_BASIC_LDFLAGS) -o $@
 
 $(METAL_BASIC_TARGET): $(METAL_BASIC_SRC) $(SRCS) $(HDRS)
 	mkdir -p bin

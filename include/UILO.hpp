@@ -24,6 +24,7 @@ public:
     void setPage(const std::string& pageName);
     void setScreenBounds(const Bounds& bounds);
     void setOnResize(std::function<void(float, float)> callback);
+    float getDeltaTime() const { return m_deltaTime; }
 
     template <typename T>
     T* getElement(const std::string& name) {
@@ -41,6 +42,8 @@ private:
     Bounds m_screenBounds;
     std::chrono::steady_clock::time_point m_lastTime;
     std::function<void(float, float)> m_onResize;
+
+    float m_deltaTime = 1.f;
 
     friend class Element;
 };

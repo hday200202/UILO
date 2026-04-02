@@ -47,10 +47,10 @@ public:
 
     virtual void update(Bounds& parentBounds, float dt) = 0;
     virtual void render(Renderer& renderer) = 0;
-    virtual bool checkRightClick(const Vec2f& mousePosition) = 0;
-    virtual bool checkLeftClick(const Vec2f& mousePosition) = 0;
-    virtual bool checkHover(const Vec2f& mousePosition) = 0;
-    virtual bool checkScroll(const Vec2f& mousePosition, float delta) = 0;
+    virtual bool checkRightClick(const Vec2f& mousePosition);
+    virtual bool checkLeftClick(const Vec2f& mousePosition);
+    virtual bool checkHover(const Vec2f& mousePosition);
+    virtual bool checkScroll(const Vec2f& mousePosition, float delta);
     void resize(const Bounds& parent);
 
     ElementType getType() const;

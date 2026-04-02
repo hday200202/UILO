@@ -3,6 +3,7 @@
 
 #include "UILO.hpp"
 #include "Factory.hpp"
+#include "../assets/EmbeddedFont.hpp"
 
 using namespace uilo;
 
@@ -12,9 +13,15 @@ int main() {
     settings.antiAliasingLevel = 8;
     sf::RenderWindow window(sf::VideoMode({W, H}), "UILO - sfml_basic", sf::Style::Default, sf::State::Windowed, settings);
     window.setFramerateLimit(60);
+    // window.setVerticalSyncEnabled(true);
 
     // Wire renderer callbacks to SFML draw calls
     Renderer renderer;
+
+    // Load embedded font
+    sf::Font sfFont;
+    if (!sfFont.openFromMemory(uilo::EMBEDDED_DEJAVUSANS_FONT.data(), uilo::EMBEDDED_DEJAVUSANS_FONT.size()))
+        return 1;
 
     auto drawRect = [&](Rect* r) {
         const auto& verts   = r->getVertices();
@@ -31,6 +38,33 @@ int main() {
     renderer.setDrawFilledRect([&](Rect* r) { drawRect(r); });
     renderer.setDrawRoundedRect([&](Rect* r, float radius) {
         r->setCornerRadius(radius); drawRect(r);
+    });
+    renderer.setDrawText([&](Text* t) {
+        sf::Text sfText(sfFont, t->getString(), t->getFontSize());
+        auto c = t->getModifier().getColor();
+        sfText.setFillColor(sf::Color(c.r, c.g, c.b, c.a));
+
+        auto bounds    = t->getBounds();
+        auto textRect  = sfText.getLocalBounds();
+        Align align    = t->getModifier().getAlign();
+
+        float x, y;
+        if      (hasAlign(align, Align::CENTER_X))
+            x = bounds.position.x + (bounds.size.x - textRect.size.x) * 0.5f - textRect.position.x;
+        else if (hasAlign(align, Align::RIGHT))
+            x = bounds.right() - textRect.size.x - textRect.position.x;
+        else
+            x = bounds.position.x - textRect.position.x;
+
+        if      (hasAlign(align, Align::CENTER_Y))
+            y = bounds.position.y + (bounds.size.y - textRect.size.y) * 0.5f - textRect.position.y;
+        else if (hasAlign(align, Align::BOTTOM))
+            y = bounds.bottom() - textRect.size.y - textRect.position.y;
+        else
+            y = bounds.position.y - textRect.position.y;
+
+        sfText.setPosition({x, y});
+        window.draw(sfText);
     });
 
     // -------------------------------------------------------
@@ -49,12 +83,17 @@ int main() {
 
     auto* header = row(
         Modifier().setHeight(60_px).setColor(Colors::Red).setRounded(16.f).setPadding(4.f),
-        {}
+        {
+            text(Modifier().setColor(Colors::White).setFitContentWidth(true).setFitContentHeight(true).setAlign(Align::CENTER_X | Align::CENTER_Y), 20, "UILO Header")
+        }
     );
 
     auto* leftPanel = column(
         Modifier().setWidth(50_pct).setColor(Colors::Blue).setRounded(16.f).setPadding(4.f),
-        {}, "leftPanel"
+        {
+            text(Modifier().setColor(Colors::White).setFitContentWidth(true).setFitContentHeight(true), 16, "Left Panel"),
+            text(Modifier().setColor(Colors::White).setFitContentWidth(true).setFitContentHeight(true), 14, "Word wrap test", "", true)
+        }, "leftPanel"
     );
     auto* rightPanel = column(
         Modifier().setWidth(50_pct).setColor(Colors::Green).setRounded(16.f).setPadding(4.f),
@@ -85,6 +124,9 @@ int main() {
 
     Input input;
 
+    float clock = 0.f;
+    int dtCount = 0;
+
     while (window.isOpen()) {
         input.reset();
 
@@ -113,6 +155,15 @@ int main() {
         window.clear(sf::Color(20, 20, 20));
         uilo.render(renderer);
         window.display();
+
+        clock += uilo.getDeltaTime();
+        dtCount++;
+        
+        if (clock >= 0.5f) {
+            std::cout << "FPS: " << 1 / (clock / (float)dtCount) << std::endl;
+            clock = 0.f;
+            dtCount = 0;
+        }
     }
 
     return 0;

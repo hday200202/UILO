@@ -29,12 +29,12 @@ void UILO::setOnResize(std::function<void(float, float)> callback) {
 
 void UILO::update(const Input& input) {
     auto now = std::chrono::steady_clock::now();
-    float dt = std::chrono::duration<float>(now - m_lastTime).count();
+    m_deltaTime = std::chrono::duration<float>(now - m_lastTime).count();
     m_lastTime = now;
 
     if (!m_activePage) return;
 
-    m_activePage->update(m_screenBounds, dt);
+    m_activePage->update(m_screenBounds, m_deltaTime);
 
     // Free elements marked for deletion
     m_elementPool.erase(
