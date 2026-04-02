@@ -3,6 +3,7 @@
 namespace uilo {
 
 void Column::update(Bounds& parentBounds, float dt) {
+    pruneChildren();
     resize(parentBounds);
 
     // Group visible children by vertical alignment and sum heights

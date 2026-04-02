@@ -3,6 +3,7 @@
 namespace uilo {
 
 void Row::update(Bounds& parentBounds, float dt) {
+    pruneChildren();
     resize(parentBounds);
 
     // Group visible children by horizontal alignment and sum widths

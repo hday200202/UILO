@@ -42,6 +42,7 @@ public:
     Bounds getBounds() const;   // stores position and size
     Modifier& getModifier();    // stores color, alignment, visibility, ...
     bool isDirty() const;       // should this element be updated
+    void erase();
     virtual void setUilo(UILO& uiloRef);
 
     virtual void update(Bounds& parentBounds, float dt) = 0;
@@ -69,6 +70,7 @@ protected:
     Modifier m_modifier         = Modifier();
 
     friend class UILO;
+    friend class Container;
 };
 
 }

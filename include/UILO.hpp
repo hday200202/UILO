@@ -1,10 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "Page.hpp"
 #include "input/Input.hpp"
@@ -31,8 +33,9 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, Element*>              m_elements;
-    std::unordered_map<std::string, std::unique_ptr<Page>> m_pages;
+    std::vector<std::unique_ptr<Element>>                   m_elementPool; // owns all elements
+    std::unordered_map<std::string, Element*>               m_elements;    // named lookup
+    std::unordered_map<std::string, std::unique_ptr<Page>>  m_pages;
 
     Page*  m_activePage = nullptr;
     Bounds m_screenBounds;

@@ -36,6 +36,19 @@ void UILO::update(const Input& input) {
 
     m_activePage->update(m_screenBounds, dt);
 
+    // Free elements marked for deletion
+    m_elementPool.erase(
+        std::remove_if(m_elementPool.begin(), m_elementPool.end(),
+            [&](const std::unique_ptr<Element>& e) {
+                if (e->m_markedForDeletion) {
+                    if (!e->m_name.empty())
+                        m_elements.erase(e->m_name);
+                    return true;
+                }
+                return false;
+            }),
+        m_elementPool.end());
+
     auto* root = m_activePage->m_rootContainer;
     root->checkHover(input.mousePosition);
     if (input.leftMouse)          root->checkLeftClick(input.mousePosition);

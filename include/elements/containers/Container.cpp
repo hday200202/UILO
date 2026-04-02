@@ -1,5 +1,6 @@
 #include "Container.hpp"
 
+#include <algorithm>
 #include "../../UILO.hpp"
 
 namespace uilo {
@@ -78,6 +79,13 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
     }
 
     return childScrolled;
+}
+
+void Container::pruneChildren() {
+    m_children.erase(
+        std::remove_if(m_children.begin(), m_children.end(),
+            [](Element* e) { return e->m_markedForDeletion; }),
+        m_children.end());
 }
 
 void Container::setUilo(UILO& uiloRef) {

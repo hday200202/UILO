@@ -10,49 +10,35 @@ SRCS     := ../include/UILO.cpp \
             ../include/elements/containers/Row.cpp \
             ../include/elements/decor/Spacer.cpp
 
-# SFML backend
-SFML_TARGET  := bin/sfml_example
-SFML_SRC     := sfml_example.cpp
-SFML_LDFLAGS := -lsfml-graphics -lsfml-window -lsfml-system -lGL
-
-# SDL2 backend
-SDL_TARGET   := bin/sdl_example
-SDL_SRC      := sdl_example.cpp
-SDL_LDFLAGS  := -lSDL2 -lSDL2_ttf -lSDL2_image
-
 # SFML basic (new UILO)
-SDL_BASIC_TARGET  := bin/sfml_basic
-SDL_BASIC_SRC     := sfml_basic.cpp
+SFML_BASIC_TARGET  := bin/sfml_basic
+SFML_BASIC_SRC     := sfml_basic.cpp
 SFML_PREFIX       := /opt/homebrew/Cellar/sfml/3.0.2
-SDL_BASIC_CFLAGS  := -I$(SFML_PREFIX)/include
-SDL_BASIC_LDFLAGS := -L$(SFML_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system
+SFML_BASIC_CFLAGS  := -I$(SFML_PREFIX)/include
+SFML_BASIC_LDFLAGS := -L$(SFML_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system \
+                     -Wl,-sectcreate,__TEXT,__info_plist,Info.plist
 
-# Raylib backend
-RL_TARGET    := bin/raylib_example
-RL_SRC       := raylib_example.cpp
-RL_LDFLAGS   := -lraylib -lGL -lm -lpthread -ldl
+# Metal basic (macOS only)
+METAL_BASIC_TARGET  := bin/metal_basic
+METAL_BASIC_SRC     := metal_basic.mm
+METAL_BASIC_LDFLAGS := -framework Metal -framework Cocoa -framework QuartzCore
 
-.PHONY: all clean sfml sdl sdl_basic raylib
+HDRS := $(shell find ../include -name '*.hpp')
 
-all: sfml sdl sdl_basic raylib
+.PHONY: all clean sfml_basic metal_basic
 
-sfml: $(SFML_TARGET)
-sdl: $(SDL_TARGET)
-sdl_basic: $(SDL_BASIC_TARGET)
-raylib: $(RL_TARGET)
+all: sfml_basic metal_basic
 
-$(SFML_TARGET): $(SFML_SRC)
-	$(CXX) $(CXXFLAGS) $< $(SFML_LDFLAGS) -o $@
+sfml_basic: $(SFML_BASIC_TARGET)
+metal_basic: $(METAL_BASIC_TARGET)
 
-$(SDL_TARGET): $(SDL_SRC)
-	$(CXX) $(CXXFLAGS) $< $(SDL_LDFLAGS) -o $@
-
-$(SDL_BASIC_TARGET): $(SDL_BASIC_SRC) $(SRCS)
+$(SFML_BASIC_TARGET): $(SFML_BASIC_SRC) $(SRCS) $(HDRS)
 	mkdir -p bin
-	$(CXX) $(CXXFLAGS) $(SDL_BASIC_CFLAGS) $^ $(SDL_BASIC_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(SFML_BASIC_CFLAGS) $^ $(SFML_BASIC_LDFLAGS) -o $@
 
-$(RL_TARGET): $(RL_SRC)
-	$(CXX) $(CXXFLAGS) $< $(RL_LDFLAGS) -o $@
+$(METAL_BASIC_TARGET): $(METAL_BASIC_SRC) $(SRCS) $(HDRS)
+	mkdir -p bin
+	clang++ -std=c++20 -Wall -Wextra -I ../include $(METAL_BASIC_SRC) $(SRCS) $(METAL_BASIC_LDFLAGS) -o $@
 
 clean:
-	rm -f $(SFML_TARGET) $(SDL_TARGET) $(SDL_BASIC_TARGET) $(RL_TARGET)
+	rm -f $(SFML_BASIC_TARGET) $(METAL_BASIC_TARGET)
