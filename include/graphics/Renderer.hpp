@@ -18,12 +18,37 @@ public:
     void setDrawOutlineCircle(std::function<void(Circle*, float)> fn)   { m_drawOutlineCircle   = fn; }
     void setDrawText(std::function<void(Text*)> fn)                     { m_drawText            = fn; }
 
-    void drawFilledRect(Rect& rect)                                     { if (m_drawFilledRect)     m_drawFilledRect(&rect); }
-    void drawOutlineRect(Rect& rect, float thickness)                   { if (m_drawOutlineRect)    m_drawOutlineRect(&rect, thickness); }
-    void drawRoundedRect(Rect& rect, float radius)                      { if (m_drawRoundedRect)    m_drawRoundedRect(&rect, radius); }
-    void drawFilledCircle(Circle& circle)                               { if (m_drawFilledCircle)   m_drawFilledCircle(&circle); }
-    void drawOutlineCircle(Circle& circle, float thickness)             { if (m_drawOutlineCircle)  m_drawOutlineCircle(&circle, thickness); }
-    void drawText(Text& text)                                           { if (m_drawText)           m_drawText(&text);}
+    void drawFilledRect(Rect& rect) {
+        if (!m_drawFilledRect) return;
+        if (m_renderScale == 1.f) { m_drawFilledRect(&rect); return; }
+        Rect scaled; applyScale(rect, scaled);
+        m_drawFilledRect(&scaled);
+    }
+    void drawOutlineRect(Rect& rect, float thickness) {
+        if (!m_drawOutlineRect) return;
+        if (m_renderScale == 1.f) { m_drawOutlineRect(&rect, thickness); return; }
+        Rect scaled; applyScale(rect, scaled);
+        m_drawOutlineRect(&scaled, thickness * m_renderScale);
+    }
+    void drawRoundedRect(Rect& rect, float radius) {
+        if (!m_drawRoundedRect) return;
+        if (m_renderScale == 1.f) { m_drawRoundedRect(&rect, radius); return; }
+        Rect scaled; applyScale(rect, scaled);
+        m_drawRoundedRect(&scaled, radius * m_renderScale);
+    }
+    void drawFilledCircle(Circle& circle) {
+        if (!m_drawFilledCircle) return;
+        if (m_renderScale == 1.f) { m_drawFilledCircle(&circle); return; }
+        Circle scaled; applyScale(circle, scaled);
+        m_drawFilledCircle(&scaled);
+    }
+    void drawOutlineCircle(Circle& circle, float thickness) {
+        if (!m_drawOutlineCircle) return;
+        if (m_renderScale == 1.f) { m_drawOutlineCircle(&circle, thickness); return; }
+        Circle scaled; applyScale(circle, scaled);
+        m_drawOutlineCircle(&scaled, thickness * m_renderScale);
+    }
+    void drawText(Text& text)                                           { if (m_drawText) m_drawText(&text); }
 
 protected:
     std::function<void(Rect*)>              m_drawFilledRect            = nullptr;
@@ -32,6 +57,21 @@ protected:
     std::function<void(Circle*)>            m_drawFilledCircle          = nullptr;
     std::function<void(Circle*, float)>     m_drawOutlineCircle         = nullptr;
     std::function<void(Text*)>              m_drawText                  = nullptr;
+
+    float m_renderScale = 1.f;
+
+    void applyScale(const Rect& src, Rect& dst) {
+        dst.setColor(src.getColor());
+        dst.setPosition({src.getPosition().x * m_renderScale, src.getPosition().y * m_renderScale});
+        dst.setSize({src.getSize().x * m_renderScale, src.getSize().y * m_renderScale});
+    }
+    void applyScale(const Circle& src, Circle& dst) {
+        dst.setColor(src.getColor());
+        dst.setPosition({src.getPosition().x * m_renderScale, src.getPosition().y * m_renderScale});
+        dst.setSize({src.getSize().x * m_renderScale, src.getSize().y * m_renderScale});
+    }
+
+    friend class UILO;
 };
 
 }

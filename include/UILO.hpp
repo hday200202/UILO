@@ -24,6 +24,8 @@ public:
     void setPage(const std::string& pageName);
     void setScreenBounds(const Bounds& bounds);
     void setOnResize(std::function<void(float, float)> callback);
+    void setScale(float scale);
+    float getScale() const { return m_scale; }
     float getDeltaTime() const { return m_deltaTime; }
 
     template <typename T>
@@ -40,6 +42,7 @@ private:
 
     Page*  m_activePage = nullptr;
     Bounds m_screenBounds;
+    float  m_scale = 1.f;
     std::chrono::steady_clock::time_point m_lastTime;
     std::function<void(float, float)> m_onResize;
 

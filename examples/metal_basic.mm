@@ -4,6 +4,7 @@
 
 #include "UILO.hpp"
 #include "Factory.hpp"
+#include <iostream>
 
 using namespace uilo;
 
@@ -132,9 +133,17 @@ int main() {
                                                 inMode:NSDefaultRunLoopMode
                                                dequeue:YES])) {
                     if (ev.type == NSEventTypeKeyDown) {
-                        if ([ev.characters isEqualToString:@"d"])
+                        if ([ev.characters isEqualToString:@"d"]) {
                             if (auto* el = uilo.getElement<Column>("leftPanel"))
                                 el->erase();
+                        } else if ([ev.characters isEqualToString:@"+"]) {
+                            uilo.setScale(std::min(4.0f, uilo.getScale() + 0.25f));
+                            std::cout << "Scale: " << uilo.getScale() << std::endl;
+                        }
+                        else if ([ev.characters isEqualToString:@"-"]) {
+                            uilo.setScale(std::max(0.25f, uilo.getScale() - 0.25f));
+                            std::cout << "Scale: " << uilo.getScale() << std::endl;
+                        }
                     }
                     if (ev.type == NSEventTypeLeftMouseDown)  input.leftMouse  = true;
                     if (ev.type == NSEventTypeRightMouseDown) input.rightMouse = true;

@@ -23,6 +23,10 @@ void UILO::setScreenBounds(const Bounds& bounds) {
         m_onResize(bounds.size.x, bounds.size.y);
 }
 
+void UILO::setScale(float scale) {
+    if (scale > 0.f) m_scale = scale;
+}
+
 void UILO::setOnResize(std::function<void(float, float)> callback) {
     m_onResize = std::move(callback);
 }
@@ -34,7 +38,9 @@ void UILO::update(const Input& input) {
 
     if (!m_activePage) return;
 
-    m_activePage->update(m_screenBounds, m_deltaTime);
+    Bounds logicalBounds = {{m_screenBounds.position.x / m_scale, m_screenBounds.position.y / m_scale},
+                             {m_screenBounds.size.x     / m_scale, m_screenBounds.size.y     / m_scale}};
+    m_activePage->update(logicalBounds, m_deltaTime);
 
     // Free elements marked for deletion
     m_elementPool.erase(
@@ -49,15 +55,18 @@ void UILO::update(const Input& input) {
             }),
         m_elementPool.end());
 
+    // Divide mouse by scale so hit testing works in layout coords
+    Vec2f mouse = {input.mousePosition.x / m_scale, input.mousePosition.y / m_scale};
     auto* root = m_activePage->m_rootContainer;
-    root->checkHover(input.mousePosition);
-    if (input.leftMouse)          root->checkLeftClick(input.mousePosition);
-    if (input.rightMouse)         root->checkRightClick(input.mousePosition);
-    if (input.scrollDelta != 0.f) root->checkScroll(input.mousePosition, input.scrollDelta);
+    root->checkHover(mouse);
+    if (input.leftMouse)          root->checkLeftClick(mouse);
+    if (input.rightMouse)         root->checkRightClick(mouse);
+    if (input.scrollDelta != 0.f) root->checkScroll(mouse, input.scrollDelta);
 }
 
 void UILO::render(Renderer& renderer) {
     if (!m_activePage) return;
+    renderer.m_renderScale = m_scale;
     m_activePage->render(renderer);
 }
 
