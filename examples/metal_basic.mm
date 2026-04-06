@@ -136,11 +136,11 @@ int main() {
                         if ([ev.characters isEqualToString:@"d"]) {
                             if (auto* el = uilo.getElement<Column>("leftPanel"))
                                 el->erase();
-                        } else if ([ev.characters isEqualToString:@"+"]) {
+                        } else if ([ev.characters isEqualToString:@"+"] || [ev.characters isEqualToString:@"="]) {
                             uilo.setScale(std::min(4.0f, uilo.getScale() + 0.25f));
                             std::cout << "Scale: " << uilo.getScale() << std::endl;
                         }
-                        else if ([ev.characters isEqualToString:@"-"]) {
+                        else if ([ev.characters isEqualToString:@"-"] || [ev.characters isEqualToString:@"_"]) {
                             uilo.setScale(std::max(0.25f, uilo.getScale() - 0.25f));
                             std::cout << "Scale: " << uilo.getScale() << std::endl;
                         }

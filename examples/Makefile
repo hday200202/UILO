@@ -17,6 +17,7 @@ SFML_BASIC_SRC     := sfml_basic.cpp
 SFML_PREFIX       := /opt/homebrew/Cellar/sfml/3.0.2
 SFML_BASIC_CFLAGS  := -I$(SFML_PREFIX)/include
 SFML_BASIC_LDFLAGS := -L$(SFML_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system \
+                     -framework OpenGL \
                      -Wl,-sectcreate,__TEXT,__info_plist,Info.plist
 
 # Metal basic (macOS only)

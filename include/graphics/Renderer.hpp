@@ -17,6 +17,10 @@ public:
     void setDrawFilledCircle(std::function<void(Circle*)> fn)           { m_drawFilledCircle    = fn; }
     void setDrawOutlineCircle(std::function<void(Circle*, float)> fn)   { m_drawOutlineCircle   = fn; }
     void setDrawText(std::function<void(Text*)> fn)                     { m_drawText            = fn; }
+    void setPushClipRect(std::function<void(const Bounds&)> fn)         { m_pushClipRect        = fn; }
+    void setPushClipRoundedRect(std::function<void(const Bounds&, float)> fn) { m_pushClipRoundedRect = fn; }
+    void setPopClip(std::function<void()> fn)                           { m_popClip             = fn; }
+    void setBeginFrame(std::function<void()> fn)                        { m_beginFrame          = fn; }
 
     void drawFilledRect(Rect& rect) {
         if (!m_drawFilledRect) return;
@@ -50,6 +54,21 @@ public:
     }
     void drawText(Text& text)                                           { if (m_drawText) m_drawText(&text); }
 
+    void pushClipRect(const Bounds& bounds) {
+        if (!m_pushClipRect) return;
+        if (m_renderScale == 1.f) { m_pushClipRect(bounds); return; }
+        Bounds s; s.position = bounds.position.mul(m_renderScale); s.size = bounds.size.mul(m_renderScale);
+        m_pushClipRect(s);
+    }
+    void pushClipRoundedRect(const Bounds& bounds, float radius) {
+        if (!m_pushClipRoundedRect) return;
+        if (m_renderScale == 1.f) { m_pushClipRoundedRect(bounds, radius); return; }
+        Bounds s; s.position = bounds.position.mul(m_renderScale); s.size = bounds.size.mul(m_renderScale);
+        m_pushClipRoundedRect(s, radius * m_renderScale);
+    }
+    void popClip()                                                     { if (m_popClip) m_popClip(); }
+    void beginFrame()                                                  { if (m_beginFrame) m_beginFrame(); }
+
 protected:
     std::function<void(Rect*)>              m_drawFilledRect            = nullptr;
     std::function<void(Rect*, float)>       m_drawOutlineRect           = nullptr;
@@ -57,6 +76,10 @@ protected:
     std::function<void(Circle*)>            m_drawFilledCircle          = nullptr;
     std::function<void(Circle*, float)>     m_drawOutlineCircle         = nullptr;
     std::function<void(Text*)>              m_drawText                  = nullptr;
+    std::function<void(const Bounds&)>      m_pushClipRect              = nullptr;
+    std::function<void(const Bounds&, float)> m_pushClipRoundedRect     = nullptr;
+    std::function<void()>                   m_popClip                   = nullptr;
+    std::function<void()>                   m_beginFrame                = nullptr;
 
     float m_renderScale = 1.f;
 

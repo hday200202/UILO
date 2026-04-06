@@ -20,6 +20,8 @@ public:
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkHover(const Vec2f& mousePosition) override;
     bool checkScroll(const Vec2f& mousePosition, float delta) override;
+
+    void addElement(Element* element);
     
     void setUilo(UILO& uiloRef) override;
 

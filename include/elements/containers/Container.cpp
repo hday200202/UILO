@@ -81,6 +81,8 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
     return childScrolled;
 }
 
+void Container::addElement(Element* element) { m_children.push_back(element); }
+
 void Container::pruneChildren() {
     m_children.erase(
         std::remove_if(m_children.begin(), m_children.end(),

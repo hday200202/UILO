@@ -67,6 +67,7 @@ void UILO::update(const Input& input) {
 void UILO::render(Renderer& renderer) {
     if (!m_activePage) return;
     renderer.m_renderScale = m_scale;
+    renderer.beginFrame();
     m_activePage->render(renderer);
 }
 

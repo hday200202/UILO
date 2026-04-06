@@ -10,6 +10,7 @@
 
 #include "Page.hpp"
 #include "input/Input.hpp"
+#include "Factory.hpp"
 
 namespace uilo {
 
@@ -51,4 +52,8 @@ private:
     friend class Element;
 };
 
-}
+} // namespace uilo
+
+#ifdef UILO_SFML
+#include "renderer_interfaces/UILO_SFML.hpp"
+#endif
