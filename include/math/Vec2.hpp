@@ -19,7 +19,7 @@ struct Vec2f {
     Vec2f normalized() const {
         float mag = magnitude();
         if (mag == 0) return {0, 0};
-        return mul(1.f / mag); 
+        return mul(1.f / mag);
     }
 };
 
@@ -59,4 +59,4 @@ struct Vec2u {
     }
 };
 
-}
+} // namespace uilo

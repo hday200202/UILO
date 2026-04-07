@@ -11,4 +11,4 @@ struct Vertex {
     Vec2f texCoord = {0, 0};
 };
 
-}
+} // namespace uilo

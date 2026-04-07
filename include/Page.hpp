@@ -22,4 +22,4 @@ protected:
     friend class UILO;
 };
 
-}
+} // namespace uilo

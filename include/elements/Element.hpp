@@ -22,7 +22,7 @@ enum class ElementType {
         FreeColumn,
         FreeRow,
         Grid,
-    
+
     // Decor
         Spacer,
         Text,
@@ -65,7 +65,7 @@ protected:
     bool m_dirty                = true;
     bool m_markedForDeletion    = false;
     bool m_hovered              = false;
-    
+
     ElementType m_type          = ElementType::NONE;
     Modifier m_modifier         = Modifier();
 
@@ -73,4 +73,4 @@ protected:
     friend class Container;
 };
 
-}
+} // namespace uilo

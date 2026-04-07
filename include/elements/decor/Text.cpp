@@ -3,13 +3,15 @@
 namespace uilo {
 
 Text::Text(
-    Modifier modifier, 
-    uint16_t fontSize, 
+    Modifier modifier,
+    uint16_t fontSize,
     const std::string& string,
-    const std::string& fontName, 
+    const std::string& fontName,
     bool wordWrap,
     const std::string& name
-) : m_fontSize(fontSize), m_string(string), m_fontName(fontName), m_wordWrap(wordWrap) {
+)
+    : m_fontSize(fontSize), m_string(string), m_fontName(fontName), m_wordWrap(wordWrap)
+{
     m_modifier = modifier;
     m_type = ElementType::Text;
     m_name = name;
@@ -27,7 +29,7 @@ const std::string& Text::getFont() const { return m_fontName; }
 void Text::setWordWrap(bool wordWrap) { m_wordWrap = wordWrap; }
 bool Text::getWordWrap() const { return m_wordWrap; }
 
-void Text::update(Bounds& parentBounds, float)  { resize(parentBounds); }
-void Text::render(Renderer& renderer)           { renderer.drawText(*this); }
+void Text::update(Bounds& parentBounds, float) { resize(parentBounds); }
+void Text::render(Renderer& renderer) { renderer.drawText(*this); }
 
-}
+} // namespace uilo

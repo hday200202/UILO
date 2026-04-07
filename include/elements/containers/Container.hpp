@@ -22,7 +22,7 @@ public:
     bool checkScroll(const Vec2f& mousePosition, float delta) override;
 
     void addElement(Element* element);
-    
+
     void setUilo(UILO& uiloRef) override;
 
 protected:
@@ -30,4 +30,4 @@ protected:
     void pruneChildren();
 };
 
-}
+} // namespace uilo

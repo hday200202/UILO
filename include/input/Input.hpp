@@ -18,4 +18,4 @@ struct Input {
     }
 };
 
-}
+} // namespace uilo

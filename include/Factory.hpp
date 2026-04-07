@@ -21,6 +21,10 @@ inline Text* text(Modifier modifier, uint16_t fontSize, const std::string& strin
     return new Text(modifier, fontSize, string, fontName, wordWrap, name);
 }
 
+inline Image* image(Modifier modifier, const uint8_t* pixels, uint32_t width, uint32_t height, bool keepAspectRatio = true, const std::string& name = "") {
+    return new Image(modifier, pixels, width, height, keepAspectRatio, name);
+}
+
 inline Page* page(Container* root, const std::string& name) {
     return new Page(root, name);
 }

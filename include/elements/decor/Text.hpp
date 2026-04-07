@@ -37,4 +37,4 @@ private:
     bool m_wordWrap = false;
 };
 
-}
+} // namespace uilo

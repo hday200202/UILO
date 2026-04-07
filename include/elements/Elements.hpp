@@ -4,3 +4,4 @@
 #include "containers/Row.hpp"
 #include "decor/Spacer.hpp"
 #include "decor/Text.hpp"
+#include "decor/Image.hpp"

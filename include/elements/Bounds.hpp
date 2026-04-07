@@ -34,4 +34,4 @@ struct Bounds {
     }
 };
 
-}
+} // namespace uilo

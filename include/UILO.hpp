@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -11,6 +10,7 @@
 #include "Page.hpp"
 #include "input/Input.hpp"
 #include "Factory.hpp"
+#include "utils/Timer.hpp"
 
 namespace uilo {
 
@@ -44,10 +44,10 @@ private:
     Page*  m_activePage = nullptr;
     Bounds m_screenBounds;
     float  m_scale = 1.f;
-    std::chrono::steady_clock::time_point m_lastTime;
+    Timer m_timer;
     std::function<void(float, float)> m_onResize;
 
-    float m_deltaTime = 1.f;
+    float m_deltaTime = 0.f;
 
     friend class Element;
 };
@@ -56,4 +56,8 @@ private:
 
 #ifdef UILO_SFML
 #include "renderer_interfaces/UILO_SFML.hpp"
+#endif
+
+#ifdef UILO_SDL
+#include "renderer_interfaces/UILO_SDL.hpp"
 #endif

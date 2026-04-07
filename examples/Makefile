@@ -9,7 +9,8 @@ SRCS     := ../include/UILO.cpp \
             ../include/elements/containers/Column.cpp \
             ../include/elements/containers/Row.cpp \
             ../include/elements/decor/Spacer.cpp \
-            ../include/elements/decor/Text.cpp
+            ../include/elements/decor/Text.cpp \
+            ../include/elements/decor/Image.cpp
 
 # SFML basic (new UILO)
 SFML_BASIC_TARGET  := bin/sfml_basic
@@ -20,6 +21,15 @@ SFML_BASIC_LDFLAGS := -L$(SFML_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-
                      -framework OpenGL \
                      -Wl,-sectcreate,__TEXT,__info_plist,Info.plist
 
+# SDL3 basic
+SDL_BASIC_TARGET  := bin/sdl_basic
+SDL_BASIC_SRC     := sdl_basic.cpp
+SDL_PREFIX        := /opt/homebrew/Cellar/sdl3/3.4.4
+SDL_TTF_PREFIX    := /opt/homebrew/Cellar/sdl3_ttf/3.2.2
+SDL_IMG_PREFIX    := /opt/homebrew/Cellar/sdl3_image/3.4.2
+SDL_BASIC_CFLAGS  := -I$(SDL_PREFIX)/include -I$(SDL_TTF_PREFIX)/include -I$(SDL_IMG_PREFIX)/include
+SDL_BASIC_LDFLAGS := -L$(SDL_PREFIX)/lib -lSDL3 -L$(SDL_TTF_PREFIX)/lib -lSDL3_ttf -L$(SDL_IMG_PREFIX)/lib -lSDL3_image -framework OpenGL
+
 # Metal basic (macOS only)
 METAL_BASIC_TARGET  := bin/metal_basic
 METAL_BASIC_SRC     := metal_basic.mm
@@ -27,20 +37,25 @@ METAL_BASIC_LDFLAGS := -framework Metal -framework Cocoa -framework QuartzCore
 
 HDRS := $(shell find ../include -name '*.hpp')
 
-.PHONY: all clean sfml_basic metal_basic
+.PHONY: all clean sfml_basic metal_basic sdl_basic
 
-all: sfml_basic metal_basic
+all: sfml_basic metal_basic sdl_basic
 
 sfml_basic: $(SFML_BASIC_TARGET)
 metal_basic: $(METAL_BASIC_TARGET)
+sdl_basic: $(SDL_BASIC_TARGET)
 
 $(SFML_BASIC_TARGET): $(SFML_BASIC_SRC) $(SRCS) $(HDRS)
 	mkdir -p bin
 	$(CXX) $(CXXFLAGS) $(SFML_BASIC_CFLAGS) $(SFML_BASIC_SRC) $(SRCS) $(SFML_BASIC_LDFLAGS) -o $@
+
+$(SDL_BASIC_TARGET): $(SDL_BASIC_SRC) $(SRCS) $(HDRS)
+	mkdir -p bin
+	$(CXX) $(CXXFLAGS) $(SDL_BASIC_CFLAGS) $(SDL_BASIC_SRC) $(SRCS) $(SDL_BASIC_LDFLAGS) -o $@
 
 $(METAL_BASIC_TARGET): $(METAL_BASIC_SRC) $(SRCS) $(HDRS)
 	mkdir -p bin
 	clang++ -std=c++20 -Wall -Wextra -I ../include $(METAL_BASIC_SRC) $(SRCS) $(METAL_BASIC_LDFLAGS) -o $@
 
 clean:
-	rm -f $(SFML_BASIC_TARGET) $(METAL_BASIC_TARGET)
+	rm -f $(SFML_BASIC_TARGET) $(METAL_BASIC_TARGET) $(SDL_BASIC_TARGET)

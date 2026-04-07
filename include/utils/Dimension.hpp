@@ -16,4 +16,4 @@ inline Dimension operator""_px(unsigned long long v) { return {static_cast<float
 inline Dimension operator""_pct(long double v)       { return {static_cast<float>(v), true}; }
 inline Dimension operator""_pct(unsigned long long v) { return {static_cast<float>(v), true}; }
 
-}
+} // namespace uilo

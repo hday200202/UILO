@@ -11,35 +11,43 @@ int main() {
 
     SFMLRenderer renderer(window);
 
+    // Load settings icon
+    sf::Image settingsImg;
+    if (!settingsImg.loadFromFile("settings.jpeg")) return 1;
+    auto imgSize = settingsImg.getSize();
+    const uint8_t* imgPixels = settingsImg.getPixelsPtr();
+    uint32_t imgW = imgSize.x;
+    uint32_t imgH = imgSize.y;
+
     auto* header = row(
         Modifier().setHeight(60_px).setColor(Colors::Red).setRounded(16.f).setPadding(4.f),
-        {}
+        contains{}
     );
 
     auto* leftPanel = column(
         Modifier().setWidth(50_pct).setColor(Colors::Blue).setRounded(16.f).setPadding(4.f),
-        {
-            text(Modifier().setWidth(100_pct).setHeight(100_pct).setAlign(Align::TOP | Align::LEFT).setColor(Colors::White), 18, "Hello from the left panel!\nThis text should be clipped\nby the rounded corners\nof its parent container."),
+        contains{
+            text(Modifier().setWidth(100_pct).setHeight(100_pct).setAlign(Align::TOP | Align::RIGHT).setColor(Colors::White), 18, "Hello from the left panel!\nThis text should be clipped\nby the rounded corners\nof its parent container."),
         }, "leftPanel"
     );
     auto* rightPanel = column(
         Modifier().setWidth(50_pct).setColor(Colors::Green).setRounded(16.f).setPadding(4.f),
-        {
-            row(Modifier().setWidth(100_pct).setHeight(100_pct).setAlign(Align::CENTER_X | Align::CENTER_Y), {}),
+        contains{
+            image(Modifier().setWidth(256_px).setHeight(256_px), imgPixels, imgW, imgH),
         }
     );
     auto* content = row(
         Modifier().setHeight(100_pct).setColor({30, 30, 30, 255}),
-        {leftPanel, rightPanel}
+        contains{leftPanel, rightPanel}
     );
     auto* footer = row(
         Modifier().setHeight(40_px).setColor(Colors::Cyan).setRounded(16.f).setPadding(4.f)
             .setOnLeftClick([&](){ std::cout << "Footer Clicked" << std::endl; }),
-        {}
+        contains{}
     );
     auto* root = column(
         Modifier().setWidth(100_pct).setHeight(100_pct).setColor({25, 25, 25, 255}),
-        {header, content, footer}
+        contains{header, content, footer}
     );
 
     UILO uilo;
@@ -71,6 +79,14 @@ int main() {
                 if (e->code == sf::Keyboard::Key::Equal) {
                     uilo.setScale(std::max(0.25f, uilo.getScale() - 0.25f));
                     std::cout << "Scale: " << uilo.getScale() << std::endl;
+                }
+                if (e->code == sf::Keyboard::Key::Right) {
+                    leftPanel->getModifier().setWidth({leftPanel->getModifier().getWidth().value + 5, true});
+                    rightPanel->getModifier().setWidth({rightPanel->getModifier().getWidth().value - 5, true});
+                }
+                if (e->code == sf::Keyboard::Key::Left) {
+                    leftPanel->getModifier().setWidth({leftPanel->getModifier().getWidth().value - 5, true});
+                    rightPanel->getModifier().setWidth({rightPanel->getModifier().getWidth().value + 5, true});
                 }
             }
             if (auto* e = event->getIf<sf::Event::MouseButtonPressed>()) {

@@ -2,9 +2,7 @@
 
 namespace uilo {
 
-UILO::UILO()
-    : m_lastTime(std::chrono::steady_clock::now())
-{}
+UILO::UILO() {}
 
 void UILO::addPage(Page* page) {
     page->setUilo(*this);
@@ -18,6 +16,7 @@ void UILO::setPage(const std::string& pageName) {
 }
 
 void UILO::setScreenBounds(const Bounds& bounds) {
+    if (bounds.size.x <= 0.f || bounds.size.y <= 0.f) return;
     m_screenBounds = bounds;
     if (m_onResize)
         m_onResize(bounds.size.x, bounds.size.y);
@@ -32,14 +31,14 @@ void UILO::setOnResize(std::function<void(float, float)> callback) {
 }
 
 void UILO::update(const Input& input) {
-    auto now = std::chrono::steady_clock::now();
-    m_deltaTime = std::chrono::duration<float>(now - m_lastTime).count();
-    m_lastTime = now;
+    m_deltaTime = m_timer.restart();
 
     if (!m_activePage) return;
 
-    Bounds logicalBounds = {{m_screenBounds.position.x / m_scale, m_screenBounds.position.y / m_scale},
-                             {m_screenBounds.size.x     / m_scale, m_screenBounds.size.y     / m_scale}};
+    Bounds logicalBounds = {
+        {m_screenBounds.position.x / m_scale, m_screenBounds.position.y / m_scale},
+        {m_screenBounds.size.x / m_scale, m_screenBounds.size.y / m_scale}
+    };
     m_activePage->update(logicalBounds, m_deltaTime);
 
     // Free elements marked for deletion
@@ -59,8 +58,8 @@ void UILO::update(const Input& input) {
     Vec2f mouse = {input.mousePosition.x / m_scale, input.mousePosition.y / m_scale};
     auto* root = m_activePage->m_rootContainer;
     root->checkHover(mouse);
-    if (input.leftMouse)          root->checkLeftClick(mouse);
-    if (input.rightMouse)         root->checkRightClick(mouse);
+    if (input.leftMouse) root->checkLeftClick(mouse);
+    if (input.rightMouse) root->checkRightClick(mouse);
     if (input.scrollDelta != 0.f) root->checkScroll(mouse, input.scrollDelta);
 }
 

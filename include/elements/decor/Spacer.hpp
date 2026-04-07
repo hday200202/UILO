@@ -12,4 +12,4 @@ public:
     void render(Renderer& renderer) override;
 };
 
-}
+} // namespace uilo

@@ -8,6 +8,7 @@
 
 #include "../graphics/Renderer.hpp"
 #include "../elements/decor/Text.hpp"
+#include "../elements/decor/Image.hpp"
 #include "../utils/Alignment.hpp"
 #include "../../assets/EmbeddedFont.hpp"
 
@@ -33,11 +34,11 @@ public:
 
 private:
     sf::RenderWindow& m_window;
-    sf::Font          m_font;
+    sf::Font m_font;
 
     struct ClipEntry { sf::IntRect scissor; bool isRounded; Bounds bounds; float radius; };
     std::vector<ClipEntry> m_clipStack;
-    int                    m_stencilDepth = 0;
+    int m_stencilDepth = 0;
 
     // Build a VertexArray for a rounded-rect shape (used for stencil writes).
     sf::VertexArray vaFromBounds(const Bounds& b, float r) {
@@ -99,11 +100,15 @@ private:
             drawRectVA(r);
         });
         setDrawText([this](Text* t) {
-            sf::Text sfText(m_font, t->getString(), t->getFontSize());
+            const float s = m_renderScale;
+            sf::Text sfText(m_font, t->getString(), (uint32_t)(t->getFontSize() * s));
             auto c = t->getModifier().getColor();
             sfText.setFillColor(sf::Color(c.r, c.g, c.b, c.a));
 
-            auto bounds   = t->getBounds();
+            auto rawBounds = t->getBounds();
+            Bounds bounds;
+            bounds.position = rawBounds.position.mul(s);
+            bounds.size     = rawBounds.size.mul(s);
             auto textRect = sfText.getLocalBounds();
             Align align   = t->getModifier().getAlign();
 
@@ -124,6 +129,48 @@ private:
 
             sfText.setPosition({x, y});
             m_window.draw(sfText);
+        });
+
+        setDrawImage([this](Image* img) {
+            const auto& pixels = img->getPixels();
+            uint32_t nw = img->getNativeWidth();
+            uint32_t nh = img->getNativeHeight();
+            if (pixels.empty() || nw == 0 || nh == 0) return;
+
+            const float s = m_renderScale;
+            sf::Image sfImg({nw, nh}, pixels.data());
+            sf::Texture sfTex(sfImg);
+            sfTex.setSmooth(true);
+
+            auto rawBounds = img->getBounds();
+            Bounds bounds;
+            bounds.position = rawBounds.position.mul(s);
+            bounds.size     = rawBounds.size.mul(s);
+
+            sf::Sprite sprite(sfTex);
+            sprite.setScale({bounds.size.x / nw, bounds.size.y / nh});
+
+            Align align = img->getModifier().getAlign();
+            float dw = bounds.size.x;
+            float dh = bounds.size.y;
+
+            float x, y;
+            if      (hasAlign(align, Align::CENTER_X))
+                x = bounds.position.x + (bounds.size.x - dw) * 0.5f;
+            else if (hasAlign(align, Align::RIGHT))
+                x = bounds.right() - dw;
+            else
+                x = bounds.position.x;
+
+            if      (hasAlign(align, Align::CENTER_Y))
+                y = bounds.position.y + (bounds.size.y - dh) * 0.5f;
+            else if (hasAlign(align, Align::BOTTOM))
+                y = bounds.bottom() - dh;
+            else
+                y = bounds.position.y;
+
+            sprite.setPosition({x, y});
+            m_window.draw(sprite);
         });
 
         // --- Clip ---

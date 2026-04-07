@@ -96,4 +96,4 @@ void Container::setUilo(UILO& uiloRef) {
         child->setUilo(uiloRef);
 }
 
-}
+} // namespace uilo

@@ -21,4 +21,4 @@ void Page::setUilo(UILO& uiloRef) {
     m_rootContainer->setUilo(uiloRef);
 }
 
-}
+} // namespace uilo

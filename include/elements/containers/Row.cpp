@@ -8,19 +8,23 @@ void Row::update(Bounds& parentBounds, float dt) {
 
     std::vector<Element*> lft, mid, rgt;
     float totalFixed = 0.f;
+    float totalPct = 0.f;
 
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
+
         Align align = child->getModifier().getAlign();
         if      (hasAlign(align, Align::RIGHT))    rgt.push_back(child);
         else if (hasAlign(align, Align::CENTER_X)) mid.push_back(child);
         else                                       lft.push_back(child);
+
         Dimension dim = child->getModifier().getWidth();
         if (!dim.percent) totalFixed += dim.value;
+        else totalPct += dim.value;
     }
 
     const float remaining = m_bounds.size.x - totalFixed;
-    const float pctSlotW  = remaining;
+    const float pctSlotW  = totalPct > 0.f ? (remaining * 100.f / totalPct) : remaining;
 
     auto resolvedW = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getWidth();
@@ -37,16 +41,17 @@ void Row::update(Bounds& parentBounds, float dt) {
 
     auto layoutGroup = [&](std::vector<Element*>& group, float startX) {
         float cursorX = startX;
+
         for (auto* child : group) {
             float sw = slotSizeX(child);
             float rw = resolvedW(child);
             Align align = child->getModifier().getAlign();
-            // Adjust slot start so that after resize() applies horizontal alignment
-            // the element lands exactly at cursorX (avoids double-centering pct slots).
+
             float slotX;
             if      (hasAlign(align, Align::RIGHT))    slotX = cursorX + rw - sw;
             else if (hasAlign(align, Align::CENTER_X)) slotX = cursorX - (sw - rw) * 0.5f;
             else                                       slotX = cursorX;
+
             Bounds slot;
             slot.position = { slotX, m_bounds.position.y };
             slot.size     = { sw, m_bounds.size.y };
@@ -68,18 +73,18 @@ void Row::render(Renderer& renderer) {
         rect.setPosition(m_bounds.position);
         rect.setSize(m_bounds.size);
         rect.setColor(c);
-        if (radius > 0.f)
-            renderer.drawRoundedRect(rect, radius);
-        else
-            renderer.drawFilledRect(rect);
+
+        if (radius > 0.f)   renderer.drawRoundedRect(rect, radius);
+        else                renderer.drawFilledRect(rect);
     }
-    if (radius > 0.f)
-        renderer.pushClipRoundedRect(m_bounds, radius);
-    else
-        renderer.pushClipRect(m_bounds);
+
+    if (radius > 0.f)   renderer.pushClipRoundedRect(m_bounds, radius);
+    else                renderer.pushClipRect(m_bounds);
+
     for (auto* child : m_children)
         child->render(renderer);
+
     renderer.popClip();
 }
 
-}
+} // namespace uilo

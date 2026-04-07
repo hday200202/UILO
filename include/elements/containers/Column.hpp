@@ -10,10 +10,6 @@ public:
 
     void update(Bounds& parentBounds, float dt) override;
     void render(Renderer& renderer) override;
-
-protected:
-
-
 };
 
-}
+} // namespace uilo

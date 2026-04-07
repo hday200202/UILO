@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <algorithm>
 
 #include "../utils/Utils.hpp"
 #include "../math/Vec2.hpp"
@@ -64,4 +65,4 @@ private:
     float m_cornerRadius    = 0.f;
 };
 
-}
+} // namespace uilo

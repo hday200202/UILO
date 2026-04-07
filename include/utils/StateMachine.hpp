@@ -7,29 +7,24 @@
 
 namespace uilo {
 
-/*
-    Transition
-    Usage: Transition("Run", []() { return speed > 0.5f; })
-    Transition to "Run" state if speed is > 0.5f.
-*/
+// Transition
+// Usage: Transition("Run", []() { return speed > 0.5f; })
+// Transition to "Run" state if speed is > 0.5f.
 struct Transition {
     std::string             targetState;
     std::function<bool()>   condition;
 
     Transition(const std::string& targetState, std::function<bool()> condition)
-    : targetState(targetState), condition(condition) {}
+        : targetState(targetState), condition(condition) {}
 };
 
-
-/*
-    State
-    Usage:  State(
-                "Idle",
-                []()        { },
-                [](float dt){ },
-                []()        { }
-            );
-*/
+// State
+// Usage:  State(
+//             "Idle",
+//             []()        { },
+//             [](float dt){ },
+//             []()        { }
+//         );
 class State {
 public:
     State(
@@ -37,22 +32,23 @@ public:
         std::function<void()>       onEnter,
         std::function<void(float)>  onUpdate,
         std::function<void()>       onExit
-    ) : m_name(name), m_onEnter(onEnter), m_onUpdate(onUpdate), m_onExit(onExit) {}
+    )
+        : m_name(name), m_onEnter(onEnter), m_onUpdate(onUpdate), m_onExit(onExit) {}
 
-    void OnEnter()              { if (m_onEnter)    m_onEnter(); }
-    void OnUpdate(float dt)     { if (m_onUpdate)   m_onUpdate(dt); }
-    void OnExit()               { if (m_onExit)     m_onExit(); }
+    void onEnter()              { if (m_onEnter)    m_onEnter(); }
+    void onUpdate(float dt)     { if (m_onUpdate)   m_onUpdate(dt); }
+    void onExit()               { if (m_onExit)     m_onExit(); }
 
-    const std::string&  GetName() const         { return m_name; }
-    void                SetName(const std::string& name) { m_name = name; }
+    const std::string&  getName() const         { return m_name; }
+    void                setName(const std::string& name) { m_name = name; }
 
-    void SetOnEnter(std::function<void()> onEnter)          { m_onEnter = onEnter; }
-    void SetOnUpdate(std::function<void(float)> onUpdate)   { m_onUpdate = onUpdate; }
-    void SetOnExit(std::function<void()> onExit)            { m_onExit = onExit; }
+    void setOnEnter(std::function<void()> onEnter)          { m_onEnter = onEnter; }
+    void setOnUpdate(std::function<void(float)> onUpdate)   { m_onUpdate = onUpdate; }
+    void setOnExit(std::function<void()> onExit)            { m_onExit = onExit; }
 
-    void AddTransition(const Transition& transition)        { m_transitions.push_back(transition); }
+    void addTransition(const Transition& transition)        { m_transitions.push_back(transition); }
 
-    std::string CheckTransitions() const {
+    std::string checkTransitions() const {
         for (const auto& t : m_transitions)
             if (t.condition()) return t.targetState;
         return "";
@@ -67,32 +63,29 @@ private:
     std::vector<Transition>     m_transitions;
 };
 
-
-/*
-    StateMachine
-    Usage: StateMachine sm;
-           sm.AddState(idleState);
-           sm.SetState("Idle");
-           sm.Update(deltaTime);    // call every frame
-*/
+// StateMachine
+// Usage: StateMachine sm;
+//        sm.addState(idleState);
+//        sm.setState("Idle");
+//        sm.update(deltaTime);    // call every frame
 class StateMachine {
 public:
-    void AddState(const State& state)   { m_states[state.GetName()] = state; }
+    void addState(const State& state)   { m_states[state.getName()] = state; }
 
-    void SetState(const std::string& name) {
-        if (m_currentState) m_currentState->OnExit();
+    void setState(const std::string& name) {
+        if (m_currentState) m_currentState->onExit();
         m_currentState = &m_states.at(name);
-        m_currentState->OnEnter();
+        m_currentState->onEnter();
     }
 
-    void Update(float dt) {
-        std::string next = m_currentState->CheckTransitions();
-        if (!next.empty()) { SetState(next); return; }
-        m_currentState->OnUpdate(dt);
+    void update(float dt) {
+        std::string next = m_currentState->checkTransitions();
+        if (!next.empty()) { setState(next); return; }
+        m_currentState->onUpdate(dt);
     }
 
-    std::string GetCurrentState() const {
-        return m_currentState ? m_currentState->GetName() : "";
+    std::string getCurrentState() const {
+        return m_currentState ? m_currentState->getName() : "";
     }
 
 private:
@@ -100,4 +93,4 @@ private:
     State*                                  m_currentState = nullptr;
 };
 
-}
+} // namespace uilo

@@ -26,7 +26,7 @@ protected:
     Vec2f m_position        = {0, 0};
     Vec2f m_size            = {0, 0};
     Color m_color           = {255, 255, 255, 255};
-    
+
     std::vector<Vertex>     m_verts;
     std::vector<uint32_t>   m_indices;
 
@@ -35,7 +35,7 @@ protected:
 
 class Rect : public Shape {
 public:
-    void setCornerRadius(float radius) { m_cornerRadius = radius; updateVertices(); }        
+    void setCornerRadius(float radius) { m_cornerRadius = radius; updateVertices(); }
 
 private:
     float m_cornerRadius = 0;
@@ -159,4 +159,4 @@ private:
     }
 };
 
-}
+} // namespace uilo
