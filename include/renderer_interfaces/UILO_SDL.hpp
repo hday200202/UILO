@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../graphics/Renderer.hpp"
+#include "../input/Input.hpp"
 #include "../elements/decor/Text.hpp"
 #include "../elements/decor/Image.hpp"
 #include "../utils/Alignment.hpp"
@@ -44,14 +45,55 @@ public:
         if (m_font) TTF_CloseFont(m_font);
     }
 
+    Input getInput() override {
+        Input input;
+
+        // Mouse positions (state query, no event consumption)
+        float mx, my;
+        SDL_GetMouseState(&mx, &my);
+        input.mousePosition = {mx, my};
+
+        // Global position: try SDL_GetGlobalMouseState first,
+        // fall back to window position + local mouse if unavailable (e.g. Wayland)
+        float gmx, gmy;
+        SDL_GetGlobalMouseState(&gmx, &gmy);
+        int wx, wy;
+        SDL_GetWindowPosition(m_window, &wx, &wy);
+        input.monitorMousePosition = {(float)wx + mx, (float)wy + my};
+
+        // Button press edge detection
+        SDL_MouseButtonFlags buttons = SDL_GetMouseState(nullptr, nullptr);
+        bool leftDown  = (buttons & SDL_BUTTON_LMASK) != 0;
+        bool rightDown = (buttons & SDL_BUTTON_RMASK) != 0;
+        input.leftMouse  = leftDown  && !m_prevLeftDown;
+        input.rightMouse = rightDown && !m_prevRightDown;
+        m_prevLeftDown  = leftDown;
+        m_prevRightDown = rightDown;
+
+        // Consume accumulated scroll
+        input.scrollDelta = m_pendingScroll;
+        m_pendingScroll = 0.f;
+
+        return input;
+    }
+
+    Vec2f getWindowSize() override {
+        int w, h;
+        SDL_GetWindowSize(m_window, &w, &h);
+        return {(float)w, (float)h};
+    }
+
 private:
     SDL_Window* m_window;
     [[maybe_unused]] SDL_GLContext m_ctx;
     TTF_Font* m_font = nullptr;
+    bool m_prevLeftDown  = false;
+    bool m_prevRightDown = false;
 
     struct ClipEntry { bool isRounded; Bounds bounds; float radius; };
     std::vector<ClipEntry> m_clipStack;
     int m_stencilDepth = 0;
+    float m_displayScale = 1.f;
 
     void drawVertices(const std::vector<Vertex>& verts, const std::vector<uint32_t>& indices) {
         glBegin(GL_TRIANGLES);
@@ -74,8 +116,10 @@ private:
 
     // Recompute and apply scissor + stencil test based on current clip stack.
     void updateGLClipState() {
-        int w, h;
-        SDL_GetWindowSize(m_window, &w, &h);
+        int pw, ph;
+        SDL_GetWindowSizeInPixels(m_window, &pw, &ph);
+        float sx = m_displayScale;
+        float sy = m_displayScale;
 
         if (m_clipStack.empty()) {
             glDisable(GL_SCISSOR_TEST);
@@ -92,15 +136,16 @@ private:
                 x2 = std::min(x2, b.position.x + b.size.x);
                 y2 = std::min(y2, b.position.y + b.size.y);
             }
-            int sx1 = (int)std::floor(x1);
-            int sy1 = (int)std::floor(y1);
-            int sx2 = (int)std::ceil(x2);
-            int sy2 = (int)std::ceil(y2);
-            int sw = std::max(0, sx2 - sx1);
-            int sh = std::max(0, sy2 - sy1);
+            // Scale logical coords to pixel coords for glScissor.
+            int px1 = (int)std::floor(x1 * sx);
+            int py1 = (int)std::floor(y1 * sy);
+            int px2 = (int)std::ceil(x2 * sx);
+            int py2 = (int)std::ceil(y2 * sy);
+            int sw = std::max(0, px2 - px1);
+            int sh = std::max(0, py2 - py1);
             glEnable(GL_SCISSOR_TEST);
             // GL scissor origin is bottom-left; flip Y.
-            glScissor(sx1, h - sy2, sw, sh);
+            glScissor(px1, ph - py2, sw, sh);
         }
 
         if (m_stencilDepth == 0) {
@@ -278,13 +323,15 @@ private:
             m_clipStack.clear();
             m_stencilDepth = 0;
 
-            // Set up an orthographic projection matching logical window size (top-left origin).
-            int w, h;
-            SDL_GetWindowSize(m_window, &w, &h);
-            glViewport(0, 0, w, h);
+            // Use pixel dimensions for viewport, logical dimensions for projection.
+            int lw, lh, pw, ph;
+            SDL_GetWindowSize(m_window, &lw, &lh);
+            SDL_GetWindowSizeInPixels(m_window, &pw, &ph);
+            m_displayScale = (lw > 0) ? (float)pw / (float)lw : 1.f;
+            glViewport(0, 0, pw, ph);
             glMatrixMode(GL_PROJECTION);
             glLoadIdentity();
-            glOrtho(0.0, (double)w, (double)h, 0.0, -1.0, 1.0);
+            glOrtho(0.0, (double)lw, (double)lh, 0.0, -1.0, 1.0);
             glMatrixMode(GL_MODELVIEW);
             glLoadIdentity();
 

@@ -9,6 +9,7 @@ struct Vec2f {
     float x = 0.f;
     float y = 0.f;
 
+    Vec2f() = default;
     Vec2f(float x, float y) : x(x), y(y) {}
 
     float magnitude()       const { return std::sqrt((x*x) + (y*y)); }
@@ -21,12 +22,20 @@ struct Vec2f {
         if (mag == 0) return {0, 0};
         return mul(1.f / mag);
     }
+
+    bool operator==(const Vec2f& o) const { return x == o.x && y == o.y; }
+    bool operator!=(const Vec2f& o) const { return !(*this == o); }
+    bool operator<(const Vec2f& o)  const { return (x != o.x) ? x < o.x : y < o.y; }
+    bool operator>(const Vec2f& o)  const { return o < *this; }
+    bool operator<=(const Vec2f& o) const { return !(o < *this); }
+    bool operator>=(const Vec2f& o) const { return !(*this < o); }
 };
 
 struct Vec2i {
     int32_t x = 0;
     int32_t y = 0;
 
+    Vec2i() = default;
     Vec2i(int32_t x, int32_t y) : x(x), y(y) {}
 
     float magnitude() const { return std::sqrt(float(x*x) + float(y*y)); }
@@ -39,12 +48,20 @@ struct Vec2i {
         if (mag == 0) return {0.f, 0.f};
         return {x / mag, y / mag};
     }
+
+    bool operator==(const Vec2i& o) const { return x == o.x && y == o.y; }
+    bool operator!=(const Vec2i& o) const { return !(*this == o); }
+    bool operator<(const Vec2i& o)  const { return (x != o.x) ? x < o.x : y < o.y; }
+    bool operator>(const Vec2i& o)  const { return o < *this; }
+    bool operator<=(const Vec2i& o) const { return !(o < *this); }
+    bool operator>=(const Vec2i& o) const { return !(*this < o); }
 };
 
 struct Vec2u {
     uint32_t x = 0;
     uint32_t y = 0;
 
+    Vec2u() = default;
     Vec2u(uint32_t x, uint32_t y) : x(x), y(y) {}
 
     float magnitude() const { return std::sqrt(float(x*x) + float(y*y)); }
@@ -57,6 +74,13 @@ struct Vec2u {
         if (mag == 0) return {0.f, 0.f};
         return {x / mag, y / mag};
     }
+
+    bool operator==(const Vec2u& o) const { return x == o.x && y == o.y; }
+    bool operator!=(const Vec2u& o) const { return !(*this == o); }
+    bool operator<(const Vec2u& o)  const { return (x != o.x) ? x < o.x : y < o.y; }
+    bool operator>(const Vec2u& o)  const { return o < *this; }
+    bool operator<=(const Vec2u& o) const { return !(o < *this); }
+    bool operator>=(const Vec2u& o) const { return !(*this < o); }
 };
 
 } // namespace uilo

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../graphics/Renderer.hpp"
+#include "../input/Input.hpp"
 #include "../elements/decor/Text.hpp"
 #include "../elements/decor/Image.hpp"
 #include "../utils/Alignment.hpp"
@@ -32,9 +33,41 @@ public:
         setupCallbacks();
     }
 
+    Input getInput() override {
+        Input input;
+
+        // Mouse positions (state query, no event consumption)
+        auto mpos = sf::Mouse::getPosition(m_window);
+        input.mousePosition = {(float)mpos.x, (float)mpos.y};
+
+        auto gpos = sf::Mouse::getPosition();
+        input.monitorMousePosition = {(float)gpos.x, (float)gpos.y};
+
+        // Button press edge detection
+        bool leftDown  = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
+        bool rightDown = sf::Mouse::isButtonPressed(sf::Mouse::Button::Right);
+        input.leftMouse  = leftDown  && !m_prevLeftDown;
+        input.rightMouse = rightDown && !m_prevRightDown;
+        m_prevLeftDown  = leftDown;
+        m_prevRightDown = rightDown;
+
+        // Consume accumulated scroll
+        input.scrollDelta = m_pendingScroll;
+        m_pendingScroll = 0.f;
+
+        return input;
+    }
+
+    Vec2f getWindowSize() override {
+        auto size = m_window.getSize();
+        return {(float)size.x, (float)size.y};
+    }
+
 private:
     sf::RenderWindow& m_window;
     sf::Font m_font;
+    bool m_prevLeftDown  = false;
+    bool m_prevRightDown = false;
 
     struct ClipEntry { sf::IntRect scissor; bool isRounded; Bounds bounds; float radius; };
     std::vector<ClipEntry> m_clipStack;

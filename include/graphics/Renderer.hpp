@@ -2,6 +2,7 @@
 
 #include <functional>
 #include "Shape.hpp"
+#include "../input/Input.hpp"
 
 namespace uilo {
 
@@ -119,6 +120,15 @@ public:
         if (m_beginFrame) m_beginFrame();
     }
 
+    // Feed scroll delta from your event loop (scroll has no state query).
+    void feedScrollDelta(float delta) { m_pendingScroll += delta; }
+
+    // Backend queries current input state (positions, buttons) without consuming events.
+    virtual Input getInput() { return {}; }
+
+    // Backend queries current window size.
+    virtual Vec2f getWindowSize() { return {0.f, 0.f}; }
+
 protected:
     std::function<void(Rect*)>               m_drawFilledRect = nullptr;
     std::function<void(Rect*, float)>        m_drawOutlineRect = nullptr;
@@ -133,6 +143,7 @@ protected:
     std::function<void()>                    m_beginFrame = nullptr;
 
     float m_renderScale = 1.f;
+    float m_pendingScroll = 0.f;
 
     void applyScale(const Rect& src, Rect& dst) {
         dst.setColor(src.getColor());

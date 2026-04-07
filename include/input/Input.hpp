@@ -10,6 +10,7 @@ struct Input {
     float scrollDelta = 0.f;
 
     Vec2f mousePosition = {0, 0};
+    Vec2f monitorMousePosition = {0, 0};
 
     inline void reset() {
         leftMouse = false;

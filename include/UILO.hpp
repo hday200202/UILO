@@ -9,6 +9,7 @@
 
 #include "Page.hpp"
 #include "input/Input.hpp"
+#include "input/Mouse.hpp"
 #include "Factory.hpp"
 #include "utils/Timer.hpp"
 
@@ -19,6 +20,7 @@ public:
     UILO();
 
     void update(const Input& input);
+    bool update(Renderer& renderer);
     void render(Renderer& renderer);
 
     void addPage(Page* page);

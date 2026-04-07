@@ -33,6 +33,9 @@ void UILO::setOnResize(std::function<void(float, float)> callback) {
 void UILO::update(const Input& input) {
     m_deltaTime = m_timer.restart();
 
+    Mouse::get().setWindowPosition(input.mousePosition);
+    Mouse::get().setMonitorPosition(input.monitorMousePosition);
+
     if (!m_activePage) return;
 
     Bounds logicalBounds = {
@@ -61,6 +64,19 @@ void UILO::update(const Input& input) {
     if (input.leftMouse) root->checkLeftClick(mouse);
     if (input.rightMouse) root->checkRightClick(mouse);
     if (input.scrollDelta != 0.f) root->checkScroll(mouse, input.scrollDelta);
+}
+
+bool UILO::update(Renderer& renderer) {
+    // Check for window resize by querying current size
+    Vec2f winSize = renderer.getWindowSize();
+    if (winSize.x > 0.f && winSize.y > 0.f) {
+        if (winSize != Vec2f(m_screenBounds.size.x, m_screenBounds.size.y))
+            setScreenBounds({{0.f, 0.f}, winSize});
+    }
+
+    Input input = renderer.getInput();
+    update(input);
+    return true;
 }
 
 void UILO::render(Renderer& renderer) {
