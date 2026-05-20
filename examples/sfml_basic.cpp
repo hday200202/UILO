@@ -7,8 +7,14 @@ using namespace uilo;
 
 int main() {
     const unsigned int W = 1280, H = 720;
-    sf::RenderWindow window(sf::VideoMode({W, H}), "UILO - sfml_basic", sf::Style::Default, sf::State::Windowed, SFMLRenderer::recommendedSettings());
-    window.setFramerateLimit(60);
+    sf::RenderWindow window(
+        sf::VideoMode({W, H}), 
+        "UILO - sfml_basic", 
+        sf::Style::Default, 
+        sf::State::Windowed, 
+        SFMLRenderer::recommendedSettings()
+    );
+    window.setVerticalSyncEnabled(true);
 
     SFMLRenderer renderer(window);
 
