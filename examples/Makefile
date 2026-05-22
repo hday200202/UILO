@@ -1,6 +1,8 @@
 CXX      := g++
 CXXFLAGS := -std=c++20 -Wall -Wextra -I ../include
 
+UNAME := $(shell uname)
+
 SRCS     := ../include/UILO.cpp \
             ../include/Page.cpp \
             ../include/elements/Element.cpp \
@@ -15,20 +17,30 @@ SRCS     := ../include/UILO.cpp \
 # SFML basic (new UILO)
 SFML_BASIC_TARGET  := bin/sfml_basic
 SFML_BASIC_SRC     := sfml_basic.cpp
-SFML_PREFIX       := /opt/homebrew/Cellar/sfml/3.0.2
+ifeq ($(UNAME), Darwin)
+SFML_PREFIX        := /opt/homebrew/Cellar/sfml/3.0.2
 SFML_BASIC_CFLAGS  := -I$(SFML_PREFIX)/include
 SFML_BASIC_LDFLAGS := -L$(SFML_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system \
                      -framework OpenGL \
                      -Wl,-sectcreate,__TEXT,__info_plist,Info.plist
+else
+SFML_BASIC_CFLAGS  :=
+SFML_BASIC_LDFLAGS := -lsfml-graphics -lsfml-window -lsfml-system -lGL
+endif
 
 # SDL3 basic
 SDL_BASIC_TARGET  := bin/sdl_basic
 SDL_BASIC_SRC     := sdl_basic.cpp
+ifeq ($(UNAME), Darwin)
 SDL_PREFIX        := /opt/homebrew/Cellar/sdl3/3.4.4
 SDL_TTF_PREFIX    := /opt/homebrew/Cellar/sdl3_ttf/3.2.2
 SDL_IMG_PREFIX    := /opt/homebrew/Cellar/sdl3_image/3.4.2
 SDL_BASIC_CFLAGS  := -I$(SDL_PREFIX)/include -I$(SDL_TTF_PREFIX)/include -I$(SDL_IMG_PREFIX)/include
 SDL_BASIC_LDFLAGS := -L$(SDL_PREFIX)/lib -lSDL3 -L$(SDL_TTF_PREFIX)/lib -lSDL3_ttf -L$(SDL_IMG_PREFIX)/lib -lSDL3_image -framework OpenGL
+else
+SDL_BASIC_CFLAGS  :=
+SDL_BASIC_LDFLAGS := -lSDL3 -lSDL3_ttf -lSDL3_image
+endif
 
 # Metal basic (macOS only)
 METAL_BASIC_TARGET  := bin/metal_basic
