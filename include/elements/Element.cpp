@@ -1,0 +1,81 @@
+#include "Element.hpp"
+#include "../UILO.hpp"
+
+namespace uilo {
+    
+    sf::FloatRect Element::getBounds() const { return m_bounds; }
+    Modifier& Element::getModifier() { return m_modifier; }
+    bool Element::isDirty() const { return m_dirty; }
+    void Element::erase() { m_markedForDeletion = true; }
+    ElementType Element::getType() const { return m_type; }
+
+    void Element::resize(const sf::FloatRect& parent) {
+        float op = m_modifier.getOuterPadding();
+
+        // Resolve against parent, shrink by outer padding on lrtb
+        m_bounds.size.x = m_modifier.getWidth().resolve(parent.size.x) - (2.f * op);
+        m_bounds.size.y = m_modifier.getHeight().resolve(parent.size.y) - (2.f * op);
+
+        sf::FloatRect inner = {
+            {parent.position.x + op, parent.position.y + op},
+            {parent.size.x - (2.f * op), parent.size.y - (2.f * op)}
+        };
+
+        Align align = m_modifier.getAlign();
+
+        // Horizontal alignment
+        if (hasAlign(align, Align::Left))
+            m_bounds.position.x = inner.position.x;
+        else if (hasAlign(align, Align::Right))
+            m_bounds.position.x = inner.position.x + inner.size.x - m_bounds.size.x;
+        else if (hasAlign(align, Align::CenterX))
+            m_bounds.position.x = inner.position.x + (inner.size.x - m_bounds.size.x) * 0.5f;
+        else m_bounds.position.x = inner.position.x;
+
+        // Vertical alignment
+        if (hasAlign(align, Align::Top))
+            m_bounds.position.y = inner.position.y;
+        else if (hasAlign(align, Align::Bottom))
+            m_bounds.position.y = inner.position.y + inner.size.y - m_bounds.size.y;
+        else if (hasAlign(align, Align::CenterY))
+            m_bounds.position.y = inner.position.y + (inner.size.y - m_bounds.size.y) * 0.5f;
+        else m_bounds.position.y = inner.position.y;
+    }
+
+    bool Element::checkLeftClick(const sf::Vector2f& mousePosition) {
+        if (!m_bounds.contains(mousePosition)) return false;
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+        return true;
+    }
+
+    bool Element::checkRightClick(const sf::Vector2f& mousePosition) {
+        if (!m_bounds.contains(mousePosition)) return false;
+        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
+        return true;
+    }
+
+    bool Element::checkHover(const sf::Vector2f& mousePosition) {
+        if (!m_bounds.contains(mousePosition)) {
+            m_hovered = false;
+            return false;
+        }
+        if (!m_hovered) {
+            m_hovered = true;
+            if (m_modifier.getOnHover()) m_modifier.getOnHover()();
+        }
+        return true;
+    }
+
+    bool Element::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+        if (!m_bounds.contains(mousePosition)) return false;
+        if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
+        return true;
+    }
+
+    void Element::setUILO(UILO& uiloRef) {
+        m_uiloRef = &uiloRef;
+        uiloRef.m_elementPool.emplace_back(this);
+        if (!m_name.empty()) uiloRef.m_elements[m_name] = this;
+    }
+
+}
