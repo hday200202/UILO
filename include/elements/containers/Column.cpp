@@ -1,5 +1,7 @@
 #include "Column.hpp"
+#include "../../UILO.hpp"
 #include "../../utils/RenderUtils.hpp"
+#include <algorithm>
 
 namespace uilo {
 
@@ -10,6 +12,28 @@ Column::Column(Modifier modifier, ColumnOptions options, contains children, cons
 void Column::update(sf::FloatRect& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);
+
+    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    if (scale != m_lastScale && m_lastScale > 0.f) {
+        m_scrollOffset *= scale / m_lastScale;
+        m_lastScale = scale;
+    }
+
+    // Scrollable path: simple top-to-bottom stack, no alignment bucketing
+    if (m_options.getScrollable()) {
+        float cursorY = m_bounds.position.y - m_scrollOffset;
+        m_contentHeight = 0.f;
+        for (auto* child : m_children) {
+            if (!child->getModifier().getVisible()) continue;
+            Dimension dim = child->getModifier().getHeight();
+            float rh = dim.percent ? (m_bounds.size.y * dim.value / 100.f) : dim.value * scale;
+            sf::FloatRect slot{ {m_bounds.position.x, cursorY}, {m_bounds.size.x, rh} };
+            child->update(slot, dt);
+            cursorY      += rh;
+            m_contentHeight += rh;
+        }
+        return;
+    }
 
     std::vector<Element*> top;
     std::vector<Element*> mid;
@@ -34,7 +58,7 @@ void Column::update(sf::FloatRect& parentBounds, float dt) {
         else                                        top.push_back(child);
 
         Dimension dim = child->getModifier().getHeight();
-        if (!dim.percent) totalFixed += dim.value;
+        if (!dim.percent) totalFixed += dim.value * scale;
         else totalPct += dim.value;
     }
 
@@ -54,12 +78,12 @@ void Column::update(sf::FloatRect& parentBounds, float dt) {
     */
     auto resolvedH = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? (dim.value / 100.f * pctSlotH) : dim.value;
+        return dim.percent ? (dim.value / 100.f * pctSlotH) : dim.value * scale;
     };
 
     auto slotSizeY = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? pctSlotH : dim.value;
+        return dim.percent ? pctSlotH : dim.value * scale;
     };
 
     /*
@@ -113,7 +137,8 @@ void Column::update(sf::FloatRect& parentBounds, float dt) {
 }
 
 void Column::render(sf::RenderTarget& target) {
-    const float r = m_options.getRounding();
+    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float r = m_options.getRounding() * scale;
 
     if (r <= 0.f) {
         const sf::View originalView = target.getView();
@@ -176,6 +201,24 @@ void Column::render(sf::RenderTarget& target) {
         sprite.setPosition(m_bounds.position);
         target.draw(sprite);
     }
+}
+
+bool Column::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+    if (!m_bounds.contains(mousePosition)) return false;
+
+    if (m_options.getScrollable()) {
+        // Let nested scrollables consume first
+        for (auto* child : m_children)
+            if (child->getBounds().contains(mousePosition))
+                if (child->checkScroll(mousePosition, delta)) return true;
+
+        float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
+        m_scrollOffset = std::clamp(m_scrollOffset - delta * m_options.getScrollSpeed(),
+                                    0.f, maxScroll);
+        return true;
+    }
+
+    return Container::checkScroll(mousePosition, delta);
 }
 
 }

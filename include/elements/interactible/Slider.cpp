@@ -31,6 +31,7 @@ void Slider::update(sf::FloatRect& parentBounds, float /*dt*/) {
 void Slider::render(sf::RenderTarget& target) {
     if (!m_modifier.getVisible()) return;
 
+    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const sf::Vector2f pos  = m_bounds.position;
     const sf::Vector2f size = m_bounds.size;
 
@@ -46,7 +47,7 @@ void Slider::render(sf::RenderTarget& target) {
     t = std::clamp(t, 0.f, 1.f);
 
     const float thumbX = trackLeft + t * trackW;
-    const float r      = m_options.getTrackRounding();
+    const float r      = m_options.getTrackRounding() * scale;
 
     if (r <= 0.f) {
         sf::RectangleShape bg({trackW, trackH});
@@ -75,7 +76,7 @@ void Slider::render(sf::RenderTarget& target) {
 
     if (m_options.getThumbShape() == ThumbShape::Circle) {
         const float radius = m_options.getThumbSize().x > 0.f
-            ? m_options.getThumbSize().x * 0.5f
+            ? m_options.getThumbSize().x * scale * 0.5f
             : size.y * 0.4f;
         sf::CircleShape thumb(radius);
         thumb.setOrigin({radius, radius});
@@ -83,9 +84,9 @@ void Slider::render(sf::RenderTarget& target) {
         thumb.setFillColor(m_options.getThumbColor());
         target.draw(thumb);
     } else {
-        const float tw = m_options.getThumbSize().x;
-        const float th = m_options.getThumbSize().y > 0.f ? m_options.getThumbSize().y : size.y;
-        const float tr = m_options.getThumbRounding();
+        const float tw = m_options.getThumbSize().x * scale;
+        const float th = m_options.getThumbSize().y > 0.f ? m_options.getThumbSize().y * scale : size.y;
+        const float tr = m_options.getThumbRounding() * scale;
         if (tr <= 0.f) {
             sf::RectangleShape thumb({tw, th});
             thumb.setOrigin({tw * 0.5f, th * 0.5f});
@@ -150,13 +151,14 @@ void Slider::applyValue(float raw) {
 }
 
 float Slider::resolveThumbHalfWidth() const {
+    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     if (m_options.getThumbShape() == ThumbShape::Circle) {
         const float r = m_options.getThumbSize().x > 0.f
-            ? m_options.getThumbSize().x * 0.5f
+            ? m_options.getThumbSize().x * scale * 0.5f
             : m_bounds.size.y * 0.4f;
         return r;
     }
-    return m_options.getThumbSize().x * 0.5f;
+    return m_options.getThumbSize().x * scale * 0.5f;
 }
 
 }

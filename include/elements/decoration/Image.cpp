@@ -1,4 +1,5 @@
 #include "Image.hpp"
+#include "../../UILO.hpp"
 
 namespace uilo {
 
@@ -83,7 +84,8 @@ void Image::update(sf::FloatRect& parentBounds, float dt) {
     resize(parentBounds);
 
     auto texSize = m_texture.getSize();
-    float op    = m_modifier.getOuterPadding();
+    float scale  = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    float op     = m_modifier.getOuterPadding() * scale;
     Align align = m_modifier.getAlign();
 
     if (m_options.getLockAspectWidth()) {

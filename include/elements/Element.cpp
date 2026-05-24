@@ -10,11 +10,16 @@ namespace uilo {
     ElementType Element::getType() const { return m_type; }
 
     void Element::resize(const sf::FloatRect& parent) {
-        float op = m_modifier.getOuterPadding();
+        float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+        float op = m_modifier.getOuterPadding() * scale;
+
+        auto resolveScaled = [&](Dimension dim, float parentSize) -> float {
+            return dim.percent ? (dim.value / 100.f * parentSize) : (dim.value * scale);
+        };
 
         // Resolve against parent, shrink by outer padding on lrtb
-        m_bounds.size.x = m_modifier.getWidth().resolve(parent.size.x) - (2.f * op);
-        m_bounds.size.y = m_modifier.getHeight().resolve(parent.size.y) - (2.f * op);
+        m_bounds.size.x = resolveScaled(m_modifier.getWidth(),  parent.size.x) - (2.f * op);
+        m_bounds.size.y = resolveScaled(m_modifier.getHeight(), parent.size.y) - (2.f * op);
 
         sf::FloatRect inner = {
             {parent.position.x + op, parent.position.y + op},
@@ -68,8 +73,11 @@ namespace uilo {
 
     bool Element::checkScroll(const sf::Vector2f& mousePosition, float delta) {
         if (!m_bounds.contains(mousePosition)) return false;
-        if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
-        return true;
+        if (m_modifier.getOnScroll()) {
+            m_modifier.getOnScroll()(delta);
+            return true;
+        }
+        return false;
     }
 
     void Element::setUILO(UILO& uiloRef) {

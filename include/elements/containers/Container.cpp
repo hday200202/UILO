@@ -63,18 +63,16 @@ bool Container::checkHover(const sf::Vector2f& mousePosition) {
 }
 
 bool Container::checkScroll(const sf::Vector2f& mousePosition, float delta) {
-    bool childScrolled = false;
-
     for (auto& child : m_children)
         if (child->getBounds().contains(mousePosition))
-            childScrolled |= child->checkScroll(mousePosition, delta);
+            if (child->checkScroll(mousePosition, delta)) return true;
 
-    if (!childScrolled && m_bounds.contains(mousePosition)) {
-        if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
+    if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
+        m_modifier.getOnScroll()(delta);
         return true;
     }
 
-    return childScrolled;
+    return false;
 }
 
 void Container::addElement(Element* element) {m_children.push_back(element); }
