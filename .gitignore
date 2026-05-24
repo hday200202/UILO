@@ -5,3 +5,4 @@ UILO_OLD.hpp
 tests/valgrind.txt
 checklist.txt
 examples/bin
+obj

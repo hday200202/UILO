@@ -3,8 +3,8 @@
 
 namespace uilo {
 
-Row::Row(Modifier modifier, RowOptions /*options*/, contains children, const std::string& name)
-    : Container(modifier, children, name)
+Row::Row(Modifier modifier, RowOptions options, contains children, const std::string& name)
+    : Container(modifier, children, name), m_options(options)
 {}
 
 void Row::update(sf::FloatRect& parentBounds, float dt) {
@@ -113,7 +113,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
 }
 
 void Row::render(sf::RenderTarget& target) {
-    const float r = m_modifier.getRounding();
+    const float r = m_options.getRounding();
 
     if (r <= 0.f) {
         const sf::View originalView = target.getView();
@@ -129,7 +129,7 @@ void Row::render(sf::RenderTarget& target) {
 
         target.setView(clipView);
 
-        sf::Color c = m_modifier.getColor();
+        sf::Color c = m_options.getColor();
         if (c.a > 0) {
             sf::RectangleShape rect;
             rect.setPosition(m_bounds.position);
@@ -155,7 +155,7 @@ void Row::render(sf::RenderTarget& target) {
         m_rt.setView(fullView);
         m_rt.clear(sf::Color::Transparent);
 
-        sf::Color c = m_modifier.getColor();
+        sf::Color c = m_options.getColor();
         if (c.a > 0) {
             sf::RectangleShape bg(m_bounds.size);
             bg.setPosition(m_bounds.position);

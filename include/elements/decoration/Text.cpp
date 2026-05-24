@@ -25,7 +25,7 @@ Text::Text(
 }
 
 void Text::init() {
-    m_lastColor = m_modifier.getColor();
+    m_lastColor = m_options.getColor();
     rebuildText();
     m_loaded = true;
 }
@@ -87,7 +87,7 @@ void Text::rebuildText() {
     else
         m_text->setLineAlignment(sf::Text::LineAlignment::Left);
 
-    m_text->setFillColor(m_modifier.getColor());
+    m_text->setFillColor(m_options.getColor());
 }
 
 bool Text::isLoaded() const { return m_loaded; }
@@ -112,7 +112,7 @@ void Text::update(sf::FloatRect& parentBounds, float dt) {
 void Text::render(sf::RenderTarget& target) {
     if (!m_loaded || !m_text) return;
 
-    sf::Color cur = m_modifier.getColor();
+    sf::Color cur = m_options.getColor();
     if (cur != m_lastColor) {
         m_lastColor = cur;
         m_text->setFillColor(cur);

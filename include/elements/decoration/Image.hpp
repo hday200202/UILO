@@ -14,6 +14,7 @@ public:
 
     ImageOptions& setPath(const std::string& path) { m_path = path;            return *this; }
     ImageOptions& setImage(sf::Image img)           { m_image = std::move(img); return *this; }
+    ImageOptions& setColor(const sf::Color& c)      { m_color = c;              return *this; }
     ImageOptions& setLockAspectWidth(bool v)        { m_lockAspectWidth  = v;   return *this; }
     ImageOptions& setLockAspectHeight(bool v)       { m_lockAspectHeight = v;   return *this; }
     ImageOptions& setRecolor(bool v)                { m_recolor          = v;   return *this; }
@@ -23,6 +24,7 @@ public:
 
     const std::string&              getPath()             const { return m_path; }
     const std::optional<sf::Image>& getImage()            const { return m_image; }
+    sf::Color                       getColor()            const { return m_color; }
     bool                            getLockAspectWidth()  const { return m_lockAspectWidth; }
     bool                            getLockAspectHeight() const { return m_lockAspectHeight; }
     bool                            getRecolor()          const { return m_recolor; }
@@ -33,6 +35,7 @@ public:
 private:
     std::string              m_path;
     std::optional<sf::Image> m_image;
+    sf::Color m_color           = sf::Color::White;
     bool m_lockAspectWidth  = false;
     bool m_lockAspectHeight = false;
     bool m_recolor          = false;
@@ -47,6 +50,9 @@ public:
 
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;
+
+    const ImageOptions& getOptions() const     { return m_options; }
+    void setOptions(const ImageOptions& opts)  { m_options = opts; rebuildTexture(); }
 
     bool isLoaded() const;
 

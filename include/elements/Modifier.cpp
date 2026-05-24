@@ -15,7 +15,6 @@ Modifier& Modifier::setHeight(Dimension dim) {
     return *this;
 }
 
-Modifier& Modifier::setColor(const sf::Color& color) { m_color = color; return *this; }
 Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *this; }
 Modifier& Modifier::setOnLeftClick(FuncPtr leftClick) { m_onLeftClick = leftClick; return *this; }
 Modifier& Modifier::setOnRightClick(FuncPtr rightClick) { m_onRightClick = rightClick; return *this; }
@@ -23,8 +22,6 @@ Modifier& Modifier::setOnScroll(ScrollFuncPtr scroll) { m_onScroll = scroll; ret
 Modifier& Modifier::setOuterPadding(float padding) { m_outerPadding = padding; return *this; }
 Modifier& Modifier::setVisible(bool visible) { m_visible = visible; return *this; }
 Modifier& Modifier::setFreePosition(const sf::Vector2f& freePos) { m_freePosition = freePos; return *this; }
-Modifier& Modifier::setRounding(float r) { m_rounding = r < 0.f ? 0.f : r; return *this; }
-
 Modifier& Modifier::setOnHover(FuncPtr hover, float delay) {
     m_onHover = hover;
     m_hoverDelay = delay;
@@ -33,7 +30,6 @@ Modifier& Modifier::setOnHover(FuncPtr hover, float delay) {
 
 Dimension Modifier::getWidth() const { return m_width; }
 Dimension Modifier::getHeight() const { return m_height; }
-sf::Color Modifier::getColor() const { return m_color; }
 Align Modifier::getAlign() const { return m_align; }
 const FuncPtr& Modifier::getOnLeftClick() const { return m_onLeftClick; }
 const FuncPtr& Modifier::getOnRightClick() const { return m_onRightClick; }
@@ -43,6 +39,5 @@ float Modifier::getHoverDelay() const { return m_hoverDelay; }
 float Modifier::getOuterPadding() const { return m_outerPadding; }
 bool Modifier::getVisible() const { return m_visible; }
 sf::Vector2f Modifier::getFreePosition() const { return m_freePosition; }
-float Modifier::getRounding() const { return m_rounding; }
 
 } // namespace uilo

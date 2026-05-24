@@ -23,7 +23,7 @@ Image::Image(
 void Image::init() {
     if (m_options.getRecolor() ||
         m_options.getClipEllipse()) {
-        m_lastRecolor = m_modifier.getColor();
+        m_lastRecolor = m_options.getColor();
         rebuildTexture();
     } else {
         if (!m_texture.loadFromImage(m_originalImage)) return;
@@ -38,7 +38,7 @@ void Image::rebuildTexture() {
     auto size = working.getSize();
 
     if (m_options.getRecolor()) {
-        sf::Color tgt = m_modifier.getColor();
+        sf::Color tgt = m_options.getColor();
         for (unsigned y = 0; y < size.y; ++y) {
             for (unsigned x = 0; x < size.x; ++x) {
                 sf::Color px = working.getPixel({x, y});
@@ -112,7 +112,7 @@ void Image::render(sf::RenderTarget& target) {
     if (!m_loaded || !m_sprite) return;
 
     if (m_options.getRecolor()) {
-        sf::Color cur = m_modifier.getColor();
+        sf::Color cur = m_options.getColor();
         if (cur != m_lastRecolor) {
             m_lastRecolor = cur;
             rebuildTexture();
