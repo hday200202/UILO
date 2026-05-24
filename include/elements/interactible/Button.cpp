@@ -2,11 +2,11 @@
 
 namespace uilo {
 
-Button::Button(Modifier modifier, Text* text, const std::string& name)
+Button::Button(Modifier modifier, ButtonOptions options, const std::string& name)
     : Row(modifier, {}, name)
 {
     m_type = ElementType::Button;
-    m_children.push_back(text);
+    if (options.getLabel()) m_children.push_back(options.getLabel());
 }
 
 bool Button::checkLeftClick(const sf::Vector2f& mousePosition) {

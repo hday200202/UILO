@@ -5,6 +5,7 @@ namespace uilo {
 
 Spacer::Spacer(
     Modifier modifier,
+    SpacerOptions /*options*/,
     const std::string& name
 ) {
     m_modifier = modifier;

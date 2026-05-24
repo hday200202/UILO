@@ -1,43 +1,52 @@
 #pragma once
 
+#include <optional>
+
+#include <SFML/Graphics.hpp>
+
 #include "../Element.hpp"
 
 namespace uilo {
 
-enum class ImageOptions : uint8_t {
-    NONE             = 0,
-    LockAspectWidth  = 1 << 0,
-    LockAspectHeight = 1 << 1,
-    Recolor          = 1 << 2,
-    ClipEllipse      = 1 << 3,
-    FlipH            = 1 << 4,
-    FlipV            = 1 << 5,
+class ImageOptions {
+public:
+    ImageOptions() = default;
+
+    ImageOptions& setPath(const std::string& path) { m_path = path;            return *this; }
+    ImageOptions& setImage(sf::Image img)           { m_image = std::move(img); return *this; }
+    ImageOptions& setLockAspectWidth(bool v)        { m_lockAspectWidth  = v;   return *this; }
+    ImageOptions& setLockAspectHeight(bool v)       { m_lockAspectHeight = v;   return *this; }
+    ImageOptions& setRecolor(bool v)                { m_recolor          = v;   return *this; }
+    ImageOptions& setClipEllipse(bool v)            { m_clipEllipse      = v;   return *this; }
+    ImageOptions& setFlipH(bool v)                  { m_flipH            = v;   return *this; }
+    ImageOptions& setFlipV(bool v)                  { m_flipV            = v;   return *this; }
+
+    const std::string&              getPath()             const { return m_path; }
+    const std::optional<sf::Image>& getImage()            const { return m_image; }
+    bool                            getLockAspectWidth()  const { return m_lockAspectWidth; }
+    bool                            getLockAspectHeight() const { return m_lockAspectHeight; }
+    bool                            getRecolor()          const { return m_recolor; }
+    bool                            getClipEllipse()      const { return m_clipEllipse; }
+    bool                            getFlipH()            const { return m_flipH; }
+    bool                            getFlipV()            const { return m_flipV; }
+
+private:
+    std::string              m_path;
+    std::optional<sf::Image> m_image;
+    bool m_lockAspectWidth  = false;
+    bool m_lockAspectHeight = false;
+    bool m_recolor          = false;
+    bool m_clipEllipse      = false;
+    bool m_flipH            = false;
+    bool m_flipV            = false;
 };
-
-inline ImageOptions operator|(ImageOptions a, ImageOptions b) {
-    return static_cast<ImageOptions>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
-}
-
-inline bool hasOption(ImageOptions set, ImageOptions flag) {
-    return (static_cast<uint8_t>(set) & static_cast<uint8_t>(flag)) != 0;
-}
 
 class Image : public Element {
 public:
-    Image(Modifier modifier,
-          const std::string& path,
-          ImageOptions options = ImageOptions::NONE,
-          const std::string& name = "");
-
-    Image(Modifier modifier,
-          sf::Image sourceImg,
-          ImageOptions options = ImageOptions::NONE,
-          const std::string& name = "");
+    explicit Image(Modifier modifier, ImageOptions options = {}, const std::string& name = "");
 
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;
-
-    void setOptions(ImageOptions options) { m_options = options; rebuildTexture(); } 
 
     bool isLoaded() const;
 
@@ -45,11 +54,10 @@ private:
     void rebuildTexture();
     void init();
 
+    ImageOptions              m_options;
     sf::Image                 m_originalImage;
     sf::Texture               m_texture;
     std::optional<sf::Sprite> m_sprite;
-
-    ImageOptions              m_options     = ImageOptions::NONE;
     sf::Color                 m_lastRecolor = sf::Color::White;
     bool                      m_loaded      = false;
 };

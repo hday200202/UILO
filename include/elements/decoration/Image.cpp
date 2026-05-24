@@ -4,7 +4,6 @@ namespace uilo {
 
 Image::Image(
     Modifier modifier,
-    const std::string& path,
     ImageOptions options,
     const std::string& name
 ) : m_options(options) {
@@ -12,26 +11,18 @@ Image::Image(
     m_name     = name;
     m_type     = ElementType::Image;
 
-    if (!m_originalImage.loadFromFile(path)) return;
-    init();
-}
-
-Image::Image(
-    Modifier modifier,
-    sf::Image sourceImg,
-    ImageOptions options,
-    const std::string& name
-) : m_originalImage(std::move(sourceImg)), m_options(options) {
-    m_modifier = modifier;
-    m_name     = name;
-    m_type     = ElementType::Image;
-
-    init();
+    if (options.getImage().has_value()) {
+        m_originalImage = *options.getImage();
+        init();
+    } else if (!options.getPath().empty()) {
+        if (!m_originalImage.loadFromFile(options.getPath())) return;
+        init();
+    }
 }
 
 void Image::init() {
-    if (hasOption(m_options, ImageOptions::Recolor) ||
-        hasOption(m_options, ImageOptions::ClipEllipse)) {
+    if (m_options.getRecolor() ||
+        m_options.getClipEllipse()) {
         m_lastRecolor = m_modifier.getColor();
         rebuildTexture();
     } else {
@@ -46,7 +37,7 @@ void Image::rebuildTexture() {
     sf::Image working = m_originalImage;
     auto size = working.getSize();
 
-    if (hasOption(m_options, ImageOptions::Recolor)) {
+    if (m_options.getRecolor()) {
         sf::Color tgt = m_modifier.getColor();
         for (unsigned y = 0; y < size.y; ++y) {
             for (unsigned x = 0; x < size.x; ++x) {
@@ -64,7 +55,7 @@ void Image::rebuildTexture() {
         }
     }
 
-    if (hasOption(m_options, ImageOptions::ClipEllipse)) {
+    if (m_options.getClipEllipse()) {
         float cx = size.x * 0.5f;
         float cy = size.y * 0.5f;
         for (unsigned y = 0; y < size.y; ++y) {
@@ -95,7 +86,7 @@ void Image::update(sf::FloatRect& parentBounds, float dt) {
     float op    = m_modifier.getOuterPadding();
     Align align = m_modifier.getAlign();
 
-    if (hasOption(m_options, ImageOptions::LockAspectWidth)) {
+    if (m_options.getLockAspectWidth()) {
         float aspect     = static_cast<float>(texSize.y) / static_cast<float>(texSize.x);
         m_bounds.size.y  = m_bounds.size.x * aspect;
 
@@ -105,7 +96,7 @@ void Image::update(sf::FloatRect& parentBounds, float dt) {
         else if (hasAlign(align, Align::CenterY))   m_bounds.position.y = innerTop + (innerH - m_bounds.size.y) * 0.5f;
         else                                      m_bounds.position.y = innerTop;
     }
-    else if (hasOption(m_options, ImageOptions::LockAspectHeight)) {
+    else if (m_options.getLockAspectHeight()) {
         float aspect     = static_cast<float>(texSize.x) / static_cast<float>(texSize.y);
         m_bounds.size.x  = m_bounds.size.y * aspect;
 
@@ -120,7 +111,7 @@ void Image::update(sf::FloatRect& parentBounds, float dt) {
 void Image::render(sf::RenderTarget& target) {
     if (!m_loaded || !m_sprite) return;
 
-    if (hasOption(m_options, ImageOptions::Recolor)) {
+    if (m_options.getRecolor()) {
         sf::Color cur = m_modifier.getColor();
         if (cur != m_lastRecolor) {
             m_lastRecolor = cur;

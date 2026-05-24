@@ -3,6 +3,10 @@
 
 namespace uilo {
 
+Column::Column(Modifier modifier, ColumnOptions /*options*/, contains children, const std::string& name)
+    : Container(modifier, children, name)
+{}
+
 void Column::update(sf::FloatRect& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);

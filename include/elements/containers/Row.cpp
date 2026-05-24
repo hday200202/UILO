@@ -3,6 +3,10 @@
 
 namespace uilo {
 
+Row::Row(Modifier modifier, RowOptions /*options*/, contains children, const std::string& name)
+    : Container(modifier, children, name)
+{}
+
 void Row::update(sf::FloatRect& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);

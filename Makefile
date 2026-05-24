@@ -14,6 +14,8 @@ SRCS := \
 	include/elements/decoration/Spacer.cpp \
 	include/elements/decoration/Image.cpp \
 	include/elements/decoration/Text.cpp \
+	include/elements/interactible/Interactible.cpp \
+	include/elements/interactible/Slider.cpp \
 	include/elements/interactible/Button.cpp
 
 OBJS := $(patsubst include/%.cpp,obj/%.o,$(SRCS))

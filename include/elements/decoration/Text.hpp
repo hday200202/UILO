@@ -1,7 +1,6 @@
 #pragma once
 
 #include <optional>
-#include <cstdint>
 
 #include <SFML/Graphics.hpp>
 
@@ -9,50 +8,56 @@
 
 namespace uilo {
 
-enum class TextOptions : uint16_t {
-    NONE          = 0,
-    LeftAlign     = 1 << 0,
-    RightAlign    = 1 << 1,
-    CenterX       = 1 << 2,
-    CenterY       = 1 << 3,
-    Wrap          = 1 << 4,
-    Bold          = 1 << 5,
-    Italic        = 1 << 6,
-    Underlined    = 1 << 7,
-    StrikeThrough = 1 << 8,
-    TopAlign      = 1 << 9,
-    BottomAlign   = 1 << 10,
+class TextOptions {
+public:
+    TextOptions() = default;
+
+    TextOptions& setFont(const std::string& path) { m_fontPath = path; m_fontRef = nullptr; return *this; }
+    TextOptions& setFont(const sf::Font& font)    { m_fontRef = &font; m_fontPath.clear();  return *this; }
+    TextOptions& setContent(const std::string& s) { m_content = s;          return *this; }
+    TextOptions& setCharSize(unsigned int n)       { m_charSize = n;         return *this; }
+    TextOptions& setWrap(bool v)                   { m_wrap = v;             return *this; }
+    TextOptions& setBold(bool v)                   { m_bold = v;             return *this; }
+    TextOptions& setItalic(bool v)                 { m_italic = v;           return *this; }
+    TextOptions& setUnderlined(bool v)             { m_underlined = v;       return *this; }
+    TextOptions& setStrikeThrough(bool v)          { m_strikeThrough = v;    return *this; }
+    TextOptions& setTextAlignX(Align a)            { m_textAlignX = a;       return *this; }
+    TextOptions& setTextAlignY(Align a)            { m_textAlignY = a;       return *this; }
+
+    const std::string& getFontPath()       const { return m_fontPath; }
+    const sf::Font*    getFontRef()        const { return m_fontRef; }
+    const std::string& getContent()        const { return m_content; }
+    unsigned int       getCharSize()       const { return m_charSize; }
+    bool               getWrap()           const { return m_wrap; }
+    bool               getBold()           const { return m_bold; }
+    bool               getItalic()         const { return m_italic; }
+    bool               getUnderlined()     const { return m_underlined; }
+    bool               getStrikeThrough()  const { return m_strikeThrough; }
+    Align              getTextAlignX()     const { return m_textAlignX; }
+    Align              getTextAlignY()     const { return m_textAlignY; }
+
+private:
+    std::string     m_fontPath;
+    const sf::Font* m_fontRef       = nullptr;
+    std::string     m_content;
+    unsigned int    m_charSize      = 30;
+    bool            m_wrap          = false;
+    bool            m_bold          = false;
+    bool            m_italic        = false;
+    bool            m_underlined    = false;
+    bool            m_strikeThrough = false;
+    Align           m_textAlignX    = Align::Left;
+    Align           m_textAlignY    = Align::Top;
 };
-
-inline TextOptions operator|(TextOptions a, TextOptions b) {
-    return static_cast<TextOptions>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
-}
-
-inline bool hasOption(TextOptions set, TextOptions flag) {
-    return (static_cast<uint16_t>(set) & static_cast<uint16_t>(flag)) != 0;
-}
 
 class Text : public Element {
 public:
-    Text(Modifier modifier,
-         const std::string& fontPath,
-         const std::string& content,
-         unsigned int charSize,
-         TextOptions options = TextOptions::NONE,
-         const std::string& name = "");
-
-    Text(Modifier modifier,
-         const sf::Font& font,
-         const std::string& content,
-         unsigned int charSize,
-         TextOptions options = TextOptions::NONE,
-         const std::string& name = "");
+    explicit Text(Modifier modifier, TextOptions options = {}, const std::string& name = "");
 
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;
 
     void setString(const std::string& content);
-    void setOptions(TextOptions options) { m_options = options; rebuildText(); }
 
     bool isLoaded() const;
 
@@ -61,17 +66,15 @@ private:
     void rebuildText();
     void init();
 
-    sf::Font              m_ownedFont;
-    const sf::Font*       m_fontPtr = nullptr;
-
-    std::string           m_content;
-    unsigned int          m_charSize   = 30;
+    TextOptions             m_options;
+    sf::Font                m_ownedFont;
+    const sf::Font*         m_fontPtr       = nullptr;
+    std::string             m_content;
+    unsigned int            m_charSize      = 30;
     std::optional<sf::Text> m_text;
-
-    TextOptions           m_options         = TextOptions::NONE;
-    sf::Color             m_lastColor       = sf::Color::White;
-    float                 m_lastWrapWidth   = 0.f;
-    bool                  m_loaded          = false;
+    sf::Color               m_lastColor     = sf::Color::White;
+    float                   m_lastWrapWidth = 0.f;
+    bool                    m_loaded        = false;
 };
 
 }

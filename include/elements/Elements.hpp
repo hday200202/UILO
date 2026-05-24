@@ -8,6 +8,8 @@
 #include "decoration/Image.hpp"
 #include "decoration/Text.hpp"
 
+#include "interactible/Interactible.hpp"
+#include "interactible/Slider.hpp"
 #include "interactible/Button.hpp"
 
 // Factory

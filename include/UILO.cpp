@@ -1,4 +1,5 @@
 #include "UILO.hpp"
+#include "elements/interactible/Interactible.hpp"
 #include <algorithm>
 
 namespace uilo {
@@ -16,7 +17,17 @@ void UILO::addPage(Page* page) {
 
 void UILO::setPage(const std::string& pageName) {
     auto it = m_pages.find(pageName);
-    if (it != m_pages.end()) m_activePage = it->second.get();
+    if (it != m_pages.end()) {
+        setCurrInteractible(nullptr);
+        m_activePage = it->second.get();
+    }
+}
+
+void UILO::setCurrInteractible(Interactible* i) {
+    m_interactibleActivatedThisFrame = true;
+    if (m_currInteractible == i) return;
+    if (m_currInteractible) m_currInteractible->onDeactivate();
+    m_currInteractible = i;
 }
 
 void UILO::setScale(float scale) { if (scale > 0.f) m_scale = scale; }
@@ -54,8 +65,19 @@ void UILO::update() {
 
     auto* root = m_activePage->m_rootContainer;
     root->checkHover(mouse);
-    if (leftDown  && !m_prevLeftMouse)  root->checkLeftClick(mouse);
-    if (rightDown && !m_prevRightMouse) root->checkRightClick(mouse);
+
+    if (leftDown && !m_prevLeftMouse) {
+        m_interactibleActivatedThisFrame = false;
+        root->checkLeftClick(mouse);
+        if (!m_interactibleActivatedThisFrame)
+            setCurrInteractible(nullptr);
+    }
+    if (rightDown && !m_prevRightMouse) {
+        m_interactibleActivatedThisFrame = false;
+        root->checkRightClick(mouse);
+        if (!m_interactibleActivatedThisFrame)
+            setCurrInteractible(nullptr);
+    }
 
     m_prevLeftMouse  = leftDown;
     m_prevRightMouse = rightDown;
