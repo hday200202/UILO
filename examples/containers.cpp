@@ -29,54 +29,90 @@ int main() {
     UILO ui(
         window, 
         page(
-            column(Modifier().setColor(bgColor), {
-                row(Modifier().setHeight(96_px).setColor(contColor).setOuterPadding(8.f).setRounding(rounding), {}),
-                row(
-                    Modifier(),
-                    contains {
+            column(
+                Modifier()
+                    .setColor(bgColor), 
+                ColumnOptions(), 
+                contains {
+                    row(Modifier().setHeight(96_px).setColor(contColor).setOuterPadding(8.f).setRounding(rounding), RowOptions(), {}),
+                    row(
+                        Modifier(),
+                        RowOptions(),
+                        contains {
 
-                        column(
-                            Modifier()
-                                .setColor(contColor).setOuterPadding(8.f).setWidth(35_pct).setRounding(rounding), 
-                            contains {
-                                // image(
-                                //     Modifier().setWidth(512_px).setHeight(512_px).setAlign(Align::Top | Align::Left),
-                                //     "assets/images/stones.jpg",
-                                //     ImageOptions::NONE,
-                                //     "stones"
-                                // )
-                            }, "1"
-                        ),
+                            column(
+                                Modifier()
+                                    .setColor(contColor).setOuterPadding(8.f).setWidth(35_pct).setRounding(rounding),
+                                ColumnOptions(),
+                                contains {
+                                    image(
+                                        Modifier()
+                                            .setWidth(512_px)
+                                            .setHeight(512_px)
+                                            .setAlign(Align::Top | Align::Left),
+                                        ImageOptions()
+                                            .setPath("assets/images/stones.jpg"),
+                                        "stones"
+                                    )
+                                }, "1"
+                            ),
 
-                        // spacer(Modifier().setWidth(64_px).setColor(sf::Color::Yellow)),
+                            column(
+                                Modifier()
+                                    .setColor(contColor).setOuterPadding(8.f).setRounding(rounding),
+                                ColumnOptions(),
+                                contains{
+                                    button(
+                                        Modifier()
+                                            .setAlign(Align::CenterX | Align::CenterY)
+                                            .setColor(sf::Color::Blue)
+                                            .setWidth(192_px)
+                                            .setHeight(64_px)
+                                            .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; })
+                                            .setRounding(rounding),
+                                        ButtonOptions().setLabel(
+                                            text(
+                                                Modifier()
+                                                    .setAlign(Align::CenterX | Align::CenterY)
+                                                    .setColor(sf::Color::White),
+                                                TextOptions()
+                                                    .setFont("assets/fonts/Montserrat.ttf")
+                                                    .setContent("TEST")
+                                                    .setCharSize(36)
+                                                    .setTextAlignX(Align::CenterX)
+                                                    .setTextAlignY(Align::CenterY)
+                                            )
+                                        ), "test_button"
+                                    )
+                                }, "2"
+                            )
 
-                        column(
-                            Modifier()
-                                .setColor(contColor).setOuterPadding(8.f).setRounding(rounding), 
-                            contains{
-                                // button(
-                                //     Modifier()
-                                //         .setAlign(Align::CenterX | Align::CenterY)
-                                //         .setColor(sf::Color::Blue)
-                                //         .setWidth(192_px)
-                                //         .setHeight(64_px)
-                                //         .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; })
-                                //         .setRounding(rounding),
-
-                                //     text(Modifier().setAlign(Align::CenterX | Align::CenterY).setColor(sf::Color::White),
-                                //         "assets/fonts/Montserrat.ttf", "TEST", 36,
-                                //         TextOptions::CenterX | TextOptions::CenterY
-                                //     ),
-
-                                //     "test_button"
-                                // )
-                            }, "2"
-                        )
-
-                    }
-                ),
-                row(Modifier().setHeight(256_px).setColor(contColor).setOuterPadding(8.f).setRounding(rounding), {}),
-            }, "root"), "main_page"
+                        }
+                    ),
+                    row(
+                        Modifier()
+                            .setHeight(256_px)
+                            .setColor(contColor)
+                            .setOuterPadding(8.f)
+                            .setRounding(rounding), 
+                        RowOptions(), 
+                        contains {
+                            slider(
+                                Modifier()
+                                    .setHeight(32_px)
+                                    .setAlign(Align::CenterX | Align::CenterY), 
+                                SliderOptions()
+                                    .setThumbShape(ThumbShape::Rect)
+                                    .setThumbSize(16, 48)
+                                    .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
+                                    .setFillColor(sf::Color::Black)
+                                    .setThumbRounding(8.f),
+                                ""
+                            )
+                        }
+                    ),
+                }, "root"
+            ), "main_page"
         )
     );
 

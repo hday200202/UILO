@@ -7,35 +7,21 @@ namespace uilo {
 
 Text::Text(
     Modifier modifier,
-    const std::string& fontPath,
-    const std::string& content,
-    unsigned int charSize,
     TextOptions options,
     const std::string& name
-) : m_content(content), m_charSize(charSize), m_options(options) {
+) : m_options(options), m_content(options.getContent()), m_charSize(options.getCharSize()) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Text;
 
-    if (!m_ownedFont.openFromFile(fontPath)) return;
-    m_fontPtr = &m_ownedFont;
-    init();
-}
-
-Text::Text(
-    Modifier modifier,
-    const sf::Font& font,
-    const std::string& content,
-    unsigned int charSize,
-    TextOptions options,
-    const std::string& name
-) : m_content(content), m_charSize(charSize), m_options(options) {
-    m_modifier = modifier;
-    m_name     = name;
-    m_type     = ElementType::Text;
-
-    m_fontPtr = &font;
-    init();
+    if (options.getFontRef()) {
+        m_fontPtr = options.getFontRef();
+        init();
+    } else if (!options.getFontPath().empty()) {
+        if (!m_ownedFont.openFromFile(options.getFontPath())) return;
+        m_fontPtr = &m_ownedFont;
+        init();
+    }
 }
 
 void Text::init() {
@@ -81,22 +67,22 @@ void Text::rebuildText() {
     if (!m_fontPtr) return;
 
     float wrapWidth = m_bounds.size.x;
-    std::string str = (hasOption(m_options, TextOptions::Wrap) && wrapWidth > 0.f)
+    std::string str = (m_options.getWrap() && wrapWidth > 0.f)
                     ? wrapContent(wrapWidth)
                     : m_content;
 
     m_text.emplace(*m_fontPtr, str, m_charSize);
 
     std::uint32_t style = 0;
-    if (hasOption(m_options, TextOptions::Bold))          style |= static_cast<std::uint32_t>(sf::Text::Style::Bold);
-    if (hasOption(m_options, TextOptions::Italic))        style |= static_cast<std::uint32_t>(sf::Text::Style::Italic);
-    if (hasOption(m_options, TextOptions::Underlined))    style |= static_cast<std::uint32_t>(sf::Text::Style::Underlined);
-    if (hasOption(m_options, TextOptions::StrikeThrough)) style |= static_cast<std::uint32_t>(sf::Text::Style::StrikeThrough);
+    if (m_options.getBold())          style |= static_cast<std::uint32_t>(sf::Text::Style::Bold);
+    if (m_options.getItalic())        style |= static_cast<std::uint32_t>(sf::Text::Style::Italic);
+    if (m_options.getUnderlined())    style |= static_cast<std::uint32_t>(sf::Text::Style::Underlined);
+    if (m_options.getStrikeThrough()) style |= static_cast<std::uint32_t>(sf::Text::Style::StrikeThrough);
     m_text->setStyle(style);
 
-    if (hasOption(m_options, TextOptions::CenterX))
+    if (m_options.getTextAlignX() == Align::CenterX)
         m_text->setLineAlignment(sf::Text::LineAlignment::Center);
-    else if (hasOption(m_options, TextOptions::RightAlign))
+    else if (m_options.getTextAlignX() == Align::Right)
         m_text->setLineAlignment(sf::Text::LineAlignment::Right);
     else
         m_text->setLineAlignment(sf::Text::LineAlignment::Left);
@@ -117,7 +103,7 @@ void Text::update(sf::FloatRect& parentBounds, float dt) {
 
     resize(parentBounds);
 
-    if (hasOption(m_options, TextOptions::Wrap) && m_bounds.size.x != m_lastWrapWidth) {
+    if (m_options.getWrap() && m_bounds.size.x != m_lastWrapWidth) {
         m_lastWrapWidth = m_bounds.size.x;
         rebuildText();
     }
@@ -135,17 +121,17 @@ void Text::render(sf::RenderTarget& target) {
     sf::FloatRect lb = m_text->getLocalBounds();
 
     float x;
-    if (hasOption(m_options, TextOptions::CenterX))
+    if (m_options.getTextAlignX() == Align::CenterX)
         x = m_bounds.position.x + m_bounds.size.x * 0.5f;
-    else if (hasOption(m_options, TextOptions::RightAlign))
+    else if (m_options.getTextAlignX() == Align::Right)
         x = m_bounds.position.x + m_bounds.size.x;
     else
         x = m_bounds.position.x - lb.position.x;
 
     float y;
-    if (hasOption(m_options, TextOptions::CenterY))
+    if (m_options.getTextAlignY() == Align::CenterY)
         y = m_bounds.position.y + (m_bounds.size.y - lb.size.y) * 0.5f - lb.position.y;
-    else if (hasOption(m_options, TextOptions::BottomAlign))
+    else if (m_options.getTextAlignY() == Align::Bottom)
         y = m_bounds.position.y + m_bounds.size.y - lb.size.y - lb.position.y;
     else
         y = m_bounds.position.y - lb.position.y;

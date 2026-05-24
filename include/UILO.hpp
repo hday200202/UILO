@@ -9,6 +9,8 @@
 
 namespace uilo {
 
+class Interactible;
+
 class UILO {
 public:
     UILO() = default;
@@ -22,8 +24,16 @@ public:
     void addPage(Page* page);
     void setPage(const std::string& pageName);
     void setScale(float scale);
+
+    void setCurrInteractible(Interactible* i);
+    Interactible* getCurrInteractible() const { return m_currInteractible; }
+    
     float getScale() const { return m_scale; }
     float getDeltaTime() const { return m_deltaTime; }
+    sf::Vector2f getMousePosition() const {
+        sf::Vector2i raw = sf::Mouse::getPosition(*m_window);
+        return { static_cast<float>(raw.x), static_cast<float>(raw.y) };
+    }
 
     template <typename T>
     T* getElement(const std::string& name) {
@@ -49,7 +59,11 @@ private:
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
 
+    Interactible* m_currInteractible             = nullptr;
+    bool          m_interactibleActivatedThisFrame = false;
+
     friend class Element;
+    friend class Interactible;
 };
 
 }
