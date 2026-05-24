@@ -85,4 +85,16 @@ void UILO::update() {
 
 void UILO::render() { m_activePage->render(*m_window); }
 
+void UILO::handleEvent(const sf::Event& event) {
+    if (!m_activePage) return;
+
+    if (const auto* scroll = event.getIf<sf::Event::MouseWheelScrolled>()) {
+        sf::Vector2f mouse = {
+            static_cast<float>(scroll->position.x),
+            static_cast<float>(scroll->position.y)
+        };
+        m_activePage->m_rootContainer->checkScroll(mouse, scroll->delta);
+    }
+}
+
 }

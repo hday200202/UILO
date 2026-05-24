@@ -1,4 +1,5 @@
 #include "Text.hpp"
+#include "../../UILO.hpp"
 #include "../../utils/Alignment.hpp"
 
 #include <sstream>
@@ -33,7 +34,8 @@ void Text::init() {
 std::string Text::wrapContent(float maxWidth) const {
     if (maxWidth <= 0.f) return m_content;
 
-    sf::Text probe(*m_fontPtr, "", m_charSize);
+    unsigned int cs = static_cast<unsigned int>(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f));
+    sf::Text probe(*m_fontPtr, "", cs);
     std::string result;
 
     std::istringstream paragraphs(m_content);
@@ -66,12 +68,13 @@ std::string Text::wrapContent(float maxWidth) const {
 void Text::rebuildText() {
     if (!m_fontPtr) return;
 
+    unsigned int cs = static_cast<unsigned int>(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f));
     float wrapWidth = m_bounds.size.x;
     std::string str = (m_options.getWrap() && wrapWidth > 0.f)
                     ? wrapContent(wrapWidth)
                     : m_content;
 
-    m_text.emplace(*m_fontPtr, str, m_charSize);
+    m_text.emplace(*m_fontPtr, str, cs);
 
     std::uint32_t style = 0;
     if (m_options.getBold())          style |= static_cast<std::uint32_t>(sf::Text::Style::Bold);
@@ -103,10 +106,17 @@ void Text::update(sf::FloatRect& parentBounds, float dt) {
 
     resize(parentBounds);
 
+    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    bool needRebuild = false;
     if (m_options.getWrap() && m_bounds.size.x != m_lastWrapWidth) {
         m_lastWrapWidth = m_bounds.size.x;
-        rebuildText();
+        needRebuild = true;
     }
+    if (scale != m_lastScale) {
+        m_lastScale = scale;
+        needRebuild = true;
+    }
+    if (needRebuild) rebuildText();
 }
 
 void Text::render(sf::RenderTarget& target) {

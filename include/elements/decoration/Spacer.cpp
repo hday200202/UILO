@@ -1,4 +1,5 @@
 #include "Spacer.hpp"
+#include "../../UILO.hpp"
 #include "../../utils/RenderUtils.hpp"
 
 namespace uilo {
@@ -15,7 +16,8 @@ Spacer::Spacer(
 void Spacer::update(sf::FloatRect& parentBounds, float dt) { resize(parentBounds); (void)dt; }
 
 void Spacer::render(sf::RenderTarget& target) {
-    const float r     = m_options.getRounding();
+    float scale   = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float r = m_options.getRounding() * scale;
     const sf::Color c = m_options.getColor();
 
     if (r <= 0.f) {

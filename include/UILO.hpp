@@ -18,6 +18,7 @@ public:
 
     void update();
     void render();
+    void handleEvent(const sf::Event& event);
 
     void setRenderWindow(sf::RenderWindow& window) { m_window = &window; }
 

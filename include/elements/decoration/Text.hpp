@@ -80,6 +80,7 @@ private:
     std::optional<sf::Text> m_text;
     sf::Color               m_lastColor     = sf::Color::White;
     float                   m_lastWrapWidth = 0.f;
+    float                   m_lastScale     = 1.f;
     bool                    m_loaded        = false;
 };
 

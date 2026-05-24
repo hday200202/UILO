@@ -3,6 +3,12 @@
 
 using namespace uilo;
 
+sf::Color   BG_COLOR    = {33, 35, 47};
+sf::Color   CONT_COLOR  = {44, 47, 60};
+float       ROUNDING    = 8.f;
+
+Container* buildRootContainer();
+
 int main() {
     sf::RenderWindow window;
     sf::VideoMode screenRes({1920, 1080});
@@ -18,110 +24,12 @@ int main() {
         settings
     );
     
-    window.setVerticalSyncEnabled(true);
+    // window.setVerticalSyncEnabled(true);
+    window.setFramerateLimit(1600);
 
-    // rgb(44, 47, 60)
-    sf::Color bgColor       = {33, 35, 47};
-    sf::Color contColor     = {44, 47, 60};
+    UILO ui(window, page(buildRootContainer(), "main_page"));
 
-    float rounding = 8.f;
-
-    UILO ui(
-        window, 
-        page(
-            column(
-                Modifier(), 
-                ColumnOptions().setColor(bgColor), 
-                contains {
-                    row(
-                        Modifier()
-                            .setHeight(96_px)
-                            .setOuterPadding(8.f),
-                        RowOptions().setColor(contColor).setRounding(rounding),
-                        contains {}
-                    ),
-                    
-                    row(
-                        Modifier(),
-                        RowOptions(),
-                        contains {
-
-                            column(
-                                Modifier()
-                                    .setOuterPadding(8.f)
-                                    .setWidth(35_pct),
-                                ColumnOptions().setColor(contColor).setRounding(rounding),
-                                contains {
-                                    image(
-                                        Modifier()
-                                            .setWidth(512_px)
-                                            .setHeight(512_px)
-                                            .setAlign(Align::Top | Align::Left),
-                                        ImageOptions()
-                                            .setPath("assets/images/stones.jpg"),
-                                        "stones"
-                                    )
-                                }, "1"
-                            ),
-
-                            column(
-                                Modifier()
-                                    .setOuterPadding(8.f),
-                                ColumnOptions().setColor(contColor).setRounding(rounding),
-                                contains{
-                                    button(
-                                        Modifier()
-                                            .setAlign(Align::CenterX | Align::CenterY)
-                                            .setWidth(192_px)
-                                            .setHeight(64_px)
-                                            .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; }),
-                                        ButtonOptions()
-                                            .setColor(sf::Color::Blue)
-                                            .setRounding(rounding)
-                                            .setLabel(
-                                                text(
-                                                    Modifier()
-                                                        .setAlign(Align::CenterX | Align::CenterY),
-                                                    TextOptions()
-                                                        .setFont("assets/fonts/Montserrat.ttf")
-                                                        .setContent("TEST")
-                                                        .setCharSize(36)
-                                                        .setColor(sf::Color::White)
-                                                        .setTextAlignX(Align::CenterX)
-                                                        .setTextAlignY(Align::CenterY)
-                                                )
-                                            ),
-                                        "test_button"
-                                    )
-                                }, "2"
-                            )
-                        }
-                    ),
-
-                    row(
-                        Modifier()
-                            .setHeight(256_px)
-                            .setOuterPadding(8.f),
-                        RowOptions().setColor(contColor).setRounding(rounding),
-                        contains {
-                            slider(
-                                Modifier()
-                                    .setHeight(32_px)
-                                    .setAlign(Align::CenterX | Align::CenterY), 
-                                SliderOptions()
-                                    .setThumbShape(ThumbShape::Rect)
-                                    .setThumbSize(16, 48)
-                                    .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
-                                    .setFillColor(sf::Color::Black)
-                                    .setThumbRounding(8.f),
-                                ""
-                            )
-                        }
-                    ),
-                }, "root"
-            ), "main_page"
-        )
-    );
+    ui.setScale(1.f);
 
     sf::Font fpsFont;
     std::optional<sf::Text> fpsText;
@@ -141,6 +49,9 @@ int main() {
     float fpsSum = 0.f;
     int loopCount = 0.f;
 
+    bool prevPlus = false;
+    bool prevMinus = false;
+
     while (window.isOpen()) {
         while (const auto event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>())
@@ -148,7 +59,17 @@ int main() {
             if (const auto* key = event->getIf<sf::Event::KeyPressed>())
                 if (key->code == sf::Keyboard::Key::F10)
                     showFps = !showFps;
+            ui.handleEvent(*event);
         }
+
+        bool plus = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Equal);
+        bool minus = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Hyphen);
+
+        if (plus && !prevPlus) ui.setScale(ui.getScale() + 0.1f);
+        if (minus && !prevMinus) ui.setScale(ui.getScale() - 0.1f);
+
+        prevPlus = plus;
+        prevMinus = minus;
 
         dt = ui.getDeltaTime();
         timer += dt;
@@ -173,4 +94,146 @@ int main() {
         if (showFps && fpsText) window.draw(*fpsText);
         window.display();
     }
+}
+
+Container* buildRootContainer() {
+    auto panelCol = ColumnOptions().setColor(CONT_COLOR).setRounding(ROUNDING);
+    auto panelRow = RowOptions().setColor(CONT_COLOR).setRounding(ROUNDING);
+    
+    return column(
+        Modifier(), 
+        ColumnOptions().setColor(BG_COLOR), 
+        contains {
+            row(
+                Modifier()
+                    .setHeight(96_px)
+                    .setOuterPadding(8.f),
+                panelRow,
+                contains {}
+            ),
+            
+            row(
+                Modifier(),
+                RowOptions(),
+                contains {
+                    // "Filebrowser"
+                    column(
+                        Modifier()
+                            .setOuterPadding(8.f)
+                            .setWidth(35_pct),
+                        ColumnOptions().setColor(CONT_COLOR).setRounding(ROUNDING).setScrollable(true).setScrollSpeed(40.f),
+                        contains {
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  include/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    Page.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    Page.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    elements/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Element.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Element.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Elements.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Factory.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Modifier.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Modifier.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      containers/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Container.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Container.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Column.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Column.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Row.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Row.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      decoration/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Image.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Image.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Spacer.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Spacer.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Text.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Text.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      interactible/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Button.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Button.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dropdown.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dropdown.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Knob.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Knob.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Slider.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Slider.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        TextBox.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        TextBox.cpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      utils/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Alignment.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dimension.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        RenderUtils.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Timer.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Utils.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  assets/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedAssets.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedFont.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedIcons.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  Makefile").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  build.sh").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  README.md").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  TODO.txt").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  License.txt").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  UILO_NEW.md").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
+                        }, "1"
+                    ),
+
+                    column(
+                        Modifier()
+                            .setOuterPadding(8.f),
+                        panelCol,
+                        contains{
+                            button(
+                                Modifier()
+                                    .setAlign(Align::CenterX | Align::CenterY)
+                                    .setWidth(192_px)
+                                    .setHeight(64_px)
+                                    .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; }),
+                                ButtonOptions()
+                                    .setColor(sf::Color::Blue)
+                                    .setRounding(ROUNDING)
+                                    .setLabel(
+                                        text(
+                                            Modifier()
+                                                .setAlign(Align::CenterX | Align::CenterY),
+                                            TextOptions()
+                                                .setFont("assets/fonts/Montserrat.ttf")
+                                                .setContent("TEST")
+                                                .setCharSize(36)
+                                                .setColor(sf::Color::White)
+                                                .setTextAlignX(Align::CenterX)
+                                                .setTextAlignY(Align::CenterY)
+                                        )
+                                    ),
+                                "test_button"
+                            )
+                        }, "2"
+                    )
+                }
+            ),
+
+            row(
+                Modifier()
+                    .setHeight(256_px)
+                    .setOuterPadding(8.f),
+                panelRow,
+                contains {
+                    slider(
+                        Modifier()
+                            .setHeight(32_px)
+                            .setAlign(Align::CenterX | Align::CenterY), 
+                        SliderOptions()
+                            .setThumbShape(ThumbShape::Rect)
+                            .setThumbSize(16, 48)
+                            .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
+                            .setFillColor(sf::Color::Black)
+                            .setThumbRounding(8.f)
+                            .setStep(0.01f),
+                        ""
+                    )
+                }
+            ),
+        }, "root"
+    );
 }
