@@ -70,6 +70,9 @@ public:
     void  setValue(float value);
     float getValue() const { return m_value; }
 
+    const SliderOptions& getOptions() const      { return m_options; }
+    void setOptions(const SliderOptions& opts)   { m_options = opts; }
+
 private:
     float valueFromMouseX(float mouseX) const;
     void  applyValue(float raw);

@@ -5,18 +5,18 @@ namespace uilo {
 
 Spacer::Spacer(
     Modifier modifier,
-    SpacerOptions /*options*/,
+    SpacerOptions options,
     const std::string& name
-) {
+) : m_options(options) {
     m_modifier = modifier;
     m_name = name;
 }
 
-void Spacer::update(sf::FloatRect& parentBounds, float dt) { resize(parentBounds); }
+void Spacer::update(sf::FloatRect& parentBounds, float dt) { resize(parentBounds); (void)dt; }
 
 void Spacer::render(sf::RenderTarget& target) {
-    const float r = m_modifier.getRounding();
-    const sf::Color c = m_modifier.getColor();
+    const float r     = m_options.getRounding();
+    const sf::Color c = m_options.getColor();
 
     if (r <= 0.f) {
         sf::RectangleShape rect;

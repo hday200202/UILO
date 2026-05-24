@@ -30,11 +30,17 @@ int main() {
         window, 
         page(
             column(
-                Modifier()
-                    .setColor(bgColor), 
-                ColumnOptions(), 
+                Modifier(), 
+                ColumnOptions().setColor(bgColor), 
                 contains {
-                    row(Modifier().setHeight(96_px).setColor(contColor).setOuterPadding(8.f).setRounding(rounding), RowOptions(), {}),
+                    row(
+                        Modifier()
+                            .setHeight(96_px)
+                            .setOuterPadding(8.f),
+                        RowOptions().setColor(contColor).setRounding(rounding),
+                        contains {}
+                    ),
+                    
                     row(
                         Modifier(),
                         RowOptions(),
@@ -42,8 +48,9 @@ int main() {
 
                             column(
                                 Modifier()
-                                    .setColor(contColor).setOuterPadding(8.f).setWidth(35_pct).setRounding(rounding),
-                                ColumnOptions(),
+                                    .setOuterPadding(8.f)
+                                    .setWidth(35_pct),
+                                ColumnOptions().setColor(contColor).setRounding(rounding),
                                 contains {
                                     image(
                                         Modifier()
@@ -59,43 +66,43 @@ int main() {
 
                             column(
                                 Modifier()
-                                    .setColor(contColor).setOuterPadding(8.f).setRounding(rounding),
-                                ColumnOptions(),
+                                    .setOuterPadding(8.f),
+                                ColumnOptions().setColor(contColor).setRounding(rounding),
                                 contains{
                                     button(
                                         Modifier()
                                             .setAlign(Align::CenterX | Align::CenterY)
-                                            .setColor(sf::Color::Blue)
                                             .setWidth(192_px)
                                             .setHeight(64_px)
-                                            .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; })
-                                            .setRounding(rounding),
-                                        ButtonOptions().setLabel(
-                                            text(
-                                                Modifier()
-                                                    .setAlign(Align::CenterX | Align::CenterY)
-                                                    .setColor(sf::Color::White),
-                                                TextOptions()
-                                                    .setFont("assets/fonts/Montserrat.ttf")
-                                                    .setContent("TEST")
-                                                    .setCharSize(36)
-                                                    .setTextAlignX(Align::CenterX)
-                                                    .setTextAlignY(Align::CenterY)
-                                            )
-                                        ), "test_button"
+                                            .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; }),
+                                        ButtonOptions()
+                                            .setColor(sf::Color::Blue)
+                                            .setRounding(rounding)
+                                            .setLabel(
+                                                text(
+                                                    Modifier()
+                                                        .setAlign(Align::CenterX | Align::CenterY),
+                                                    TextOptions()
+                                                        .setFont("assets/fonts/Montserrat.ttf")
+                                                        .setContent("TEST")
+                                                        .setCharSize(36)
+                                                        .setColor(sf::Color::White)
+                                                        .setTextAlignX(Align::CenterX)
+                                                        .setTextAlignY(Align::CenterY)
+                                                )
+                                            ),
+                                        "test_button"
                                     )
                                 }, "2"
                             )
-
                         }
                     ),
+
                     row(
                         Modifier()
                             .setHeight(256_px)
-                            .setColor(contColor)
-                            .setOuterPadding(8.f)
-                            .setRounding(rounding), 
-                        RowOptions(), 
+                            .setOuterPadding(8.f),
+                        RowOptions().setColor(contColor).setRounding(rounding),
                         contains {
                             slider(
                                 Modifier()

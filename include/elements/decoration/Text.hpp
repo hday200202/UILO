@@ -16,6 +16,7 @@ public:
     TextOptions& setFont(const sf::Font& font)    { m_fontRef = &font; m_fontPath.clear();  return *this; }
     TextOptions& setContent(const std::string& s) { m_content = s;          return *this; }
     TextOptions& setCharSize(unsigned int n)       { m_charSize = n;         return *this; }
+    TextOptions& setColor(const sf::Color& c)      { m_color = c;            return *this; }
     TextOptions& setWrap(bool v)                   { m_wrap = v;             return *this; }
     TextOptions& setBold(bool v)                   { m_bold = v;             return *this; }
     TextOptions& setItalic(bool v)                 { m_italic = v;           return *this; }
@@ -28,6 +29,7 @@ public:
     const sf::Font*    getFontRef()        const { return m_fontRef; }
     const std::string& getContent()        const { return m_content; }
     unsigned int       getCharSize()       const { return m_charSize; }
+    sf::Color          getColor()          const { return m_color; }
     bool               getWrap()           const { return m_wrap; }
     bool               getBold()           const { return m_bold; }
     bool               getItalic()         const { return m_italic; }
@@ -41,6 +43,7 @@ private:
     const sf::Font* m_fontRef       = nullptr;
     std::string     m_content;
     unsigned int    m_charSize      = 30;
+    sf::Color       m_color         = sf::Color::White;
     bool            m_wrap          = false;
     bool            m_bold          = false;
     bool            m_italic        = false;
@@ -58,6 +61,9 @@ public:
     void render(sf::RenderTarget& target) override;
 
     void setString(const std::string& content);
+
+    const TextOptions& getOptions() const      { return m_options; }
+    void setOptions(const TextOptions& opts)   { m_options = opts; rebuildText(); }
 
     bool isLoaded() const;
 
