@@ -37,4 +37,14 @@ inline Slider* slider(Modifier modifier, SliderOptions options = {}, const std::
     return new Slider(modifier, options, name);
 }
 
+inline Dropdown* dropdown(Modifier modifier, DropdownOptions options,
+                          std::initializer_list<std::string> items,
+                          const std::string& name = "") {
+    return new Dropdown(modifier, options, items, name);
+}
+
+inline Resizer* resizer(Modifier modifier = {}, ResizerOptions options = {}, const std::string& name = "") {
+    return new Resizer(modifier, options, name);
+}
+
 }

@@ -9,7 +9,8 @@ namespace uilo {
 
 using ValueChangedFuncPtr = std::function<void(float)>;
 
-enum class ThumbShape { Circle, Rect };
+enum class ThumbShape       { Circle, Rect };
+enum class SliderOrientation { Horizontal, Vertical };
 
 class SliderOptions {
 public:
@@ -26,6 +27,7 @@ public:
     SliderOptions& setRange(float mn, float mx)             { m_min = mn; m_max = mx;   return *this; }
     SliderOptions& setStep(float s)                         { m_step = s;               return *this; }
     SliderOptions& setOnValueChanged(ValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
+    SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
 
     sf::Color            getTrackColor()      const { return m_trackColor; }
     sf::Color            getFillColor()       const { return m_fillColor; }
@@ -38,6 +40,7 @@ public:
     float                getMin()             const { return m_min; }
     float                getMax()             const { return m_max; }
     float                getStep()            const { return m_step; }
+    SliderOrientation    getOrientation()     const { return m_orientation; }
     const ValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
@@ -52,6 +55,7 @@ private:
     float                m_min             = 0.f;
     float                m_max             = 1.f;
     float                m_step            = 0.f;                       // 0 = continuous; >0 = discrete snap increment
+    SliderOrientation    m_orientation     = SliderOrientation::Horizontal;
     ValueChangedFuncPtr  m_onValueChanged;
 };
 
@@ -62,6 +66,7 @@ public:
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;
 
+    bool checkHover(const sf::Vector2f& mousePosition) override;
     bool checkLeftClick(const sf::Vector2f& mousePosition) override;
     bool checkScroll(const sf::Vector2f& mousePosition, float delta) override;
 
@@ -75,8 +80,10 @@ public:
 
 private:
     float valueFromMouseX(float mouseX) const;
+    float valueFromMouseY(float mouseY) const;
     void  applyValue(float raw);
-    float resolveThumbHalfWidth() const;
+    float resolveThumbHalfWidth()  const;
+    float resolveThumbHalfHeight() const;
 
     SliderOptions m_options;
     float m_value    = 0.f;

@@ -22,6 +22,7 @@ public:
 
     void addElement(Element* element);
     void setUILO(UILO& uiloRef) override;
+    void collectResizers(std::vector<Element*>& out) override;
 
 protected:
     std::vector<Element*> m_children;

@@ -1,6 +1,7 @@
 #include "Row.hpp"
 #include "../../UILO.hpp"
 #include "../../utils/RenderUtils.hpp"
+#include "../interactible/Resizer.hpp"
 #include <algorithm>
 
 namespace uilo {
@@ -25,6 +26,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
         m_contentWidth = 0.f;
         for (auto* child : m_children) {
             if (!child->getModifier().getVisible()) continue;
+            if (child->getType() == ElementType::Resizer) continue;
             Dimension dim = child->getModifier().getWidth();
             float rw = dim.percent ? (m_bounds.size.x * dim.value / 100.f) : dim.value * scale;
             sf::FloatRect slot{ {cursorX, m_bounds.position.y}, {rw, m_bounds.size.y} };
@@ -51,6 +53,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
     */
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
+        if (child->getType() == ElementType::Resizer) continue;
 
         Align align = child->getModifier().getAlign();
         if      (hasAlign(align, Align::Right))     right.push_back(child);
@@ -134,6 +137,66 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
     layoutGroup(left,  m_bounds.position.x);
     layoutGroup(mid,   m_bounds.position.x + (m_bounds.size.x - midW) * 0.5f);
     layoutGroup(right, m_bounds.position.x + m_bounds.size.x - rightW);
+
+    // Position Resizer children at element boundaries (invisible to layout flow)
+    for (size_t i = 0; i < m_children.size(); ++i) {
+        auto* child = m_children[i];
+        if (child->getType() != ElementType::Resizer) continue;
+        Resizer* r = static_cast<Resizer*>(child);
+
+        Element* prevEl = nullptr;
+        for (int j = (int)i - 1; j >= 0; --j) {
+            if (m_children[j]->getType() != ElementType::Resizer &&
+                m_children[j]->getModifier().getVisible()) { prevEl = m_children[j]; break; }
+        }
+        Element* nextEl = nullptr;
+        for (size_t j = i + 1; j < m_children.size(); ++j) {
+            if (m_children[j]->getType() != ElementType::Resizer &&
+                m_children[j]->getModifier().getVisible()) { nextEl = m_children[j]; break; }
+        }
+
+        // Use slot boundaries (restore outer padding) so asymmetric padding
+        // between adjacent panels doesn't shift the center of the resizer.
+        float rEdge = prevEl ? (prevEl->getBounds().position.x + prevEl->getBounds().size.x
+                                + prevEl->getModifier().getOuterPadding() * scale)
+                             : m_bounds.position.x;
+        float lEdge = nextEl ? (nextEl->getBounds().position.x
+                                - nextEl->getModifier().getOuterPadding() * scale)
+                             : (m_bounds.position.x + m_bounds.size.x);
+        float boundX = (rEdge + lEdge) * 0.5f;
+
+        // Clamp Y extent to the intersection of the adjacent panels' bounds
+        // so the resizer doesn't bleed into areas outside the visible panels.
+        float topY = std::max(
+            prevEl ? prevEl->getBounds().position.y : m_bounds.position.y,
+            nextEl ? nextEl->getBounds().position.y : m_bounds.position.y
+        );
+        float botY = std::min(
+            prevEl ? (prevEl->getBounds().position.y + prevEl->getBounds().size.y) : (m_bounds.position.y + m_bounds.size.y),
+            nextEl ? (nextEl->getBounds().position.y + nextEl->getBounds().size.y) : (m_bounds.position.y + m_bounds.size.y)
+        );
+
+        // Hit area uses the modifier's width (scaled), matching how every other
+        // element scales. getThickness() is the visual strip width only.
+        Dimension hitDim = r->getModifier().getWidth();
+        float hitW = hitDim.percent ? (m_bounds.size.x * hitDim.value / 100.f)
+                                    : hitDim.value * scale;
+        sf::FloatRect rBounds = {
+            { boundX - hitW * 0.5f, topY },
+            { hitW, std::max(0.f, botY - topY) }
+        };
+
+        Element* resizerTarget = nullptr;
+        switch (r->getDirection()) {
+            case ResizerDir::Left:
+            case ResizerDir::Top:    resizerTarget = prevEl; break;
+            case ResizerDir::Right:
+            case ResizerDir::Bottom: resizerTarget = nextEl; break;
+        }
+        r->setTarget(resizerTarget);
+        r->setContainerBounds(m_bounds);
+        child->update(rBounds, dt);
+    }
 }
 
 void Row::render(sf::RenderTarget& target) {
@@ -163,7 +226,8 @@ void Row::render(sf::RenderTarget& target) {
             target.draw(rect);
         }
 
-        for (auto* child : m_children) child->render(target);
+        for (auto* child : m_children)
+            if (child->getType() != ElementType::Resizer) child->render(target);
 
         target.setView(originalView);
     } else {
@@ -188,7 +252,8 @@ void Row::render(sf::RenderTarget& target) {
             m_rt.draw(bg);
         }
 
-        for (auto* child : m_children) child->render(m_rt);
+        for (auto* child : m_children)
+            if (child->getType() != ElementType::Resizer) child->render(m_rt);
 
         eraseCorners(m_rt, m_bounds, r);
         m_rt.display();
@@ -199,7 +264,13 @@ void Row::render(sf::RenderTarget& target) {
         };
         sf::Sprite sprite(m_rt.getTexture(), texRect);
         sprite.setPosition(m_bounds.position);
+        const sf::View savedView = target.getView();
+        target.setView(sf::View(sf::FloatRect{
+            {0.f, 0.f},
+            {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
+        }));
         target.draw(sprite);
+        target.setView(savedView);
     }
 }
 

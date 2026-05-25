@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "Modifier.hpp"
 
@@ -24,8 +25,10 @@ enum class ElementType {
 
     Button,
     Slider,
+    Dropdown,
     Knob,
     TextBox,
+    Resizer,
 };
 
 class UILO;
@@ -48,6 +51,9 @@ public:
     virtual bool checkHover(const sf::Vector2f& mousePosition);
     virtual bool checkScroll(const sf::Vector2f& mousePosition, float delta);
     void resize(const sf::FloatRect& parent);
+
+    // Recursively collect all Resizer-type descendant elements
+    virtual void collectResizers(std::vector<Element*>&) {}
 
     ElementType getType() const;
 
