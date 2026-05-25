@@ -205,7 +205,7 @@ Container* buildRootContainer() {
                                     .setHeight(64_px)
                                     .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; }),
                                 ButtonOptions()
-                                    .setColor(sf::Color::Blue)
+                                    .setColor({151, 120, 206})
                                     .setRounding(ROUNDING)
                                     .setLabel(
                                         text(
@@ -258,7 +258,7 @@ Container* buildRootContainer() {
                                     .setMultiline(true)                                    
                                     .setPaddingLeft(16.f)
                                     .setPaddingRight(16.f)
-                                    .setOutlineColor(sf::Color::Blue)
+                                    .setOutlineColor({151, 120, 206})
                                     .setOutlineThickness(2.f)
                                     .setMaxResizeLines(6)
                             )

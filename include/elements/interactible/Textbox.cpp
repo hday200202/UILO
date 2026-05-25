@@ -208,11 +208,12 @@ void Textbox::computeTextOrigin() {
     // area.size.y would push line 1 further down each time a new line was added.
     float oy;
     if (m_options.getMultiline()) {
-        const float sc        = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-        const float ptS       = m_options.getPaddingTop()    * sc;
-        const float pbS       = m_options.getPaddingBottom() * sc;
-        const float initAreaH = m_initialHeightSet
-                                ? std::max(slb.size.y, m_initialHeight - ptS - pbS)
+        const float sc          = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+        const float ptS         = m_options.getPaddingTop()    * sc;
+        const float pbS         = m_options.getPaddingBottom() * sc;
+        const float scaledInitH = m_initialHeight * sc;  // re-scale each frame
+        const float initAreaH   = m_initialHeightSet
+                                ? std::max(slb.size.y, scaledInitH - ptS - pbS)
                                 : slb.size.y;
         const float topOffset = (initAreaH - slb.size.y) * 0.5f;
         oy = area.position.y + topOffset - slb.position.y - m_scrollOffsetY;
@@ -523,7 +524,7 @@ void Textbox::update(sf::FloatRect& parentBounds, float dt) {
     if (wrapMode) {
         // Capture the originally-specified height so we never shrink below it.
         if (!m_initialHeightSet) {
-            m_initialHeight    = m_bounds.size.y;
+            m_initialHeight    = m_bounds.size.y / scale;  // store unscaled so DPI changes don't break it
             m_initialHeightSet = true;
         }
 
