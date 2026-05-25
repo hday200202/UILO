@@ -13,6 +13,7 @@
 #include "interactible/Button.hpp"
 #include "interactible/Dropdown.hpp"
 #include "interactible/Resizer.hpp"
+#include "interactible/Textbox.hpp"
 
 // Factory
 #include "Factory.hpp"

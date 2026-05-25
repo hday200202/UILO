@@ -222,6 +222,7 @@ Container* buildRootContainer() {
                                     ),
                                 "test_button"
                             ),
+                            spacer(Modifier().setHeight(16_px).setAlign(Align::CenterY)),
                             dropdown(
                                 Modifier()
                                     .setAlign(Align::CenterX | Align::CenterY)
@@ -241,6 +242,25 @@ Container* buildRootContainer() {
                                     .setDividerThickness(1.f)
                                     .setOnItemChanged([&](const std::string& s){ std::cout << "Dropdown changed to: " << s << std::endl; }),
                                 { "Column", "Row", "Button", "Dropdown", "Knob", "Slider", "1000", "2000", "3000", "4000", "5000", "6000"}
+                            ),
+                            spacer(Modifier().setHeight(16_px).setAlign(Align::CenterY)),
+                            textbox(
+                                Modifier()
+                                    .setAlign(Align::CenterX | Align::CenterY)
+                                    .setWidth(512_px)
+                                    .setHeight(48_px),
+                                TextboxOptions()
+                                    .setCharSize(32)
+                                    .setFont("assets/fonts/Montserrat.ttf")
+                                    .setRounding(ROUNDING)
+                                    .setPlaceholder("Type Something...")
+                                    .setBackgroundColor({100, 100, 100})
+                                    .setMultiline(true)                                    
+                                    .setPaddingLeft(16.f)
+                                    .setPaddingRight(16.f)
+                                    .setOutlineColor(sf::Color::Blue)
+                                    .setOutlineThickness(2.f)
+                                    .setMaxResizeLines(6)
                             )
                         }, "2"
                     )
