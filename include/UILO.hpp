@@ -81,6 +81,7 @@ private:
     std::optional<sf::Cursor> m_curHand;
     std::optional<sf::Cursor> m_curSizeH;
     std::optional<sf::Cursor> m_curSizeV;
+    std::optional<sf::Cursor> m_curText;
 
     Interactible* m_currInteractible             = nullptr;
     bool          m_interactibleActivatedThisFrame = false;

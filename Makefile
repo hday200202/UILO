@@ -18,7 +18,8 @@ SRCS := \
 	include/elements/interactible/Slider.cpp \
 	include/elements/interactible/Button.cpp \
 	include/elements/interactible/Dropdown.cpp \
-	include/elements/interactible/Resizer.cpp
+	include/elements/interactible/Resizer.cpp \
+	include/elements/interactible/Textbox.cpp
 
 OBJS := $(patsubst include/%.cpp,obj/%.o,$(SRCS))
 

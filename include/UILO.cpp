@@ -121,6 +121,10 @@ void UILO::update() {
                 if (!m_curSizeV) m_curSizeV = sf::Cursor::createFromSystem(sf::Cursor::Type::SizeVertical);
                 if (m_curSizeV) cur = &*m_curSizeV;
                 break;
+            case sf::Cursor::Type::Text:
+                if (!m_curText) m_curText = sf::Cursor::createFromSystem(sf::Cursor::Type::Text);
+                if (m_curText) cur = &*m_curText;
+                break;
             default: break;
         }
         if (cur && m_window) m_window->setMouseCursor(*cur);
@@ -146,9 +150,8 @@ void UILO::update() {
             for (auto& ov : m_overlays)
                 if (ov.element->getBounds().contains(mouse)) { clickedOverlay = ov.element; break; }
 
-            if (clickedOverlay) {
-                clickedOverlay->checkLeftClick(mouse);
-            } else {
+            if (clickedOverlay) clickedOverlay->checkLeftClick(mouse);
+            else {
                 // Outside all overlays — dismiss them, then pass click to page
                 auto copy = m_overlays;
                 m_overlays.clear();
@@ -205,6 +208,12 @@ void UILO::handleEvent(const sf::Event& event) {
         if (scrollOverlay) scrollOverlay->checkScroll(mouse, scroll->delta);
         else               m_activePage->m_rootContainer->checkScroll(mouse, scroll->delta);
     }
+
+    if (const auto* te = event.getIf<sf::Event::TextEntered>())
+        if (m_currInteractible) m_currInteractible->handleTextInput(te->unicode);
+
+    if (const auto* kp = event.getIf<sf::Event::KeyPressed>())
+        if (m_currInteractible) m_currInteractible->handleKeyInput(kp->code, kp->shift, kp->control);
 }
 
 }

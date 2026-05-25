@@ -21,6 +21,11 @@ public:
     // Called by UILO when another interactible (or empty space) is clicked.
     // Override to close dropdowns, release focus, etc.
     virtual void onDeactivate() {}
+
+    // Called by UILO event routing for keyboard/text input.
+    // Override in text-input interactibles (e.g. Textbox).
+    virtual void handleTextInput(char32_t /* unicode */) {}
+    virtual void handleKeyInput(sf::Keyboard::Key /* key */, bool /* shift */, bool /* ctrl */) {}
 };
 
 }
