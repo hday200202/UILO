@@ -20,9 +20,11 @@ Container::Container(
 bool Container::checkLeftClick(const sf::Vector2f& mousePosition) {
     bool childClicked = false;
 
-    for (auto& child : m_children)
+    for (auto& child : m_children) {
+        if (child->getType() == ElementType::Resizer) continue;
         if (child->getBounds().contains(mousePosition))
             childClicked |= child->checkLeftClick(mousePosition);
+    }
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
@@ -50,12 +52,16 @@ bool Container::checkRightClick(const sf::Vector2f& mousePosition) {
 bool Container::checkHover(const sf::Vector2f& mousePosition) {
     bool childHovered = false;
 
-    for (auto& child : m_children)
+    for (auto& child : m_children) {
+        if (child->getType() == ElementType::Resizer) continue;
         if (child->getBounds().contains(mousePosition))
             childHovered |= child->checkHover(mousePosition);
+    }
 
     if (!childHovered && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnHover()) m_modifier.getOnHover()();
+        if (m_uiloRef && m_modifier.getOnLeftClick())
+            m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
         return true;
     }
 
@@ -90,6 +96,15 @@ void Container::setUILO(UILO& uiloRef) {
     Element::setUILO(uiloRef);
     for (auto& child : m_children)
         child->setUILO(uiloRef);
+}
+
+void Container::collectResizers(std::vector<Element*>& out) {
+    for (auto* child : m_children) {
+        if (child->getType() == ElementType::Resizer)
+            out.push_back(child);
+        else
+            child->collectResizers(out);
+    }
 }
 
 }

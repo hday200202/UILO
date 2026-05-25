@@ -1,4 +1,5 @@
 #include "Button.hpp"
+#include "../../UILO.hpp"
 
 namespace uilo {
 
@@ -26,6 +27,8 @@ bool Button::checkRightClick(const sf::Vector2f& mousePosition) {
 }
 
 bool Button::checkHover(const sf::Vector2f& mousePosition) {
+    if (m_bounds.contains(mousePosition) && m_uiloRef)
+        m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
     return Element::checkHover(mousePosition);
 }
 

@@ -11,6 +11,8 @@
 #include "interactible/Interactible.hpp"
 #include "interactible/Slider.hpp"
 #include "interactible/Button.hpp"
+#include "interactible/Dropdown.hpp"
+#include "interactible/Resizer.hpp"
 
 // Factory
 #include "Factory.hpp"

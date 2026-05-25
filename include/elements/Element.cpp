@@ -68,6 +68,8 @@ namespace uilo {
             m_hovered = true;
             if (m_modifier.getOnHover()) m_modifier.getOnHover()();
         }
+        if (m_uiloRef && m_modifier.getOnLeftClick())
+            m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
         return true;
     }
 

@@ -24,8 +24,8 @@ int main() {
         settings
     );
     
-    // window.setVerticalSyncEnabled(true);
-    window.setFramerateLimit(1600);
+    window.setVerticalSyncEnabled(true);
+    // window.setFramerateLimit(1600);
 
     UILO ui(window, page(buildRootContainer(), "main_page"));
 
@@ -120,8 +120,12 @@ Container* buildRootContainer() {
                     column(
                         Modifier()
                             .setOuterPadding(8.f)
-                            .setWidth(35_pct),
-                        ColumnOptions().setColor(CONT_COLOR).setRounding(ROUNDING).setScrollable(true).setScrollSpeed(40.f),
+                            .setWidth(320_px),
+                        ColumnOptions()
+                            .setColor(CONT_COLOR)
+                            .setRounding(ROUNDING)
+                            .setScrollable(true)
+                            .setScrollSpeed(40.f),
                         contains {
                             row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColor({55,58,74}).setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  include/").setCharSize(16).setColor({180,190,220}).setTextAlignY(Align::CenterY)) }),
                             row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.hpp").setCharSize(16).setColor({140,148,180}).setTextAlignY(Align::CenterY)) }),
@@ -179,6 +183,16 @@ Container* buildRootContainer() {
                         }, "1"
                     ),
 
+                    // resizer(...)
+                    resizer(
+                        Modifier()
+                            .setWidth(48_px), 
+                        ResizerOptions()
+                            .setDirection(ResizerDir::Left)
+                            .setResizeWidthMin(10_pct)
+                            .setResizeWidthMax(50_pct)
+                    ),
+
                     column(
                         Modifier()
                             .setOuterPadding(8.f),
@@ -207,10 +221,39 @@ Container* buildRootContainer() {
                                         )
                                     ),
                                 "test_button"
+                            ),
+                            dropdown(
+                                Modifier()
+                                    .setAlign(Align::CenterX | Align::CenterY)
+                                    .setWidth(256_px)
+                                    .setHeight(32_px),
+                                DropdownOptions()
+                                    .setFont("assets/fonts/Montserrat.ttf")
+                                    .setCharSize(18)
+                                    .setPopupRounding(ROUNDING)
+                                    .setHeaderRounding(ROUNDING)
+                                    .setPlaceholder("Choose...")
+                                    .setSpacer(4.f)
+                                    .setHeaderTextAlignment(Align::CenterX, Align::CenterY)
+                                    .setPopupTextAlignment(Align::CenterX, Align::CenterY)
+                                    .setMaxItems(6)
+                                    .setDividerColor({60, 60, 60})
+                                    .setDividerThickness(1.f)
+                                    .setOnItemChanged([&](const std::string& s){ std::cout << "Dropdown changed to: " << s << std::endl; }),
+                                { "Column", "Row", "Button", "Dropdown", "Knob", "Slider", "1000", "2000", "3000", "4000", "5000", "6000"}
                             )
                         }, "2"
                     )
                 }
+            ),
+
+            resizer(
+                Modifier()
+                    .setHeight(48_px), 
+                ResizerOptions()
+                    .setDirection(ResizerDir::Bottom)
+                    .setResizeHeightMin(10_pct)
+                    .setResizeHeightMax(50_pct)
             ),
 
             row(
