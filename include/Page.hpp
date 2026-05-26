@@ -15,8 +15,8 @@ protected:
     Container* m_rootContainer = nullptr;
     std::string m_name = "";
 
-    void update(sf::FloatRect& screenBounds, float dt);
-    void render(sf::RenderTarget& target);
+    void update(Rectf& screenBounds, float dt);
+    void render();
     void setUILO(UILO& uiloRef);
 
     friend class UILO;

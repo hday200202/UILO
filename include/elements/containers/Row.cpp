@@ -10,7 +10,7 @@ Row::Row(Modifier modifier, RowOptions options, contains children, const std::st
     : Container(modifier, children, name), m_options(options)
 {}
 
-void Row::update(sf::FloatRect& parentBounds, float dt) {
+void Row::update(Rectf& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);
 
@@ -29,7 +29,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
             if (child->getType() == ElementType::Resizer) continue;
             Dimension dim = child->getModifier().getWidth();
             float rw = dim.percent ? (m_bounds.size.x * dim.value / 100.f) : dim.value * scale;
-            sf::FloatRect slot{ {cursorX, m_bounds.position.y}, {rw, m_bounds.size.y} };
+            Rectf slot{ {cursorX, m_bounds.position.y}, {rw, m_bounds.size.y} };
             child->update(slot, dt);
             cursorX       += rw;
             m_contentWidth += rw;
@@ -122,7 +122,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
             else if (hasAlign(align, Align::CenterX))   slotX = cursorX - (sw - rw) * 0.5f;
             else                                        slotX = cursorX;
 
-            sf::FloatRect slot;
+            Rectf slot;
             slot.position   = { slotX, m_bounds.position.y };
             slot.size       = { sw, m_bounds.size.y };
             child->update(slot, dt);
@@ -183,7 +183,7 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
         Dimension hitDim = r->getModifier().getWidth();
         float hitW = hitDim.percent ? (m_bounds.size.x * hitDim.value / 100.f)
                                     : hitDim.value * scale;
-        sf::FloatRect rBounds = {
+        Rectf rBounds = {
             { boundX - hitW * 0.5f, topY },
             { hitW, std::max(0.f, botY - topY) }
         };
@@ -201,93 +201,35 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
     }
 }
 
-void Row::render(sf::RenderTarget& target) {
+void Row::render() {
     if (m_bounds.size.x <= 0.f || m_bounds.size.y <= 0.f) return;
 
+    // TODO: BGFX rendering — background fill + children
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const float r = m_options.getRounding() * scale;
+    (void)scale;
 
-    // ---- Scrollable path: no RT — use viewport clipping ----
-    if (m_options.getScrollable()) {
-        const sf::Color c = m_options.getColor();
+    if (m_uiloRef) {
+        Color c = m_options.getColor();
         if (c.a > 0) {
-            if (r <= 0.f) {
-                sf::VertexArray bg(sf::PrimitiveType::Triangles, 6);
-                appendQuad(bg, m_bounds.position, m_bounds.size, c);
-                target.draw(bg);
-            } else {
-                sf::ConvexShape bg = makeRoundedRect(m_bounds.position, m_bounds.size, r);
-                bg.setFillColor(c);
-                target.draw(bg);
-            }
+            float r = m_options.getRounding() * scale;
+            if (r <= 0.f)
+                m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
+            else
+                m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
         }
-
-        const sf::View savedView = target.getView();
-        target.setView(computeClipView(savedView, m_bounds));
-
-        for (auto* child : m_children) {
-            if (child->getType() == ElementType::Resizer) continue;
-            if (!m_bounds.findIntersection(child->getBounds())) continue;
-            child->render(target);
-        }
-
-        target.setView(savedView);
-        m_dirty = false;
-        return;
-    }
-
-    // ---- Non-scrollable path: RT caching ----
-    const sf::Vector2u needed{
-        static_cast<unsigned int>(std::ceil(m_bounds.size.x)),
-        static_cast<unsigned int>(std::ceil(m_bounds.size.y))
-    };
-    if (m_rt.getSize() != needed) {
-        if (!m_rt.resize(needed, m_uiloRef ? m_uiloRef->getContextSettings() : sf::ContextSettings{})) return;
-        m_dirty = true;
-    }
-
-    if (!m_dirty) {
-        for (auto* child : m_children) {
-            if (child->getType() == ElementType::Resizer) continue;
-            if (!m_bounds.findIntersection(child->getBounds())) continue;
-            if (child->isDirty()) { m_dirty = true; break; }
-        }
-    }
-
-    if (!m_dirty) {
-        sf::Sprite sprite(m_rt.getTexture());
-        sprite.setPosition(m_bounds.position);
-        target.draw(sprite);
-        return;
-    }
-
-    m_rt.setView(sf::View(sf::FloatRect{m_bounds.position, m_bounds.size}));
-    m_rt.clear(sf::Color::Transparent);
-
-    sf::Color c = m_options.getColor();
-    if (c.a > 0) {
-        sf::VertexArray bg(sf::PrimitiveType::Triangles, 6);
-        appendQuad(bg, m_bounds.position, m_bounds.size, c);
-        m_rt.draw(bg);
     }
 
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
-        if (!m_bounds.findIntersection(child->getBounds())) continue;
-        child->render(m_rt);
+        if (m_uiloRef) m_uiloRef->getRenderer().pushScissor(m_bounds);
+        child->render();
+        if (m_uiloRef) m_uiloRef->getRenderer().popScissor();
     }
-
-    if (r > 0.f) eraseCorners(m_rt, m_bounds, r);
-    m_rt.display();
-
-    sf::Sprite sprite(m_rt.getTexture());
-    sprite.setPosition(m_bounds.position);
-    target.draw(sprite);
 
     m_dirty = false;
 }
 
-bool Row::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+bool Row::checkScroll(const Vec2f& mousePosition, float delta) {
     if (!m_bounds.contains(mousePosition)) return false;
 
     if (m_options.getScrollable()) {

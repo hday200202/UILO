@@ -25,7 +25,7 @@ bool Container::isDirty() const {
     return false;
 }
 
-bool Container::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Container::checkLeftClick(const Vec2f& mousePosition) {
     bool childClicked = false;
 
     for (auto& child : m_children) {
@@ -42,7 +42,7 @@ bool Container::checkLeftClick(const sf::Vector2f& mousePosition) {
     return childClicked;
 }
 
-bool Container::checkRightClick(const sf::Vector2f& mousePosition) {
+bool Container::checkRightClick(const Vec2f& mousePosition) {
     bool childClicked = false;
 
     for (auto& child : m_children)
@@ -57,7 +57,7 @@ bool Container::checkRightClick(const sf::Vector2f& mousePosition) {
     return childClicked;
 }
 
-bool Container::checkHover(const sf::Vector2f& mousePosition) {
+bool Container::checkHover(const Vec2f& mousePosition) {
     bool childHovered = false;
 
     for (auto& child : m_children) {
@@ -69,14 +69,14 @@ bool Container::checkHover(const sf::Vector2f& mousePosition) {
     if (!childHovered && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnHover()) m_modifier.getOnHover()();
         if (m_uiloRef && m_modifier.getOnLeftClick())
-            m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
+            m_uiloRef->requestCursor(CursorType::Hand, 1);
         return true;
     }
 
     return childHovered;
 }
 
-bool Container::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
     for (auto& child : m_children)
         if (child->getBounds().contains(mousePosition))
             if (child->checkScroll(mousePosition, delta)) return true;

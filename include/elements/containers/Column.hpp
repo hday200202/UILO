@@ -8,18 +8,18 @@ class ColumnOptions {
 public:
     ColumnOptions() = default;
 
-    ColumnOptions& setColor(const sf::Color& c) { m_color       = c;  return *this; }
+    ColumnOptions& setColor(const Color& c)    { m_color       = c;  return *this; }
     ColumnOptions& setRounding(float r)         { m_rounding    = r;  return *this; }
     ColumnOptions& setScrollable(bool v)        { m_scrollable  = v;  return *this; }
     ColumnOptions& setScrollSpeed(float s)      { m_scrollSpeed = s; return *this; }
 
-    sf::Color getColor()       const { return m_color; }
+    Color getColor()       const { return m_color; }
     float     getRounding()    const { return m_rounding; }
     bool      getScrollable()  const { return m_scrollable; }
     float     getScrollSpeed() const { return m_scrollSpeed; }
 
 private:
-    sf::Color m_color       = sf::Color::Transparent;
+    Color m_color       = Color{0,0,0,0};
     float     m_rounding    = 0.f;
     bool      m_scrollable  = false;
     float     m_scrollSpeed = 40.f;
@@ -35,9 +35,9 @@ public:
     void setOptions(const ColumnOptions& opts)      { m_options = opts; m_dirty = true; }
     void setScrollOffset(float offset);
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
-    bool checkScroll(const sf::Vector2f& mousePosition, float delta) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
+    bool checkScroll(const Vec2f& mousePosition, float delta) override;
 
 private:
     ColumnOptions m_options;

@@ -16,177 +16,106 @@ Slider::Slider(Modifier modifier, SliderOptions options, const std::string& name
     m_value    = m_options.getMin();
 }
 
-void Slider::update(sf::FloatRect& parentBounds, float /*dt*/) {
+void Slider::update(Rectf& parentBounds, float /*dt*/) {
     resize(parentBounds);
 
     if (m_dragging) {
-        if (!sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+        float mx, my;
+        uint32_t btns = SDL_GetMouseState(&mx, &my);
+        if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
             m_dragging = false;
         } else {
             const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
             if (m_uiloRef) m_uiloRef->requestCursor(
-                isHoriz ? sf::Cursor::Type::SizeHorizontal : sf::Cursor::Type::SizeVertical, 2);
-            const sf::Vector2f mouse = m_uiloRef->getMousePosition();
+                isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 2);
+            const Vec2f mouse = m_uiloRef->getMousePosition();
             applyValue(isHoriz ? valueFromMouseX(mouse.x) : valueFromMouseY(mouse.y));
         }
     }
 }
 
-void Slider::render(sf::RenderTarget& target) {
-    if (!m_modifier.getVisible()) return;
-    m_dirty = false;
-
-    float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const sf::Vector2f pos  = m_bounds.position;
-    const sf::Vector2f size = m_bounds.size;
+void Slider::render() {
+    if (!m_uiloRef) { m_dirty = false; return; }
+    auto& renderer = m_uiloRef->getRenderer();
+    const float scale = m_uiloRef->getScale();
+    const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
+    const float trackRounding = m_options.getTrackRounding() * scale;
 
     float t = (m_options.getMax() > m_options.getMin())
         ? (m_value - m_options.getMin()) / (m_options.getMax() - m_options.getMin())
         : 0.f;
-    t = std::clamp(t, 0.f, 1.f);
 
-    if (m_options.getOrientation() == SliderOrientation::Vertical) {
-        const float hh        = resolveThumbHalfHeight();
-        const float trackW    = size.x * m_options.getTrackThickness();
-        const float trackX    = pos.x + (size.x - trackW) * 0.5f;
-        const float trackTop  = pos.y + hh;
-        const float trackH    = size.y - 2.f * hh;
-        const float thumbY    = trackTop + t * trackH;
-        const float r         = m_options.getTrackRounding() * scale;
+    if (isHoriz) {
+        const float trackH = m_bounds.size.y * m_options.getTrackThickness();
+        const float trackY = m_bounds.position.y + (m_bounds.size.y - trackH) * 0.5f;
+        const float trackX = m_bounds.position.x;
+        const float trackW = m_bounds.size.x;
+        const float hw     = resolveThumbHalfWidth();
 
         // Background track
-        if (r <= 0.f) {
-            sf::RectangleShape bg({trackW, trackH});
-            bg.setPosition({trackX, trackTop});
-            bg.setFillColor(m_options.getTrackColor());
-            target.draw(bg);
-        } else {
-            sf::ConvexShape bg = makeRoundedRect({trackX, trackTop}, {trackW, trackH}, r);
-            bg.setFillColor(m_options.getTrackColor());
-            target.draw(bg);
-        }
+        renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
+                                  trackRounding, 8, m_options.getTrackColor()});
 
-        // Fill (top to thumb)
-        const float fillH = thumbY - trackTop;
-        if (fillH > 0.f) {
-            if (r <= 0.f) {
-                sf::RectangleShape fill({trackW, fillH});
-                fill.setPosition({trackX, trackTop});
-                fill.setFillColor(m_options.getFillColor());
-                target.draw(fill);
-            } else {
-                sf::ConvexShape fill = makeRoundedRect({trackX, trackTop}, {trackW, fillH}, r);
-                fill.setFillColor(m_options.getFillColor());
-                target.draw(fill);
-            }
-        }
+        // Fill from left to thumb
+        const float fillW = hw + t * (trackW - 2.f * hw);
+        if (fillW > 0.f)
+            renderer.draw(RoundedRect{{trackX, trackY}, {fillW, trackH},
+                                      trackRounding, 8, m_options.getFillColor()});
 
         // Thumb
-        const float cx = pos.x + size.x * 0.5f;
+        const float thumbCX = trackX + hw + t * (trackW - 2.f * hw);
+        const float thumbHH = resolveThumbHalfHeight();
+        const float thumbCY = m_bounds.position.y + m_bounds.size.y * 0.5f;
         if (m_options.getThumbShape() == ThumbShape::Circle) {
-            const float radius = m_options.getThumbSize().x > 0.f
-                ? m_options.getThumbSize().x * scale * 0.5f
-                : size.x * 0.4f;
-            sf::CircleShape thumb(radius);
-            thumb.setOrigin({radius, radius});
-            thumb.setPosition({cx, thumbY});
-            thumb.setFillColor(m_options.getThumbColor());
-            target.draw(thumb);
+            renderer.draw(Circle{{thumbCX, thumbCY}, hw, 24, m_options.getThumbColor()});
         } else {
-            const float tw = m_options.getThumbSize().x > 0.f ? m_options.getThumbSize().x * scale : size.x;
-            const float th = m_options.getThumbSize().y > 0.f ? m_options.getThumbSize().y * scale : size.x;
-            const float tr = m_options.getThumbRounding() * scale;
-            if (tr <= 0.f) {
-                sf::RectangleShape thumb({tw, th});
-                thumb.setOrigin({tw * 0.5f, th * 0.5f});
-                thumb.setPosition({cx, thumbY});
-                thumb.setFillColor(m_options.getThumbColor());
-                target.draw(thumb);
-            } else {
-                sf::ConvexShape thumb = makeRoundedRect(
-                    {cx - tw * 0.5f, thumbY - th * 0.5f}, {tw, th}, tr);
-                thumb.setFillColor(m_options.getThumbColor());
-                target.draw(thumb);
-            }
+            renderer.draw(RoundedRect{
+                {thumbCX - hw, thumbCY - thumbHH}, {hw * 2.f, thumbHH * 2.f},
+                m_options.getThumbRounding() * scale, 8, m_options.getThumbColor()});
         }
-        return;
-    }
-
-    // Horizontal path
-    const float hw        = resolveThumbHalfWidth();
-    const float trackH    = size.y * m_options.getTrackThickness();
-    const float trackY    = pos.y + (size.y - trackH) * 0.5f;
-    const float trackLeft = pos.x + hw;
-    const float trackW    = size.x - 2.f * hw;
-
-    const float thumbX = trackLeft + t * trackW;
-    const float r      = m_options.getTrackRounding() * scale;
-
-    if (r <= 0.f) {
-        sf::RectangleShape bg({trackW, trackH});
-        bg.setPosition({trackLeft, trackY});
-        bg.setFillColor(m_options.getTrackColor());
-        target.draw(bg);
     } else {
-        sf::ConvexShape bg = makeRoundedRect({trackLeft, trackY}, {trackW, trackH}, r);
-        bg.setFillColor(m_options.getTrackColor());
-        target.draw(bg);
-    }
+        const float trackW = m_bounds.size.x * m_options.getTrackThickness();
+        const float trackX = m_bounds.position.x + (m_bounds.size.x - trackW) * 0.5f;
+        const float trackY = m_bounds.position.y;
+        const float trackH = m_bounds.size.y;
+        const float hh     = resolveThumbHalfHeight();
 
-    const float fillW = thumbX - trackLeft;
-    if (fillW > 0.f) {
-        if (r <= 0.f) {
-            sf::RectangleShape fill({fillW, trackH});
-            fill.setPosition({trackLeft, trackY});
-            fill.setFillColor(m_options.getFillColor());
-            target.draw(fill);
+        // Background track
+        renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
+                                  trackRounding, 8, m_options.getTrackColor()});
+
+        // Fill from top to thumb
+        const float fillH = hh + t * (trackH - 2.f * hh);
+        if (fillH > 0.f)
+            renderer.draw(RoundedRect{{trackX, trackY}, {trackW, fillH},
+                                      trackRounding, 8, m_options.getFillColor()});
+
+        // Thumb
+        const float thumbHW = resolveThumbHalfWidth();
+        const float thumbCX = m_bounds.position.x + m_bounds.size.x * 0.5f;
+        const float thumbCY = trackY + hh + t * (trackH - 2.f * hh);
+        if (m_options.getThumbShape() == ThumbShape::Circle) {
+            renderer.draw(Circle{{thumbCX, thumbCY}, hh, 24, m_options.getThumbColor()});
         } else {
-            sf::ConvexShape fill = makeRoundedRect({trackLeft, trackY}, {fillW, trackH}, r);
-            fill.setFillColor(m_options.getFillColor());
-            target.draw(fill);
+            renderer.draw(RoundedRect{
+                {thumbCX - thumbHW, thumbCY - hh}, {thumbHW * 2.f, hh * 2.f},
+                m_options.getThumbRounding() * scale, 8, m_options.getThumbColor()});
         }
     }
 
-    if (m_options.getThumbShape() == ThumbShape::Circle) {
-        const float radius = m_options.getThumbSize().x > 0.f
-            ? m_options.getThumbSize().x * scale * 0.5f
-            : size.y * 0.4f;
-        sf::CircleShape thumb(radius);
-        thumb.setOrigin({radius, radius});
-        thumb.setPosition({thumbX, pos.y + size.y * 0.5f});
-        thumb.setFillColor(m_options.getThumbColor());
-        target.draw(thumb);
-    } else {
-        const float tw = m_options.getThumbSize().x * scale;
-        const float th = m_options.getThumbSize().y > 0.f ? m_options.getThumbSize().y * scale : size.y;
-        const float tr = m_options.getThumbRounding() * scale;
-        if (tr <= 0.f) {
-            sf::RectangleShape thumb({tw, th});
-            thumb.setOrigin({tw * 0.5f, th * 0.5f});
-            thumb.setPosition({thumbX, pos.y + size.y * 0.5f});
-            thumb.setFillColor(m_options.getThumbColor());
-            target.draw(thumb);
-        } else {
-            sf::ConvexShape thumb = makeRoundedRect(
-                {thumbX - tw * 0.5f, pos.y + size.y * 0.5f - th * 0.5f},
-                {tw, th}, tr
-            );
-            thumb.setFillColor(m_options.getThumbColor());
-            target.draw(thumb);
-        }
-    }
+    m_dirty = false;
 }
 
-bool Slider::checkHover(const sf::Vector2f& mousePosition) {
+bool Slider::checkHover(const Vec2f& mousePosition) {
     if (m_bounds.contains(mousePosition) && m_uiloRef) {
         const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
         m_uiloRef->requestCursor(
-            isHoriz ? sf::Cursor::Type::SizeHorizontal : sf::Cursor::Type::SizeVertical, 1);
+            isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 1);
     }
     return Element::checkHover(mousePosition);
 }
 
-bool Slider::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     m_uiloRef->setCurrInteractible(this);
     m_dragging = true;
@@ -196,7 +125,7 @@ bool Slider::checkLeftClick(const sf::Vector2f& mousePosition) {
     return true;
 }
 
-bool Slider::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+bool Slider::checkScroll(const Vec2f& mousePosition, float delta) {
     if (!m_bounds.contains(mousePosition)) return false;
     const float range = m_options.getMax() - m_options.getMin();
     const float step  = m_options.getStep() > 0.f

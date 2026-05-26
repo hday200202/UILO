@@ -1,98 +1,95 @@
 #include "../include/UILO.hpp"
+#include "../include/renderer/Renderer.hpp"
+#include <SDL3/SDL.h>
 #include <iostream>
+#include <cstdio>
 
 using namespace uilo;
 
-sf::Color   BG_COLOR    = {33, 35, 47};
-sf::Color   CONT_COLOR  = {44, 47, 60};
-float       ROUNDING    = 8.f;
+Color   BG_COLOR    = {33, 35, 47};
+Color   CONT_COLOR  = {44, 47, 60};
+float   ROUNDING    = 8.f;
 
 Container* buildRootContainer();
 
 int main() {
-    sf::RenderWindow window;
-    sf::VideoMode screenRes({1920, 1080});
-
-    sf::ContextSettings settings;
-    settings.antiAliasingLevel = 8;
-
-    window.create(
-        screenRes, 
-        "Containers", 
-        sf::Style::Default, 
-        sf::State::Windowed,
-        settings
-    );
-    
-    // window.setVerticalSyncEnabled(true);
-    // window.setFramerateLimit(1600);
-
-    UILO ui(window, page(buildRootContainer(), "main_page"));
-
-    ui.setScale(1.f);
-
-    sf::Font fpsFont;
-    std::optional<sf::Text> fpsText;
-    if (fpsFont.openFromFile("assets/fonts/Montserrat.ttf")) {
-        fpsText.emplace(fpsFont, "FPS: 0", 18u);
-        fpsText->setFillColor(sf::Color::White);
-        fpsText->setOutlineColor(sf::Color::Black);
-        fpsText->setOutlineThickness(1.f);
-        fpsText->setPosition({8.f, 8.f});
+    Renderer renderer;
+    if (!renderer.init(3840, 2160, "Containers", 0)) {
+        std::fprintf(stderr, "Failed to initialize renderer\n");
+        return 1;
     }
 
-    bool showFps = false;
+    renderer.setVsync(false);
 
-    float dt = 0.f;
-    float timer = 0.f;
+    UILO ui(renderer, page(buildRootContainer(), "main_page"));
+    ui.setScale(0.75f);
 
-    float fpsSum = 0.f;
-    int loopCount = 0.f;
+    Font fpsFont = renderer.loadFont("assets/fonts/Montserrat.ttf");
 
-    bool prevPlus = false;
+    bool prevPlus  = false;
     bool prevMinus = false;
+    bool prevF10   = false;
+    bool showFps   = false;
+    bool running   = true;
 
-    while (window.isOpen()) {
-        while (const auto event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>())
-                window.close();
-            if (const auto* key = event->getIf<sf::Event::KeyPressed>())
-                if (key->code == sf::Keyboard::Key::F10)
-                    showFps = !showFps;
-            ui.handleEvent(*event);
+    float fpsTimer = 0.f;
+    int   fpsLoops = 0;
+    float fpsValue = 0.f;
+
+    while (running) {
+        const float dt = ui.getDeltaTime();
+        fpsTimer += dt;
+        fpsLoops++;
+        if (fpsTimer >= 0.25f) {
+            fpsValue = (float)fpsLoops / fpsTimer;
+            fpsLoops = 0;
+            fpsTimer = 0.f;
         }
 
-        bool plus = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Equal);
-        bool minus = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Hyphen);
-
-        if (plus && !prevPlus) ui.setScale(ui.getScale() + 0.1f);
-        if (minus && !prevMinus) ui.setScale(ui.getScale() - 0.1f);
-
-        prevPlus = plus;
-        prevMinus = minus;
-
-        dt = ui.getDeltaTime();
-        timer += dt;
-
-        if (dt > 0.f) {
-            fpsSum += 1.f / dt;
-            loopCount++;
-        }
-
-        if (timer >= 1.f) {
-            timer = 0.f;
-            float fps = loopCount > 0 ? fpsSum / loopCount : 0.f;
-            if (fpsText) fpsText->setString("FPS: " + std::to_string(static_cast<int>(fps)));
-            fpsSum = 0.f;
-            loopCount = 0;
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT)
+                running = false;
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+                SDL_Keycode k = event.key.key;
+                if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) {
+                    bool prevP = prevPlus;
+                    prevPlus = true;
+                    if (!prevP) ui.setScale(ui.getScale() + 0.1f);
+                } else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) {
+                    bool prevM = prevMinus;
+                    prevMinus = true;
+                    if (!prevM) ui.setScale(ui.getScale() - 0.1f);
+                } else if (k == SDLK_F10) {
+                    if (!prevF10) showFps = !showFps;
+                    prevF10 = true;
+                }
+            }
+            if (event.type == SDL_EVENT_KEY_UP) {
+                SDL_Keycode k = event.key.key;
+                if (k == SDLK_EQUALS || k == SDLK_KP_PLUS)  prevPlus  = false;
+                if (k == SDLK_MINUS  || k == SDLK_KP_MINUS) prevMinus = false;
+                if (k == SDLK_F10)                          prevF10   = false;
+            }
+            ui.handleEvent(event);
         }
 
         ui.update();
 
-        window.clear();
+        renderer.beginFrame();
+        renderer.clear(BG_COLOR);
         ui.render();
-        if (showFps && fpsText) window.draw(*fpsText);
-        window.display();
+
+        if (showFps && fpsFont.valid()) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.0f FPS", fpsValue);
+            const float scale = ui.getScale();
+            const float pxH   = 18.f * scale;
+            const float pad   = 8.f  * scale;
+            renderer.drawText(buf, { pad, pad }, fpsFont, pxH, {255, 255, 255});
+        }
+
+        renderer.endFrame();
     }
 }
 
@@ -214,7 +211,7 @@ Container* buildRootContainer() {
                                             TextOptions()
                                                 .setFont("assets/fonts/Montserrat.ttf")
                                                 .setContent("TEST")
-                                                .setColor(sf::Color::White)
+                                                .setColor(Color::White)
                                                 .setTextAlignX(Align::CenterX)
                                                 .setTextAlignY(Align::CenterY)
                                         )

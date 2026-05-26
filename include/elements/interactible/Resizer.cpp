@@ -1,6 +1,6 @@
 #include "Resizer.hpp"
 #include "../../UILO.hpp"
-
+#include <SDL3/SDL.h>
 #include <algorithm>
 
 namespace uilo {
@@ -13,24 +13,26 @@ Resizer::Resizer(Modifier modifier, ResizerOptions options, const std::string& n
     m_type = ElementType::Resizer;
 }
 
-void Resizer::update(sf::FloatRect& parentBounds, float dt) {
+void Resizer::update(Rectf& parentBounds, float dt) {
     (void)dt;
     m_bounds = parentBounds;  // Container sets exact bounds; no resize() here
 
     if (!m_uiloRef || !m_target || !m_dragging) return;
 
-    if (!sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+    float mx, my;
+    uint32_t btns = SDL_GetMouseState(&mx, &my);
+    if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
         m_dragging = false;
         return;
     }
 
     const float scale          = m_uiloRef->getScale();
-    const sf::Vector2f mouse   = m_uiloRef->getMousePosition();
+    const Vec2f mouse   = m_uiloRef->getMousePosition();
     const ResizerDir dir       = m_options.getDirection();
     const bool isHoriz         = (dir == ResizerDir::Left || dir == ResizerDir::Right);
 
     m_uiloRef->requestCursor(
-        isHoriz ? sf::Cursor::Type::SizeHorizontal : sf::Cursor::Type::SizeVertical, 2);
+        isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 2);
 
     const float dx      = (mouse.x - m_dragStart.x) / scale;
     const float dy      = (mouse.y - m_dragStart.y) / scale;
@@ -65,56 +67,41 @@ void Resizer::update(sf::FloatRect& parentBounds, float dt) {
     }
 }
 
-void Resizer::render(sf::RenderTarget& target) {
+void Resizer::render() {
     if (!m_modifier.getVisible()) return;
-    sf::Color c = m_options.getColor();
-    if (c.a == 0) return;
-
-    // Visual strip: getThickness() * scale, centered within the (larger) hit bounds.
-    const float scale        = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const float visualThick  = m_options.getThickness() * scale;
-    const bool  isHoriz      = (m_options.getDirection() == ResizerDir::Left ||
-                                m_options.getDirection() == ResizerDir::Right);
-
-    sf::FloatRect vis = m_bounds;
-    if (isHoriz) {
-        vis.position.x = m_bounds.position.x + (m_bounds.size.x - visualThick) * 0.5f;
-        vis.size.x     = visualThick;
-    } else {
-        vis.position.y = m_bounds.position.y + (m_bounds.size.y - visualThick) * 0.5f;
-        vis.size.y     = visualThick;
+    // TODO: BGFX rendering for resizer visual strip
+    Color c = m_options.getColor();
+    if (c.a == 0) { m_dirty = false; return; }
+    if (m_uiloRef) {
+        const float scale       = m_uiloRef->getScale();
+        const float visualThick = m_options.getThickness() * scale;
+        const bool  isHoriz     = (m_options.getDirection() == ResizerDir::Left ||
+                                   m_options.getDirection() == ResizerDir::Right);
+        Rectf vis = m_bounds;
+        if (isHoriz) {
+            vis.position.x = m_bounds.position.x + (m_bounds.size.x - visualThick) * 0.5f;
+            vis.size.x     = visualThick;
+        } else {
+            vis.position.y = m_bounds.position.y + (m_bounds.size.y - visualThick) * 0.5f;
+            vis.size.y     = visualThick;
+        }
+        m_uiloRef->getRenderer().draw(Rect{vis.position, vis.size, c});
     }
-
-    // Set a pixel-accurate view so the visual rect maps 1:1 to screen coords,
-    // then restore whatever view was active before.
-    const auto winSize   = target.getSize();
-    const sf::View saved = target.getView();
-    target.setView(sf::View(sf::FloatRect{
-        {0.f, 0.f},
-        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-    }));
-
-    sf::RectangleShape rect(vis.size);
-    rect.setPosition(vis.position);
-    rect.setFillColor(c);
-    target.draw(rect);
-
-    target.setView(saved);
     m_dirty = false;
 }
 
-bool Resizer::checkHover(const sf::Vector2f& mousePosition) {
+bool Resizer::checkHover(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     if (m_uiloRef) {
-        const ResizerDir dir  = m_options.getDirection();
-        const bool isHoriz    = (dir == ResizerDir::Left || dir == ResizerDir::Right);
+        const ResizerDir dir = m_options.getDirection();
+        const bool isHoriz   = (dir == ResizerDir::Left || dir == ResizerDir::Right);
         m_uiloRef->requestCursor(
-            isHoriz ? sf::Cursor::Type::SizeHorizontal : sf::Cursor::Type::SizeVertical, 2);
+            isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 2);
     }
     return true;
 }
 
-bool Resizer::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
 
     const float scale = m_uiloRef->getScale();

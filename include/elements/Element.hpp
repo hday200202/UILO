@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Modifier.hpp"
+#include "../../include/utils/Math.hpp"
 
 namespace uilo {
 
@@ -38,19 +39,19 @@ public:
     Element() = default;
     virtual ~Element() = default;
 
-    sf::FloatRect getBounds() const;
+    Rectf getBounds() const;
     Modifier& getModifier();
     virtual bool isDirty() const;
     void erase();
-    
+
     virtual void setUILO(UILO& uiloRef);
-    virtual void update(sf::FloatRect& parentBounds, float dt) = 0;
-    virtual void render(sf::RenderTarget& target) = 0;
-    virtual bool checkLeftClick(const sf::Vector2f& mousePosition);
-    virtual bool checkRightClick(const sf::Vector2f& mousePosition);
-    virtual bool checkHover(const sf::Vector2f& mousePosition);
-    virtual bool checkScroll(const sf::Vector2f& mousePosition, float delta);
-    void resize(const sf::FloatRect& parent);
+    virtual void update(Rectf& parentBounds, float dt) = 0;
+    virtual void render() = 0;
+    virtual bool checkLeftClick(const Vec2f& mousePosition);
+    virtual bool checkRightClick(const Vec2f& mousePosition);
+    virtual bool checkHover(const Vec2f& mousePosition);
+    virtual bool checkScroll(const Vec2f& mousePosition, float delta);
+    void resize(const Rectf& parent);
 
     // Recursively collect all Resizer-type descendant elements
     virtual void collectResizers(std::vector<Element*>&) {}
@@ -61,8 +62,8 @@ protected:
     UILO* m_uiloRef             = nullptr;
     std::string m_name          = "";
 
-    sf::FloatRect m_bounds      = {{0.f, 0.f}, {0.f, 0.f}};
-    sf::FloatRect m_pastBounds  = {{0.f, 0.f}, {0.f, 0.f}};
+    Rectf m_bounds     = {};
+    Rectf m_pastBounds = {};
 
     bool m_dirty                = true;
     bool m_markedForDeletion    = false;

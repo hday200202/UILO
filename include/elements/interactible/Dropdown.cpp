@@ -14,17 +14,9 @@ Dropdown::Dropdown(
     m_name     = name;
     m_type     = ElementType::Dropdown;
 
-    // Resolve font
-    if (m_options.getFontRef()) {
-        m_fontPtr = m_options.getFontRef();
-    } else if (!m_options.getFontPath().empty()) {
-        if (m_ownedFont.openFromFile(m_options.getFontPath()))
-            m_fontPtr = &m_ownedFont;
-    }
-
     // --- Header label ---
     TextOptions headerTextOpts;
-    if (m_fontPtr) headerTextOpts.setFont(*m_fontPtr);
+    if (!m_options.getFontPath().empty()) headerTextOpts.setFont(m_options.getFontPath());
     headerTextOpts
         .setContent(m_options.getPlaceholder());
     if (m_options.hasCharSize()) headerTextOpts.setCharSize(m_options.getCharSize());
@@ -58,7 +50,7 @@ Dropdown::Dropdown(
     // --- Item buttons ---
     for (size_t i = 0; i < m_items.size(); ++i) {
         TextOptions itemTextOpts;
-        if (m_fontPtr) itemTextOpts.setFont(*m_fontPtr);
+        if (!m_options.getFontPath().empty()) itemTextOpts.setFont(m_options.getFontPath());
         itemTextOpts
             .setContent(m_items[i]);
         if (m_options.hasCharSize()) itemTextOpts.setCharSize(m_options.getCharSize());
@@ -131,7 +123,7 @@ const std::string& Dropdown::getSelectedItem() const {
     return m_items[static_cast<size_t>(m_selectedIndex)];
 }
 
-sf::FloatRect Dropdown::computePopupBounds() const {
+Rectf Dropdown::computePopupBounds() const {
     const float scale      = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float itemH      = m_options.getItemHeight() * scale;
     const float divH       = m_options.getDividerThickness() * scale;
@@ -160,7 +152,7 @@ sf::FloatRect Dropdown::computePopupBounds() const {
 void Dropdown::openPopup() {
     if (!m_uiloRef) return;
     m_isOpen = true;
-    sf::FloatRect popupBounds = computePopupBounds();
+    Rectf popupBounds = computePopupBounds();
     m_popup->update(popupBounds, 0.f);
     m_uiloRef->registerOverlay(m_popup, [this]() { closePopup(); });
 }
@@ -181,17 +173,17 @@ void Dropdown::closePopup() {
     if (m_uiloRef) m_uiloRef->unregisterOverlay(m_popup);
 }
 
-void Dropdown::update(sf::FloatRect& parentBounds, float dt) {
+void Dropdown::update(Rectf& parentBounds, float dt) {
     m_justDismissed = false;
     resize(parentBounds);
 
     m_header->update(m_bounds, dt);
 
     if (m_isOpen) {
-        sf::FloatRect popupBounds = computePopupBounds();
+        Rectf popupBounds = computePopupBounds();
         m_popup->update(popupBounds, dt);
 
-        const sf::Vector2f mousePos = m_uiloRef ? m_uiloRef->getMousePosition() : sf::Vector2f{};
+        const Vec2f mousePos = m_uiloRef ? m_uiloRef->getMousePosition() : Vec2f{};
         int newHovered = -1;
         for (size_t i = 0; i < m_itemButtons.size(); ++i) {
             if (m_itemButtons[i]->getBounds().contains(mousePos)) {
@@ -220,20 +212,20 @@ void Dropdown::update(sf::FloatRect& parentBounds, float dt) {
     }
 }
 
-void Dropdown::render(sf::RenderTarget& target) {
-    m_header->render(target);
+void Dropdown::render() {
+    m_header->render();
     m_dirty = false;
 }
 
-bool Dropdown::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Dropdown::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     if (!m_isOpen && !m_justDismissed) openPopup();
     return true;
 }
 
-bool Dropdown::checkHover(const sf::Vector2f& mousePosition) {
+bool Dropdown::checkHover(const Vec2f& mousePosition) {
     if (m_bounds.contains(mousePosition) && m_uiloRef)
-        m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
+        m_uiloRef->requestCursor(CursorType::Hand, 1);
     return Element::checkHover(mousePosition);
 }
 

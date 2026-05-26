@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SDL3/SDL.h>
 #include "../Element.hpp"
 
 namespace uilo {
@@ -15,8 +16,8 @@ class Interactible : public Element {
 public:
     Interactible() = default;
 
-    bool checkLeftClick(const sf::Vector2f& mousePosition) override;
-    bool checkRightClick(const sf::Vector2f& mousePosition) override;
+    bool checkLeftClick(const Vec2f& mousePosition) override;
+    bool checkRightClick(const Vec2f& mousePosition) override;
 
     // Called by UILO when another interactible (or empty space) is clicked.
     // Override to close dropdowns, release focus, etc.
@@ -25,7 +26,11 @@ public:
     // Called by UILO event routing for keyboard/text input.
     // Override in text-input interactibles (e.g. Textbox).
     virtual void handleTextInput(char32_t /* unicode */) {}
-    virtual void handleKeyInput(sf::Keyboard::Key /* key */, bool /* shift */, bool /* ctrl */) {}
+    virtual void handleKeyInput(SDL_Keycode /* key */, bool /* shift */, bool /* ctrl */) {}
+
+    // Override and return true in interactibles that consume IME / text-input
+    // events (Textbox). UILO uses this to toggle SDL_StartTextInput on focus.
+    virtual bool wantsTextInput() const { return false; }
 };
 
 }

@@ -13,24 +13,20 @@ Spacer::Spacer(
     m_name = name;
 }
 
-void Spacer::update(sf::FloatRect& parentBounds, float dt) { resize(parentBounds); (void)dt; }
+void Spacer::update(Rectf& parentBounds, float dt) { resize(parentBounds); (void)dt; }
 
-void Spacer::render(sf::RenderTarget& target) {
-    float scale   = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+void Spacer::render() {
+    // TODO: BGFX rendering for spacer background
+    if (!m_uiloRef) { m_dirty = false; return; }
+    const Color c = m_options.getColor();
+    if (c.a == 0) { m_dirty = false; return; }
+    const float scale = m_uiloRef->getScale();
     const float r = m_options.getRounding() * scale;
-    const sf::Color c = m_options.getColor();
-
-    if (r <= 0.f) {
-        sf::RectangleShape rect;
-        rect.setSize(m_bounds.size);
-        rect.setPosition(m_bounds.position);
-        rect.setFillColor(c);
-        target.draw(rect);
-    } else {
-        sf::ConvexShape rounded = makeRoundedRect(m_bounds.position, m_bounds.size, r);
-        rounded.setFillColor(c);
-        target.draw(rounded);
-    }
+    auto& renderer = m_uiloRef->getRenderer();
+    if (r <= 0.f)
+        renderer.draw(Rect{m_bounds.position, m_bounds.size, c});
+    else
+        renderer.draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8, c});
     m_dirty = false;
 }
 

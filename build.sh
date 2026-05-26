@@ -1,69 +1,55 @@
 #!/usr/bin/env bash
-# Usage: build.sh [clean] [debug|release] [uilo] [example...]
+# Cross-platform build wrapper for UILO (Linux / macOS / WSL / Git-Bash).
+# Auto-fetches SDL3 and bgfx via CMake FetchContent when not installed.
 #
-# Tokens (order-independent):
-#   clean              Clean the specified targets before building.
-#                      With no other targets: wipes the entire build dir.
-#                      With targets: cleans only those targets.
-#   debug | release    Build type (default: release)
-#   uilo               Build the static library target
-#   <name>             Build a named example (e.g. containers)
-#   (no targets)       Build everything (ninja default target)
-#
-# Examples:
-#   build.sh                          release build of uilo + all examples
-#   build.sh clean                    wipe entire release build dir, then rebuild all
-#   build.sh clean uilo               clean + rebuild only the library
-#   build.sh clean containers         clean + rebuild only containers
-#   build.sh clean uilo containers    clean + rebuild library and containers
-#   build.sh debug uilo containers    debug build of library + containers
-
+# Usage:
+#   ./build.sh                       # configure + build (Release)
+#   ./build.sh debug                 # Debug build
+#   ./build.sh clean                 # wipe build/ then rebuild
+#   ./build.sh clean debug           # clean Debug rebuild
+#   UILO_AUTO_FETCH=OFF ./build.sh   # require system SDL3/bgfx
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-MODE="release"
-CLEAN=0
-TARGETS=()
+MODE="Release"
+DO_CLEAN=0
+EXTRA_TARGETS=()
 
 for arg in "$@"; do
     case "$arg" in
-        clean)     CLEAN=1 ;;
-        debug)     MODE="debug" ;;
-        release)   MODE="release" ;;
-        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
-        *)         TARGETS+=("$arg") ;;
+        clean)    DO_CLEAN=1 ;;
+        debug)    MODE="Debug" ;;
+        release)  MODE="Release" ;;
+        *)        EXTRA_TARGETS+=("$arg") ;;
     esac
 done
 
-BUILD_DIR="$ROOT/build/$MODE"
-
-case "$MODE" in
-    debug)   CMAKE_BUILD_TYPE="Debug" ;;
-    release) CMAKE_BUILD_TYPE="Release" ;;
-esac
-
-# Configure (idempotent — cmake skips work when nothing changed)
-cmake -S "$ROOT" -B "$BUILD_DIR" \
-    -G Ninja \
-    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE"
-
-# Clean
-if [[ $CLEAN -eq 1 ]]; then
-    if [[ ${#TARGETS[@]} -eq 0 ]]; then
-        echo "==> Cleaning all ($MODE)"
-        ninja -C "$BUILD_DIR" -t clean
-    else
-        echo "==> Cleaning: ${TARGETS[*]} ($MODE)"
-        ninja -C "$BUILD_DIR" -t clean "${TARGETS[@]}"
-    fi
+BUILD_DIR="build/${MODE}"
+if [[ $DO_CLEAN -eq 1 ]]; then
+    echo "[UILO] cleaning $BUILD_DIR"
+    rm -rf "$BUILD_DIR"
 fi
 
-# Build
-if [[ ${#TARGETS[@]} -eq 0 ]]; then
-    echo "==> Building all ($MODE)"
-    ninja -C "$BUILD_DIR"
+# Pick a generator
+GENERATOR="Unix Makefiles"
+if command -v ninja >/dev/null 2>&1; then
+    GENERATOR="Ninja"
+fi
+
+AUTO_FETCH="${UILO_AUTO_FETCH:-ON}"
+
+echo "[UILO] configure ($MODE, $GENERATOR, AUTO_FETCH=$AUTO_FETCH)"
+cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$GENERATOR" \
+    -DCMAKE_BUILD_TYPE="$MODE" \
+    -DUILO_AUTO_FETCH="$AUTO_FETCH"
+
+echo "[UILO] build"
+if [[ ${#EXTRA_TARGETS[@]} -gt 0 ]]; then
+    cmake --build "$BUILD_DIR" --config "$MODE" --parallel --target "${EXTRA_TARGETS[@]}"
 else
-    echo "==> Building: ${TARGETS[*]} ($MODE)"
-    ninja -C "$BUILD_DIR" "${TARGETS[@]}"
+    cmake --build "$BUILD_DIR" --config "$MODE" --parallel
 fi
+
+echo "[UILO] done -> $BUILD_DIR"

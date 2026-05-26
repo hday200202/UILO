@@ -1,5 +1,6 @@
 #include "Image.hpp"
 #include "../../UILO.hpp"
+#include "../../renderer/Renderer.hpp"
 
 namespace uilo {
 
@@ -11,126 +12,53 @@ Image::Image(
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Image;
-
-    if (options.getImage().has_value()) {
-        m_originalImage = *options.getImage();
-        init();
-    } else if (!options.getPath().empty()) {
-        if (!m_originalImage.loadFromFile(options.getPath())) return;
-        init();
-    }
 }
 
 void Image::init() {
-    if (m_options.getRecolor() ||
-        m_options.getClipEllipse()) {
-        m_lastRecolor = m_options.getColor();
-        rebuildTexture();
-    } else {
-        if (!m_texture.loadFromImage(m_originalImage)) return;
+    if (m_loaded || !m_uiloRef || m_options.getPath().empty()) return;
+    Texture tex = m_uiloRef->getRenderer().loadTexture(m_options.getPath());
+    if (tex.valid()) {
+        m_textureHandle = tex.handle;
+        m_textureWidth  = tex.width;
+        m_textureHeight = tex.height;
+        m_loaded = true;
     }
-
-    m_sprite.emplace(m_texture);
-    m_loaded = true;
 }
 
 void Image::rebuildTexture() {
-    sf::Image working = m_originalImage;
-    auto size = working.getSize();
-
-    if (m_options.getRecolor()) {
-        sf::Color tgt = m_options.getColor();
-        for (unsigned y = 0; y < size.y; ++y) {
-            for (unsigned x = 0; x < size.x; ++x) {
-                sf::Color px = working.getPixel({x, y});
-                float luma = 0.299f * (px.r / 255.f)
-                           + 0.587f * (px.g / 255.f)
-                           + 0.114f * (px.b / 255.f);
-                float dark = 1.f - luma;
-                px.r = tgt.r;
-                px.g = tgt.g;
-                px.b = tgt.b;
-                px.a = static_cast<uint8_t>(px.a * dark);
-                working.setPixel({x, y}, px);
-            }
-        }
-    }
-
-    if (m_options.getClipEllipse()) {
-        float cx = size.x * 0.5f;
-        float cy = size.y * 0.5f;
-        for (unsigned y = 0; y < size.y; ++y) {
-            for (unsigned x = 0; x < size.x; ++x) {
-                float dx = (x + 0.5f - cx) / cx;
-                float dy = (y + 0.5f - cy) / cy;
-                if (dx * dx + dy * dy > 1.0f) {
-                    sf::Color px = working.getPixel({x, y});
-                    px.a = 0;
-                    working.setPixel({x, y}, px);
-                }
-            }
-        }
-    }
-
-    if (!m_texture.loadFromImage(working)) return;
+    m_loaded = false;
+    m_textureHandle = 0xFFFFu;
+    init();
 }
 
 bool Image::isLoaded() const { return m_loaded; }
 
-void Image::update(sf::FloatRect& parentBounds, float dt) {
+void Image::update(Rectf& parentBounds, float dt) {
     (void)dt;
-    if (!m_loaded) return;
-
+    if (!m_loaded) init();
     resize(parentBounds);
 
-    auto texSize = m_texture.getSize();
-    float scale  = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    float op     = m_modifier.getOuterPadding() * scale;
-    Align align = m_modifier.getAlign();
-
-    if (m_options.getLockAspectWidth()) {
-        float aspect     = static_cast<float>(texSize.y) / static_cast<float>(texSize.x);
-        m_bounds.size.y  = m_bounds.size.x * aspect;
-
-        float innerTop = parentBounds.position.y + op;
-        float innerH   = parentBounds.size.y - 2.f * op;
-        if      (hasAlign(align, Align::Bottom)) m_bounds.position.y = innerTop + innerH - m_bounds.size.y;
-        else if (hasAlign(align, Align::CenterY))   m_bounds.position.y = innerTop + (innerH - m_bounds.size.y) * 0.5f;
-        else                                      m_bounds.position.y = innerTop;
-    }
-    else if (m_options.getLockAspectHeight()) {
-        float aspect     = static_cast<float>(texSize.x) / static_cast<float>(texSize.y);
-        m_bounds.size.x  = m_bounds.size.y * aspect;
-
-        float innerLeft = parentBounds.position.x + op;
-        float innerW    = parentBounds.size.x - 2.f * op;
-        if      (hasAlign(align, Align::Right)) m_bounds.position.x = innerLeft + innerW - m_bounds.size.x;
-        else if (hasAlign(align, Align::CenterX))  m_bounds.position.x = innerLeft + (innerW - m_bounds.size.x) * 0.5f;
-        else                                     m_bounds.position.x = innerLeft;
+    if (m_loaded && m_textureWidth > 0 && m_textureHeight > 0) {
+        const float aspect = (float)m_textureWidth / (float)m_textureHeight;
+        if (m_options.getLockAspectHeight()) {
+            m_bounds.size.x = m_bounds.size.y * aspect;
+        } else if (m_options.getLockAspectWidth()) {
+            m_bounds.size.y = m_bounds.size.x / aspect;
+        }
     }
 }
 
-void Image::render(sf::RenderTarget& target) {
-    if (!m_loaded || !m_sprite) return;
-
-    if (m_options.getRecolor()) {
-        sf::Color cur = m_options.getColor();
-        if (cur != m_lastRecolor) {
-            m_lastRecolor = cur;
-            rebuildTexture();
-        }
-    }
-
-    auto texSize = m_texture.getSize();
-    float sx = m_bounds.size.x / static_cast<float>(texSize.x);
-    float sy = m_bounds.size.y / static_cast<float>(texSize.y);
-
-    m_sprite->setPosition(m_bounds.position);
-    m_sprite->setScale({sx, sy});
-    m_sprite->setColor(sf::Color::White);
-
-    target.draw(*m_sprite);
+void Image::render() {
     m_dirty = false;
+    if (!m_loaded || !m_uiloRef) return;
+    Texture tex;
+    tex.handle = m_textureHandle;
+    tex.width  = (uint16_t)m_textureWidth;
+    tex.height = (uint16_t)m_textureHeight;
+    Color tint = m_options.getRecolor() ? m_options.getColor() : Color::White;
+    m_uiloRef->getRenderer().drawImage(
+        m_bounds, tex, tint, {{0.f, 0.f}, {1.f, 1.f}},
+        m_options.getFlipH(), m_options.getFlipV());
 }
 
 } // namespace uilo

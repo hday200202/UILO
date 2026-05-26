@@ -8,14 +8,14 @@ class SpacerOptions {
 public:
     SpacerOptions() = default;
 
-    SpacerOptions& setColor(const sf::Color& c) { m_color    = c; return *this; }
+    SpacerOptions& setColor(const Color& c) { m_color    = c; return *this; }
     SpacerOptions& setRounding(float r)          { m_rounding = r; return *this; }
 
-    sf::Color getColor()    const { return m_color; }
+    Color getColor()    const { return m_color; }
     float     getRounding() const { return m_rounding; }
 
 private:
-    sf::Color m_color    = sf::Color::Transparent;
+    Color m_color    = Color{0,0,0,0};
     float     m_rounding = 0.f;
 };
 
@@ -26,8 +26,8 @@ public:
     const SpacerOptions& getOptions() const        { return m_options; }
     void setOptions(const SpacerOptions& opts)      { m_options = opts; }
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
 
 private:
     SpacerOptions m_options;
