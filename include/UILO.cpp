@@ -62,6 +62,12 @@ void UILO::update() {
 
     if (!m_activePage) return;
 
+    const sf::Vector2u windowSize = m_window->getSize();
+    if (windowSize != m_prevWindowSize) {
+        for (auto& e : m_elementPool) e->m_dirty = true;
+        m_prevWindowSize = windowSize;
+    }
+
     sf::FloatRect logicalBounds = {
         { 0.f, 0.f },
         { static_cast<float>(m_window->getSize().x), static_cast<float>(m_window->getSize().y) }
@@ -177,6 +183,8 @@ void UILO::update() {
 }
 
 void UILO::render() {
+    if (!m_activePage) return;
+
     // Set a pixel-accurate view based on the current window size before rendering.
     // Without this, a resized window would leave the view based on the original
     // creation size (getDefaultView()), causing overlays and resizers to render

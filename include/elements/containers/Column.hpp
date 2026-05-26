@@ -33,6 +33,7 @@ public:
 
     const ColumnOptions& getOptions() const        { return m_options; }
     void setOptions(const ColumnOptions& opts)      { m_options = opts; m_dirty = true; }
+    void setScrollOffset(float offset);
 
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;
