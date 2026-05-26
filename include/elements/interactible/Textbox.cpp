@@ -171,13 +171,6 @@ void Textbox::rebuildSfText() {
     m_sfText->setStyle(style);
     m_sfText->setFillColor(m_options.getTextColor());
 
-    if (hasAlign(m_options.getTextAlignX(), Align::CenterX))
-        m_sfText->setLineAlignment(sf::Text::LineAlignment::Center);
-    else if (hasAlign(m_options.getTextAlignX(), Align::Right))
-        m_sfText->setLineAlignment(sf::Text::LineAlignment::Right);
-    else
-        m_sfText->setLineAlignment(sf::Text::LineAlignment::Left);
-
     // Cache stable vertical bounds using caps-only reference so that all-caps
     // text centers perfectly on the visible cap-height, and descenders on
     // lowercase chars fall naturally below that centre line without shifting it.
@@ -717,7 +710,6 @@ void Textbox::render(sf::RenderTarget& target) {
             const unsigned int cs = static_cast<unsigned int>(std::round(resolvedCs * scale));
             sf::Text ph(*m_fontPtr, m_options.getPlaceholder(), cs);
             ph.setFillColor(m_options.getPlaceholderColor());
-            ph.setLineAlignment(m_sfText->getLineAlignment());
             ph.setPosition(m_textOrigin);
             target.draw(ph);
         } else {

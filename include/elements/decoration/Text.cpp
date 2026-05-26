@@ -84,12 +84,7 @@ void Text::rebuildText() {
     if (m_options.getStrikeThrough()) style |= static_cast<std::uint32_t>(sf::Text::Style::StrikeThrough);
     m_text->setStyle(style);
 
-    if (m_options.getTextAlignX() == Align::CenterX)
-        m_text->setLineAlignment(sf::Text::LineAlignment::Center);
-    else if (m_options.getTextAlignX() == Align::Right)
-        m_text->setLineAlignment(sf::Text::LineAlignment::Right);
-    else
-        m_text->setLineAlignment(sf::Text::LineAlignment::Left);
+
 
     m_text->setFillColor(m_options.getColor());
 }
@@ -143,9 +138,9 @@ void Text::render(sf::RenderTarget& target) {
 
     float x;
     if (m_options.getTextAlignX() == Align::CenterX)
-        x = m_bounds.position.x + m_bounds.size.x * 0.5f;
+        x = m_bounds.position.x + (m_bounds.size.x - lb.size.x) * 0.5f - lb.position.x;
     else if (m_options.getTextAlignX() == Align::Right)
-        x = m_bounds.position.x + m_bounds.size.x;
+        x = m_bounds.position.x + m_bounds.size.x - lb.size.x - lb.position.x;
     else
         x = m_bounds.position.x - lb.position.x;
 
