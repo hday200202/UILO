@@ -309,6 +309,7 @@ void Textbox::deleteSelection() {
 void Textbox::resetBlink() {
     m_blinkTimer    = 0.f;
     m_cursorVisible = true;
+    m_dirty = true;
 }
 
 size_t Textbox::lineStart(size_t pos) const {
@@ -522,6 +523,7 @@ void Textbox::update(sf::FloatRect& parentBounds, float dt) {
         m_textDirty = true;
 
     if (m_textDirty) {
+        m_dirty = true;
         rebuildSfText();
     } else if (m_sfText) {
         // Cheaper path: just sync the string without recreating the object
@@ -602,6 +604,7 @@ void Textbox::update(sf::FloatRect& parentBounds, float dt) {
         if (m_blinkTimer >= half) {
             m_blinkTimer   -= half;
             m_cursorVisible = !m_cursorVisible;
+            m_dirty = true;
         }
     }
 }
@@ -616,17 +619,17 @@ void Textbox::render(sf::RenderTarget& target) {
     const float scale  = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float r      = m_options.getRounding() * scale;
     const sf::Color bg = m_options.getBackgroundColor();
-    const sf::Vector2u winSize = target.getSize();
-    const sf::View savedView   = target.getView();
-
-    // Set a pixel-accurate base view for the background
-    sf::View pixelView(sf::FloatRect{
-        {0.f, 0.f},
-        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-    });
-    target.setView(pixelView);
+    // Capture the current view before we touch anything. Background, outline,
+    // and the clip-viewport calculation all derive from it so that TextBox
+    // works correctly whether the target is the window or a bounds-sized RT
+    // set up by a parent container.
+    const sf::View savedView     = target.getView();
+    const sf::Vector2f viewSize  = savedView.getSize();
+    const sf::Vector2f viewTL    = savedView.getCenter() - viewSize * 0.5f;
+    const sf::FloatRect viewVP   = savedView.getViewport();
 
     // ---- Background ----
+    // Draw with the inherited view — world coordinates already map correctly.
     if (bg.a > 0) {
         if (r <= 0.f) {
             sf::RectangleShape bg_rect(m_bounds.size);
@@ -662,14 +665,16 @@ void Textbox::render(sf::RenderTarget& target) {
     // ---- Text-area content (clipped) ----
     const sf::FloatRect area = textArea();
     if (area.size.x > 0.f && area.size.y > 0.f && m_sfText) {
+        // Compute the clip viewport by mapping the world-space area rect through
+        // savedView's coordinate transform. This works for any target (window or RT).
         sf::View clipView;
         clipView.setCenter(area.position + area.size / 2.f);
         clipView.setSize(area.size);
         clipView.setViewport(sf::FloatRect{
-            { area.position.x / static_cast<float>(winSize.x),
-              area.position.y / static_cast<float>(winSize.y) },
-            { area.size.x     / static_cast<float>(winSize.x),
-              area.size.y     / static_cast<float>(winSize.y) }
+            { viewVP.position.x + (area.position.x - viewTL.x) / viewSize.x * viewVP.size.x,
+              viewVP.position.y + (area.position.y - viewTL.y) / viewSize.y * viewVP.size.y },
+            { area.size.x / viewSize.x * viewVP.size.x,
+              area.size.y / viewSize.y * viewVP.size.y }
         });
         target.setView(clipView);
 
@@ -728,6 +733,7 @@ void Textbox::render(sf::RenderTarget& target) {
     }
 
     target.setView(savedView);
+    m_dirty = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -765,6 +771,7 @@ void Textbox::onDeactivate() {
     m_cursorVisible = false;
     m_mouseDown     = false;
     m_dragging      = false;
+    m_dirty = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -790,6 +797,7 @@ bool Textbox::checkScroll(const sf::Vector2f& mousePos, float delta) {
     const float targetLine  = currentLine - delta;   // delta>0 = scroll up (reveal top)
     m_scrollOffsetY = std::max(0.f, std::min(targetLine * lh, maxScroll));
     computeTextOrigin();
+    m_dirty = true;
     return true;
 }
 

@@ -23,6 +23,7 @@ public:
     void addElement(Element* element);
     void setUILO(UILO& uiloRef) override;
     void collectResizers(std::vector<Element*>& out) override;
+    bool isDirty() const override;
 
 protected:
     std::vector<Element*> m_children;

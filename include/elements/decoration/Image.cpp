@@ -130,6 +130,7 @@ void Image::render(sf::RenderTarget& target) {
     m_sprite->setColor(sf::Color::White);
 
     target.draw(*m_sprite);
+    m_dirty = false;
 }
 
 } // namespace uilo

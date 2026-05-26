@@ -17,6 +17,14 @@ Container::Container(
     for (auto& child : children) m_children.push_back(child);
 }
 
+bool Container::isDirty() const {
+    if (m_dirty) return true;
+    for (auto* child : m_children) {
+        if (child->isDirty()) return true;
+    }
+    return false;
+}
+
 bool Container::checkLeftClick(const sf::Vector2f& mousePosition) {
     bool childClicked = false;
 

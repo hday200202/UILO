@@ -32,7 +32,7 @@ public:
     explicit Row(Modifier modifier, RowOptions options, contains children, const std::string& name = "");
 
     const RowOptions& getOptions() const   { return m_options; }
-    void setOptions(const RowOptions& opts) { m_options = opts; }
+    void setOptions(const RowOptions& opts) { m_options = opts; m_dirty = true; }
 
     void update(sf::FloatRect& parentBounds, float dt) override;
     void render(sf::RenderTarget& target) override;

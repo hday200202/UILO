@@ -18,8 +18,10 @@ namespace uilo {
         };
 
         // Resolve against parent, shrink by outer padding on lrtb
+        const sf::Vector2f oldSize = m_bounds.size;
         m_bounds.size.x = resolveScaled(m_modifier.getWidth(),  parent.size.x) - (2.f * op);
         m_bounds.size.y = resolveScaled(m_modifier.getHeight(), parent.size.y) - (2.f * op);
+        if (m_bounds.size != oldSize) m_dirty = true;
 
         sf::FloatRect inner = {
             {parent.position.x + op, parent.position.y + op},
@@ -61,11 +63,12 @@ namespace uilo {
 
     bool Element::checkHover(const sf::Vector2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) {
-            m_hovered = false;
+            if (m_hovered) { m_hovered = false; m_dirty = true; }
             return false;
         }
         if (!m_hovered) {
             m_hovered = true;
+            m_dirty = true;
             if (m_modifier.getOnHover()) m_modifier.getOnHover()();
         }
         if (m_uiloRef && m_modifier.getOnLeftClick())

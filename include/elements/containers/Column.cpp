@@ -200,22 +200,39 @@ void Column::update(sf::FloatRect& parentBounds, float dt) {
 }
 
 void Column::render(sf::RenderTarget& target) {
+    if (m_bounds.size.x <= 0.f || m_bounds.size.y <= 0.f) return;
+
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float r = m_options.getRounding() * scale;
 
-    // Always use the RT path so that children which internally swap to a
-    // full-window view (e.g. child containers with rounding) are composited
-    // through this RT and can't bleed outside m_bounds.
-    const auto winSize = target.getSize();
-    if (m_rt.getSize() != winSize) {
-        if (!m_rt.resize(winSize)) return;
+    const sf::Vector2u needed{
+        static_cast<unsigned int>(std::ceil(m_bounds.size.x)),
+        static_cast<unsigned int>(std::ceil(m_bounds.size.y))
+    };
+    if (m_rt.getSize() != needed) {
+        if (!m_rt.resize(needed)) return;
+        m_dirty = true;
     }
 
-    sf::View fullView(sf::FloatRect{
-        {0.f, 0.f},
-        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-    });
-    m_rt.setView(fullView);
+    // Check if any visible child has changed content (not just position)
+    if (!m_dirty) {
+        for (auto* child : m_children) {
+            if (child->getType() == ElementType::Resizer) continue;
+            if (!m_bounds.findIntersection(child->getBounds())) continue;
+            if (child->isDirty()) { m_dirty = true; break; }
+        }
+    }
+
+    if (!m_dirty) {
+        // Blit cached sprite at current position (handles moves without re-render)
+        sf::Sprite sprite(m_rt.getTexture());
+        sprite.setPosition(m_bounds.position);
+        target.draw(sprite);
+        return;
+    }
+
+    // Full re-render to RT
+    m_rt.setView(sf::View(sf::FloatRect{m_bounds.position, m_bounds.size}));
     m_rt.clear(sf::Color::Transparent);
 
     sf::Color c = m_options.getColor();
@@ -226,25 +243,20 @@ void Column::render(sf::RenderTarget& target) {
         m_rt.draw(bg);
     }
 
-    for (auto* child : m_children)
-        if (child->getType() != ElementType::Resizer) child->render(m_rt);
+    for (auto* child : m_children) {
+        if (child->getType() == ElementType::Resizer) continue;
+        if (!m_bounds.findIntersection(child->getBounds())) continue;
+        child->render(m_rt);
+    }
 
     if (r > 0.f) eraseCorners(m_rt, m_bounds, r);
     m_rt.display();
 
-    sf::IntRect texRect{
-        {static_cast<int>(m_bounds.position.x), static_cast<int>(m_bounds.position.y)},
-        {static_cast<int>(m_bounds.size.x),     static_cast<int>(m_bounds.size.y)}
-    };
-    sf::Sprite sprite(m_rt.getTexture(), texRect);
+    sf::Sprite sprite(m_rt.getTexture());
     sprite.setPosition(m_bounds.position);
-    const sf::View savedView = target.getView();
-    target.setView(sf::View(sf::FloatRect{
-        {0.f, 0.f},
-        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-    }));
     target.draw(sprite);
-    target.setView(savedView);
+
+    m_dirty = false;
 }
 
 bool Column::checkScroll(const sf::Vector2f& mousePosition, float delta) {
@@ -259,6 +271,7 @@ bool Column::checkScroll(const sf::Vector2f& mousePosition, float delta) {
         float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
         m_scrollOffset = std::clamp(m_scrollOffset - delta * m_options.getScrollSpeed(),
                                     0.f, maxScroll);
+        m_dirty = true;
         return true;
     }
 

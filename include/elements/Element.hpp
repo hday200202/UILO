@@ -40,7 +40,7 @@ public:
 
     sf::FloatRect getBounds() const;
     Modifier& getModifier();
-    bool isDirty() const;
+    virtual bool isDirty() const;
     void erase();
     
     virtual void setUILO(UILO& uiloRef);
