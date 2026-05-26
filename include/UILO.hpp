@@ -36,6 +36,7 @@ public:
     float getScale() const { return m_scale; }
     float getDeltaTime() const { return m_deltaTime; }
     sf::Vector2u getWindowSize() const { return m_window ? m_window->getSize() : sf::Vector2u{0u, 0u}; }
+    sf::ContextSettings getContextSettings() const { return m_window ? m_window->getSettings() : sf::ContextSettings{}; }
     sf::Vector2f getMousePosition() const {
         sf::Vector2i raw = sf::Mouse::getPosition(*m_window);
         return { static_cast<float>(raw.x), static_cast<float>(raw.y) };
@@ -70,6 +71,7 @@ private:
     Timer m_timer;
 
     sf::RenderWindow* m_window = nullptr;
+    sf::Vector2u m_prevWindowSize  = {0u, 0u};
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;

@@ -10,6 +10,12 @@ Column::Column(Modifier modifier, ColumnOptions options, contains children, cons
     : Container(modifier, children, name), m_options(options)
 {}
 
+void Column::setScrollOffset(float offset) {
+    const float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
+    m_scrollOffset = std::clamp(offset, 0.f, std::max(0.f, maxScroll));
+    m_dirty = true;
+}
+
 void Column::update(sf::FloatRect& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);
@@ -207,16 +213,47 @@ void Column::render(sf::RenderTarget& target) {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float r = m_options.getRounding() * scale;
 
+    // ---- Scrollable path: no RT — use viewport clipping ----
+    // Children still cache their own RTs. We skip the expensive RT clear+display
+    // that would otherwise happen on every scroll tick.
+    if (m_options.getScrollable()) {
+        const sf::Color c = m_options.getColor();
+        if (c.a > 0) {
+            if (r <= 0.f) {
+                sf::VertexArray bg(sf::PrimitiveType::Triangles, 6);
+                appendQuad(bg, m_bounds.position, m_bounds.size, c);
+                target.draw(bg);
+            } else {
+                sf::ConvexShape bg = makeRoundedRect(m_bounds.position, m_bounds.size, r);
+                bg.setFillColor(c);
+                target.draw(bg);
+            }
+        }
+
+        const sf::View savedView = target.getView();
+        target.setView(computeClipView(savedView, m_bounds));
+
+        for (auto* child : m_children) {
+            if (child->getType() == ElementType::Resizer) continue;
+            if (!m_bounds.findIntersection(child->getBounds())) continue;
+            child->render(target);
+        }
+
+        target.setView(savedView);
+        m_dirty = false;
+        return;
+    }
+
+    // ---- Non-scrollable path: RT caching ----
     const sf::Vector2u needed{
         static_cast<unsigned int>(std::ceil(m_bounds.size.x)),
         static_cast<unsigned int>(std::ceil(m_bounds.size.y))
     };
     if (m_rt.getSize() != needed) {
-        if (!m_rt.resize(needed)) return;
+        if (!m_rt.resize(needed, m_uiloRef ? m_uiloRef->getContextSettings() : sf::ContextSettings{})) return;
         m_dirty = true;
     }
 
-    // Check if any visible child has changed content (not just position)
     if (!m_dirty) {
         for (auto* child : m_children) {
             if (child->getType() == ElementType::Resizer) continue;
@@ -226,22 +263,19 @@ void Column::render(sf::RenderTarget& target) {
     }
 
     if (!m_dirty) {
-        // Blit cached sprite at current position (handles moves without re-render)
         sf::Sprite sprite(m_rt.getTexture());
         sprite.setPosition(m_bounds.position);
         target.draw(sprite);
         return;
     }
 
-    // Full re-render to RT
     m_rt.setView(sf::View(sf::FloatRect{m_bounds.position, m_bounds.size}));
     m_rt.clear(sf::Color::Transparent);
 
     sf::Color c = m_options.getColor();
     if (c.a > 0) {
-        sf::RectangleShape bg(m_bounds.size);
-        bg.setPosition(m_bounds.position);
-        bg.setFillColor(c);
+        sf::VertexArray bg(sf::PrimitiveType::Triangles, 6);
+        appendQuad(bg, m_bounds.position, m_bounds.size, c);
         m_rt.draw(bg);
     }
 

@@ -93,6 +93,7 @@ bool Text::isLoaded() const { return m_loaded; }
 
 void Text::setString(const std::string& content) {
     m_content = content;
+    m_dirty = true;
     rebuildText();
 }
 

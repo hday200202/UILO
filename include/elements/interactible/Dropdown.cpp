@@ -113,6 +113,7 @@ void Dropdown::updateHeaderLabel() {
         ? m_items[static_cast<size_t>(m_selectedIndex)]
         : m_options.getPlaceholder();
     m_headerLabel->setString(txt);
+    m_dirty = true;
 }
 
 void Dropdown::setSelectedIndex(int idx) {

@@ -8,6 +8,42 @@
 namespace uilo {
 
 /*
+    Appends a solid-color axis-aligned quad (two triangles) to a VertexArray.
+    The VertexArray must use PrimitiveType::Triangles.
+*/
+inline void appendQuad(sf::VertexArray& va, sf::Vector2f pos, sf::Vector2f size, sf::Color color) {
+    va.append({{pos.x,          pos.y         }, color});
+    va.append({{pos.x + size.x, pos.y         }, color});
+    va.append({{pos.x + size.x, pos.y + size.y}, color});
+    va.append({{pos.x,          pos.y         }, color});
+    va.append({{pos.x + size.x, pos.y + size.y}, color});
+    va.append({{pos.x,          pos.y + size.y}, color});
+}
+
+/*
+    Computes a clipping sf::View that maps boundsInWorld to a sub-viewport of
+    parentView. Works correctly whether target is a window or a RenderTexture.
+    Use: save view, setView(computeClipView(...)), draw children, restore view.
+*/
+inline sf::View computeClipView(const sf::View& parentView, const sf::FloatRect& boundsInWorld) {
+    const sf::Vector2f vs  = parentView.getSize();
+    const sf::Vector2f vtl = parentView.getCenter() - vs * 0.5f;
+    const sf::FloatRect vp = parentView.getViewport();
+
+    sf::View clip;
+    clip.setCenter(boundsInWorld.position + boundsInWorld.size * 0.5f);
+    clip.setSize(boundsInWorld.size);
+    clip.setViewport(sf::FloatRect{
+        { vp.position.x + (boundsInWorld.position.x - vtl.x) / vs.x * vp.size.x,
+          vp.position.y + (boundsInWorld.position.y - vtl.y) / vs.y * vp.size.y },
+        { boundsInWorld.size.x / vs.x * vp.size.x,
+          boundsInWorld.size.y / vs.y * vp.size.y }
+    });
+    return clip;
+}
+
+
+/*
     Builds a convex polygon that approximates a rounded rectangle.
     segs = arc sample count per corner (>= 2).
     Corners are ordered: top-right, bottom-right, bottom-left, top-left.
