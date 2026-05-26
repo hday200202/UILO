@@ -28,7 +28,8 @@ public:
     const std::string& getFontPath()       const { return m_fontPath; }
     const sf::Font*    getFontRef()        const { return m_fontRef; }
     const std::string& getContent()        const { return m_content; }
-    unsigned int       getCharSize()       const { return m_charSize; }
+    unsigned int       getCharSize()       const { return m_charSize.value_or(30); }
+    bool               hasCharSize()       const { return m_charSize.has_value(); }
     sf::Color          getColor()          const { return m_color; }
     bool               getWrap()           const { return m_wrap; }
     bool               getBold()           const { return m_bold; }
@@ -42,7 +43,7 @@ private:
     std::string     m_fontPath;
     const sf::Font* m_fontRef       = nullptr;
     std::string     m_content;
-    unsigned int    m_charSize      = 30;
+    std::optional<unsigned int> m_charSize;
     sf::Color       m_color         = sf::Color::White;
     bool            m_wrap          = false;
     bool            m_bold          = false;
@@ -76,7 +77,8 @@ private:
     sf::Font                m_ownedFont;
     const sf::Font*         m_fontPtr       = nullptr;
     std::string             m_content;
-    unsigned int            m_charSize      = 30;
+    unsigned int            m_charSize      = 30;  // resolved value (auto-computed or from options)
+    float                   m_lastBoundsH   = 0.f;
     std::optional<sf::Text> m_text;
     sf::Color               m_lastColor     = sf::Color::White;
     float                   m_lastWrapWidth = 0.f;

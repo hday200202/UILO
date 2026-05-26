@@ -203,75 +203,48 @@ void Column::render(sf::RenderTarget& target) {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float r = m_options.getRounding() * scale;
 
-    if (r <= 0.f) {
-        const sf::View originalView = target.getView();
-        const sf::Vector2u winSize  = target.getSize();
-
-        sf::View clipView;
-        clipView.setCenter(m_bounds.position + m_bounds.size / 2.f);
-        clipView.setSize(m_bounds.size);
-        clipView.setViewport(sf::FloatRect{
-            { m_bounds.position.x / winSize.x, m_bounds.position.y / winSize.y },
-            { m_bounds.size.x     / winSize.x, m_bounds.size.y     / winSize.y }
-        });
-
-        target.setView(clipView);
-
-        sf::Color c = m_options.getColor();
-        if (c.a > 0) {
-            sf::RectangleShape rect;
-            rect.setPosition(m_bounds.position);
-            rect.setSize(m_bounds.size);
-            rect.setFillColor(c);
-            target.draw(rect);
-        }
-
-        for (auto* child : m_children)
-            if (child->getType() != ElementType::Resizer) child->render(target);
-
-        target.setView(originalView);
-    } else {
-        // RenderTexture path: draw into window-sized RT then erase corners
-        const auto winSize = target.getSize();
-        if (m_rt.getSize() != winSize) {
-            if (!m_rt.resize(winSize)) return;
-        }
-
-        sf::View fullView(sf::FloatRect{
-            {0.f, 0.f},
-            {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-        });
-        m_rt.setView(fullView);
-        m_rt.clear(sf::Color::Transparent);
-
-        sf::Color c = m_options.getColor();
-        if (c.a > 0) {
-            sf::RectangleShape bg(m_bounds.size);
-            bg.setPosition(m_bounds.position);
-            bg.setFillColor(c);
-            m_rt.draw(bg);
-        }
-
-        for (auto* child : m_children)
-            if (child->getType() != ElementType::Resizer) child->render(m_rt);
-
-        eraseCorners(m_rt, m_bounds, r);
-        m_rt.display();
-
-        sf::IntRect texRect{
-            {static_cast<int>(m_bounds.position.x), static_cast<int>(m_bounds.position.y)},
-            {static_cast<int>(m_bounds.size.x),     static_cast<int>(m_bounds.size.y)}
-        };
-        sf::Sprite sprite(m_rt.getTexture(), texRect);
-        sprite.setPosition(m_bounds.position);
-        const sf::View savedView = target.getView();
-        target.setView(sf::View(sf::FloatRect{
-            {0.f, 0.f},
-            {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
-        }));
-        target.draw(sprite);
-        target.setView(savedView);
+    // Always use the RT path so that children which internally swap to a
+    // full-window view (e.g. child containers with rounding) are composited
+    // through this RT and can't bleed outside m_bounds.
+    const auto winSize = target.getSize();
+    if (m_rt.getSize() != winSize) {
+        if (!m_rt.resize(winSize)) return;
     }
+
+    sf::View fullView(sf::FloatRect{
+        {0.f, 0.f},
+        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
+    });
+    m_rt.setView(fullView);
+    m_rt.clear(sf::Color::Transparent);
+
+    sf::Color c = m_options.getColor();
+    if (c.a > 0) {
+        sf::RectangleShape bg(m_bounds.size);
+        bg.setPosition(m_bounds.position);
+        bg.setFillColor(c);
+        m_rt.draw(bg);
+    }
+
+    for (auto* child : m_children)
+        if (child->getType() != ElementType::Resizer) child->render(m_rt);
+
+    if (r > 0.f) eraseCorners(m_rt, m_bounds, r);
+    m_rt.display();
+
+    sf::IntRect texRect{
+        {static_cast<int>(m_bounds.position.x), static_cast<int>(m_bounds.position.y)},
+        {static_cast<int>(m_bounds.size.x),     static_cast<int>(m_bounds.size.y)}
+    };
+    sf::Sprite sprite(m_rt.getTexture(), texRect);
+    sprite.setPosition(m_bounds.position);
+    const sf::View savedView = target.getView();
+    target.setView(sf::View(sf::FloatRect{
+        {0.f, 0.f},
+        {static_cast<float>(winSize.x), static_cast<float>(winSize.y)}
+    }));
+    target.draw(sprite);
+    target.setView(savedView);
 }
 
 bool Column::checkScroll(const sf::Vector2f& mousePosition, float delta) {

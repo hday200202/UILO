@@ -6,3 +6,6 @@ tests/valgrind.txt
 checklist.txt
 examples/bin
 obj
+*.o
+*.a
+build

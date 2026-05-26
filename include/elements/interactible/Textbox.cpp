@@ -120,9 +120,12 @@ sf::FloatRect Textbox::textArea() const {
 }
 
 float Textbox::lineHeight() const {
-    if (!m_fontPtr) return static_cast<float>(m_options.getCharSize());
+    const unsigned int resolvedCs = m_options.hasCharSize()
+                                  ? m_options.getCharSize()
+                                  : (m_autoCharSize > 0 ? m_autoCharSize : 18u);
+    if (!m_fontPtr) return static_cast<float>(resolvedCs);
     const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const unsigned int cs = static_cast<unsigned int>(m_options.getCharSize() * scale);
+    const unsigned int cs = static_cast<unsigned int>(std::round(resolvedCs * scale));
     return m_fontPtr->getLineSpacing(cs);
 }
 
@@ -145,7 +148,10 @@ sf::Vector2f Textbox::charScreenPos(size_t idx) const {
 void Textbox::rebuildSfText() {
     if (!m_fontPtr) return;
     const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const unsigned int cs = static_cast<unsigned int>(m_options.getCharSize() * scale);
+    const unsigned int resolvedCs = m_options.hasCharSize()
+                                  ? m_options.getCharSize()
+                                  : (m_autoCharSize > 0 ? m_autoCharSize : 18u);
+    const unsigned int cs = static_cast<unsigned int>(std::round(resolvedCs * scale));
 
     // Determine display string
     std::string displayStr;
@@ -225,7 +231,7 @@ void Textbox::computeTextOrigin() {
         oy = area.position.y - slb.position.y - m_scrollOffsetY;
     }
 
-    m_textOrigin = { ox, oy };
+    m_textOrigin = { std::round(ox), std::round(oy) };
     m_sfText->setPosition(m_textOrigin);
 }
 
@@ -346,7 +352,7 @@ void Textbox::rebuildWrapped() {
     if (!m_fontPtr) { m_wrappedDisplay = u32ToUtf8(m_text); return; }
 
     const float scale     = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    const unsigned int cs = static_cast<unsigned int>(m_options.getCharSize() * scale);
+    const unsigned int cs = static_cast<unsigned int>(std::round(m_options.getCharSize() * scale));
     const float maxWidth  = textArea().size.x;
     const std::u32string& src = m_text;
 
@@ -496,6 +502,21 @@ void Textbox::update(sf::FloatRect& parentBounds, float dt) {
     if (!m_fontPtr) return;
 
     const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+
+    // Auto char size: 60% of the *initial* (unscaled) textbox height so that
+    // multiline boxes don't shrink the font each time they grow a new line.
+    // m_initialHeight is set on the first update frame; fall back to current
+    // bounds on that very first frame.
+    if (!m_options.hasCharSize()) {
+        const float baseH    = m_initialHeightSet ? m_initialHeight : m_bounds.size.y / scale;
+        const unsigned int autoCs = std::max(1u,
+            static_cast<unsigned int>(baseH * 0.6f));
+        if (autoCs != m_autoCharSize) {
+            m_autoCharSize = autoCs;
+            m_textDirty    = true;
+        }
+    }
+
     if (scale != m_lastScale) {
         m_lastScale     = scale;
         m_textDirty     = true;
@@ -690,7 +711,10 @@ void Textbox::render(sf::RenderTarget& target) {
 
         // -- Placeholder or text --
         if (m_text.empty() && !m_options.getPlaceholder().empty()) {
-            const unsigned int cs = static_cast<unsigned int>(m_options.getCharSize() * scale);
+            const unsigned int resolvedCs = m_options.hasCharSize()
+                                          ? m_options.getCharSize()
+                                          : (m_autoCharSize > 0 ? m_autoCharSize : 18u);
+            const unsigned int cs = static_cast<unsigned int>(std::round(resolvedCs * scale));
             sf::Text ph(*m_fontPtr, m_options.getPlaceholder(), cs);
             ph.setFillColor(m_options.getPlaceholderColor());
             ph.setLineAlignment(m_sfText->getLineAlignment());

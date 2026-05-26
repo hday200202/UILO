@@ -26,8 +26,9 @@ Dropdown::Dropdown(
     TextOptions headerTextOpts;
     if (m_fontPtr) headerTextOpts.setFont(*m_fontPtr);
     headerTextOpts
-        .setContent(m_options.getPlaceholder())
-        .setCharSize(m_options.getCharSize())
+        .setContent(m_options.getPlaceholder());
+    if (m_options.hasCharSize()) headerTextOpts.setCharSize(m_options.getCharSize());
+    headerTextOpts
         .setColor(m_options.getHeaderTextColor())
         .setTextAlignX(m_options.getHeaderTextAlignX())
         .setTextAlignY(m_options.getHeaderTextAlignY());
@@ -59,8 +60,9 @@ Dropdown::Dropdown(
         TextOptions itemTextOpts;
         if (m_fontPtr) itemTextOpts.setFont(*m_fontPtr);
         itemTextOpts
-            .setContent(m_items[i])
-            .setCharSize(m_options.getCharSize())
+            .setContent(m_items[i]);
+        if (m_options.hasCharSize()) itemTextOpts.setCharSize(m_options.getCharSize());
+        itemTextOpts
             .setColor(m_options.getTextColor())
             .setTextAlignX(m_options.getPopupTextAlignX())
             .setTextAlignY(m_options.getPopupTextAlignY());

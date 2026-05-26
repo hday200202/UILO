@@ -72,7 +72,8 @@ public:
 
     const sf::Font*    getFontRef()          const { return m_fontRef; }
     const std::string& getFontPath()         const { return m_fontPath; }
-    unsigned int       getCharSize()         const { return m_charSize; }
+    unsigned int       getCharSize()         const { return m_charSize.value_or(18); }
+    bool               hasCharSize()         const { return m_charSize.has_value(); }
     sf::Color          getTextColor()        const { return m_textColor; }
     bool               getBold()             const { return m_bold; }
     bool               getItalic()           const { return m_italic; }
@@ -103,7 +104,7 @@ public:
 private:
     const sf::Font*    m_fontRef          = nullptr;
     std::string        m_fontPath;
-    unsigned int       m_charSize         = 18;
+    std::optional<unsigned int> m_charSize;
     sf::Color          m_textColor        = sf::Color::White;
     bool               m_bold             = false;
     bool               m_italic           = false;
@@ -196,6 +197,7 @@ private:
     bool                    m_mouseDown         = false;
     bool                    m_dragging          = false;  // true once mouse has moved past threshold
     bool                    m_needsCursorScroll = false;  // scroll to cursor only when it moved
+    unsigned int            m_autoCharSize      = 0;      // resolved auto char size (0 = not yet computed)
     sf::Vector2f            m_mouseDownPos      = {0.f, 0.f};
 
     sf::Font                m_ownedFont;
