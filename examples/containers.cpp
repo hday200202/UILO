@@ -31,6 +31,7 @@ int main() {
     bool prevF10   = false;
     bool showFps   = false;
     bool running   = true;
+    bool prevV     = false;
 
     float fpsTimer = 0.f;
     int   fpsLoops = 0;
@@ -63,6 +64,9 @@ int main() {
                 } else if (k == SDLK_F10) {
                     if (!prevF10) showFps = !showFps;
                     prevF10 = true;
+                } else if (k == SDLK_V) {
+                    if (!prevV) renderer.setVsync(!renderer.getVsync());
+                    prevV = true;
                 }
             }
             if (event.type == SDL_EVENT_KEY_UP) {
