@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <SFML/Graphics.hpp>
+#include <SDL3/SDL.h>
 
 #include "Interactible.hpp"
 
@@ -16,9 +16,9 @@ class SliderOptions {
 public:
     SliderOptions() = default;
     
-    SliderOptions& setTrackColor(sf::Color c)               { m_trackColor = c;         return *this; }
-    SliderOptions& setFillColor(sf::Color c)                { m_fillColor = c;          return *this; }
-    SliderOptions& setThumbColor(sf::Color c)               { m_thumbColor = c;         return *this; }
+    SliderOptions& setTrackColor(Color c)               { m_trackColor = c;         return *this; }
+    SliderOptions& setFillColor(Color c)                { m_fillColor = c;          return *this; }
+    SliderOptions& setThumbColor(Color c)               { m_thumbColor = c;         return *this; }
     SliderOptions& setThumbShape(ThumbShape s)              { m_thumbShape = s;         return *this; }
     SliderOptions& setTrackThickness(float t)               { m_trackThickness = t;     return *this; }
     SliderOptions& setTrackRounding(float r)                { m_trackRounding = r;      return *this; }
@@ -29,13 +29,13 @@ public:
     SliderOptions& setOnValueChanged(ValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
     SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
 
-    sf::Color            getTrackColor()      const { return m_trackColor; }
-    sf::Color            getFillColor()       const { return m_fillColor; }
-    sf::Color            getThumbColor()      const { return m_thumbColor; }
+    Color            getTrackColor()      const { return m_trackColor; }
+    Color            getFillColor()       const { return m_fillColor; }
+    Color            getThumbColor()      const { return m_thumbColor; }
     ThumbShape           getThumbShape()      const { return m_thumbShape; }
     float                getTrackThickness()  const { return m_trackThickness; }
     float                getTrackRounding()   const { return m_trackRounding; }
-    sf::Vector2f         getThumbSize()       const { return m_thumbSize; }
+    Vec2f         getThumbSize()       const { return m_thumbSize; }
     float                getThumbRounding()   const { return m_thumbRounding; }
     float                getMin()             const { return m_min; }
     float                getMax()             const { return m_max; }
@@ -44,13 +44,13 @@ public:
     const ValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
-    sf::Color            m_trackColor      = sf::Color(60, 60, 60);     // unfilled portion of track
-    sf::Color            m_fillColor       = sf::Color::White;          // filled portion of track
-    sf::Color            m_thumbColor      = sf::Color::White;          // draggable thumb
+    Color            m_trackColor      = Color{60, 60, 60, 255};
+    Color            m_fillColor       = Color::White;
+    Color            m_thumbColor      = Color::White;
     ThumbShape           m_thumbShape      = ThumbShape::Circle;
     float                m_trackThickness  = 0.25f;                     // fraction of element height
     float                m_trackRounding   = 0.f;                       // corner radius of the track bar (px)
-    sf::Vector2f         m_thumbSize       = {8.f, 0.f};                // width/height of thumb (height 0 = auto: element height; for Circle, width is diameter, 0 = auto)
+    Vec2f            m_thumbSize       = {8.f, 0.f};
     float                m_thumbRounding   = 0.f;                       // corner radius of thumb rect
     float                m_min             = 0.f;
     float                m_max             = 1.f;
@@ -63,12 +63,12 @@ class Slider : public Interactible {
 public:
     Slider(Modifier modifier, SliderOptions options = {}, const std::string& name = "");
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
 
-    bool checkHover(const sf::Vector2f& mousePosition) override;
-    bool checkLeftClick(const sf::Vector2f& mousePosition) override;
-    bool checkScroll(const sf::Vector2f& mousePosition, float delta) override;
+    bool checkHover(const Vec2f& mousePosition) override;
+    bool checkLeftClick(const Vec2f& mousePosition) override;
+    bool checkScroll(const Vec2f& mousePosition, float delta) override;
 
     void onDeactivate() override;
 

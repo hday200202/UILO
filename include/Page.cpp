@@ -8,12 +8,12 @@ Page::Page(Container* rootContainer, const std::string& name) {
     m_name = name;
 }
 
-void Page::update(sf::FloatRect& screenBounds, float dt) {
+void Page::update(Rectf& screenBounds, float dt) {
     m_rootContainer->update(screenBounds, dt);
 }
 
-void Page::render(sf::RenderTarget& target) {
-    m_rootContainer->render(target);
+void Page::render() {
+    m_rootContainer->render();
 }
 
 void Page::setUILO(UILO& uiloRef) {

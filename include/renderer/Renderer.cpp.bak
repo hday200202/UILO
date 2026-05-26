@@ -1,0 +1,657 @@
+#include "Renderer.hpp"
+
+#include <SDL3/SDL.h>
+#include <bgfx/bgfx.h>
+#include <bgfx/platform.h>
+#include <cmath>
+
+#if defined(SDL_PLATFORM_LINUX)
+#  include <X11/Xlib.h>   // Window type for X11 handle
+#endif
+
+#include <cstring>
+#include <cstdio>
+#include <algorithm>
+#include <cassert>
+
+namespace uilo {
+
+// ---- helpers ---------------------------------------------------------------
+
+static uint32_t toABGR(Color c) {
+    // BGFX colour format for clears / tints is 0xRRGGBBAA
+    return (uint32_t(c.r) << 24) | (uint32_t(c.g) << 16) |
+           (uint32_t(c.b) <<  8) |  uint32_t(c.a);
+}
+
+// ---- Vertex layout (pos + color, used for all solid shapes) ---------------
+
+struct PosColorVertex {
+    float x, y;
+    uint32_t abgr;  // bgfx packed color (0xAABBGGRR)
+};
+
+static bgfx::VertexLayout s_posColorLayout;
+static bool               s_layoutInit = false;
+
+// ---- Scissor stack (file-scope; submitTriangles is static) ---------------
+struct ScissorEntry { uint16_t x, y, w, h; };
+static ScissorEntry s_scissorStack[16];
+static int          s_scissorTop = 0;
+
+static void ensureLayout() {
+    if (s_layoutInit) return;
+    s_posColorLayout.begin()
+        .add(bgfx::Attrib::Position, 2, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0,   4, bgfx::AttribType::Uint8, true)
+        .end();
+    s_layoutInit = true;
+}
+
+// Compiled with: bgfx-shaderc -p spirv --platform linux
+// vs_solid.sc: vec2 a_position + vec4 a_color0, transforms by u_modelViewProj, outputs v_color0
+static const uint8_t s_vsData[] = {
+    0x56, 0x53, 0x48, 0x0b, 0x00, 0x00, 0x00, 0x00, 0xa4, 0x8b, 0xef, 0x49, 0x01, 0x00, 0x0f, 0x75,
+    0x5f, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x56, 0x69, 0x65, 0x77, 0x50, 0x72, 0x6f, 0x6a, 0x04, 0x01,
+    0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0xec, 0x03, 0x00, 0x00, 0x03, 0x02, 0x23, 0x07,
+    0x00, 0x00, 0x01, 0x00, 0x0b, 0x00, 0x08, 0x00, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x11, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x47, 0x4c, 0x53, 0x4c, 0x2e, 0x73, 0x74, 0x64, 0x2e, 0x34, 0x35, 0x30, 0x00, 0x00, 0x00, 0x00,
+    0x0e, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x09, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x00, 0x00,
+    0x33, 0x00, 0x00, 0x00, 0x37, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x43, 0x00, 0x00, 0x00,
+    0x03, 0x00, 0x03, 0x00, 0x05, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00,
+    0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x06, 0x00,
+    0x24, 0x00, 0x00, 0x00, 0x55, 0x6e, 0x69, 0x66, 0x6f, 0x72, 0x6d, 0x42, 0x6c, 0x6f, 0x63, 0x6b,
+    0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x07, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x75, 0x5f, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x56, 0x69, 0x65, 0x77, 0x50, 0x72, 0x6f, 0x6a, 0x00,
+    0x05, 0x00, 0x03, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x05, 0x00,
+    0x33, 0x00, 0x00, 0x00, 0x61, 0x5f, 0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x30, 0x00, 0x00, 0x00, 0x00,
+    0x05, 0x00, 0x05, 0x00, 0x37, 0x00, 0x00, 0x00, 0x61, 0x5f, 0x70, 0x6f, 0x73, 0x69, 0x74, 0x69,
+    0x6f, 0x6e, 0x00, 0x00, 0x05, 0x00, 0x0a, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x65, 0x6e, 0x74,
+    0x72, 0x79, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x4f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x2e, 0x67, 0x6c,
+    0x5f, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x00, 0x00, 0x00, 0x05, 0x00, 0x09, 0x00,
+    0x43, 0x00, 0x00, 0x00, 0x40, 0x65, 0x6e, 0x74, 0x72, 0x79, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x4f,
+    0x75, 0x74, 0x70, 0x75, 0x74, 0x2e, 0x76, 0x5f, 0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x30, 0x00, 0x00,
+    0x47, 0x00, 0x03, 0x00, 0x24, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x48, 0x00, 0x04, 0x00,
+    0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x48, 0x00, 0x05, 0x00,
+    0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
+    0x48, 0x00, 0x05, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x26, 0x00, 0x00, 0x00, 0x21, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x26, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x33, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x37, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x43, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x13, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x21, 0x00, 0x03, 0x00,
+    0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x16, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+    0x04, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00, 0x09, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x00, 0x00, 0x15, 0x00, 0x04, 0x00, 0x13, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x80, 0x3f, 0x2b, 0x00, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x13, 0x00, 0x00, 0x00, 0x19, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0x04, 0x00, 0x23, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+    0x04, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x03, 0x00, 0x24, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x04, 0x00, 0x25, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x04, 0x00, 0x25, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x04, 0x00, 0x27, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x04, 0x00, 0x32, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x04, 0x00, 0x32, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x04, 0x00, 0x36, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x04, 0x00, 0x36, 0x00, 0x00, 0x00, 0x37, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x04, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x04, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+    0x3b, 0x00, 0x04, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x43, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+    0x36, 0x00, 0x05, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x03, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00,
+    0x07, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00,
+    0x09, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00, 0x37, 0x00, 0x00, 0x00, 0x51, 0x00, 0x05, 0x00,
+    0x06, 0x00, 0x00, 0x00, 0x5b, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x51, 0x00, 0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x5d, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x50, 0x00, 0x07, 0x00, 0x07, 0x00, 0x00, 0x00, 0x5e, 0x00, 0x00, 0x00,
+    0x5b, 0x00, 0x00, 0x00, 0x5d, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00,
+    0x41, 0x00, 0x05, 0x00, 0x27, 0x00, 0x00, 0x00, 0x5f, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00,
+    0x19, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x23, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00,
+    0x5f, 0x00, 0x00, 0x00, 0x90, 0x00, 0x05, 0x00, 0x07, 0x00, 0x00, 0x00, 0x61, 0x00, 0x00, 0x00,
+    0x5e, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x03, 0x00, 0x40, 0x00, 0x00, 0x00,
+    0x61, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x03, 0x00, 0x43, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00,
+    0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00, 0x00, 0x02, 0x05, 0x00, 0x01, 0x00, 0x40, 0x00,
+};
+
+// fs_solid.sc: outputs v_color0 directly as fragment color
+static const uint8_t s_fsData[] = {
+    0x46, 0x53, 0x48, 0x0b, 0xa4, 0x8b, 0xef, 0x49, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x01,
+    0x00, 0x00, 0x03, 0x02, 0x23, 0x07, 0x00, 0x00, 0x01, 0x00, 0x0b, 0x00, 0x08, 0x00, 0x2e, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b, 0x00,
+    0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x47, 0x4c, 0x53, 0x4c, 0x2e, 0x73, 0x74, 0x64, 0x2e, 0x34,
+    0x35, 0x30, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x0f, 0x00, 0x07, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61,
+    0x69, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x00, 0x00, 0x10, 0x00,
+    0x03, 0x00, 0x04, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x05, 0x00,
+    0x00, 0x00, 0xf4, 0x01, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61,
+    0x69, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x05, 0x00, 0x22, 0x00, 0x00, 0x00, 0x76, 0x5f,
+    0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x30, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x06, 0x00, 0x2d, 0x00,
+    0x00, 0x00, 0x62, 0x67, 0x66, 0x78, 0x5f, 0x46, 0x72, 0x61, 0x67, 0x44, 0x61, 0x74, 0x61, 0x30,
+    0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x22, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x2d, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x13, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x21, 0x00, 0x03, 0x00, 0x03, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x16, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00, 0x00, 0x20, 0x00,
+    0x00, 0x00, 0x17, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x04, 0x00,
+    0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00,
+    0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x08, 0x00,
+    0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x00, 0x00, 0x03, 0x00,
+    0x00, 0x00, 0x36, 0x00, 0x05, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0x3d, 0x00,
+    0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00, 0x3e, 0x00,
+    0x03, 0x00, 0x2d, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x01, 0x00, 0x38, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+static bgfx::ProgramHandle s_solidProgram = BGFX_INVALID_HANDLE;
+
+static bool initShaders() {
+    bgfx::ShaderHandle vsh = bgfx::createShader(bgfx::makeRef(s_vsData, sizeof(s_vsData)));
+    bgfx::ShaderHandle fsh = bgfx::createShader(bgfx::makeRef(s_fsData, sizeof(s_fsData)));
+    if (!bgfx::isValid(vsh) || !bgfx::isValid(fsh)) {
+        std::fprintf(stderr, "[UILO] Failed to create shaders\n");
+        return false;
+    }
+    s_solidProgram = bgfx::createProgram(vsh, fsh, true /*destroyShaders*/);
+    if (!bgfx::isValid(s_solidProgram)) {
+        std::fprintf(stderr, "[UILO] Failed to create shader program\n");
+        return false;
+    }
+    return true;
+}
+
+// ---- Renderer::init --------------------------------------------------------
+
+bool Renderer::init(uint32_t width, uint32_t height,
+                    const std::string& title, uint8_t msaa) {
+    if (m_initialised) return true;
+
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        std::fprintf(stderr, "[UILO] SDL_Init failed: %s\n", SDL_GetError());
+        return false;
+    }
+
+    // SDL3 window — no GL flag; bgfx owns the graphics context
+    uint32_t flags = SDL_WINDOW_RESIZABLE;
+    m_window = SDL_CreateWindow(title.c_str(),
+                                (int)width, (int)height, flags);
+    if (!m_window) {
+        std::fprintf(stderr, "[UILO] SDL_CreateWindow failed: %s\n", SDL_GetError());
+        return false;
+    }
+
+    // Feed native handles to bgfx
+    bgfx::PlatformData pd{};
+#if defined(SDL_PLATFORM_WIN32)
+    SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
+    pd.nwh = SDL_GetPointerProperty(props,
+                SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+#elif defined(SDL_PLATFORM_MACOS)
+    // On macOS bgfx needs a CAMetalLayer (Metal backend).
+    // SDL3 can create one:
+    pd.nwh = SDL_Metal_CreateView(m_window);
+#elif defined(SDL_PLATFORM_LINUX)
+    SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
+    // Try Wayland first, fall back to X11
+    void* waylandSurf = SDL_GetPointerProperty(props,
+                SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+    Window x11WinNum  = (Window)SDL_GetNumberProperty(props,
+                SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    void* x11Win      = (void*)(uintptr_t)x11WinNum;
+    void* x11Display  = SDL_GetPointerProperty(props,
+                SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+    if (waylandSurf) {
+        pd.ndt = SDL_GetPointerProperty(props,
+                     SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+        pd.nwh = waylandSurf;
+        pd.type = bgfx::NativeWindowHandleType::Wayland;
+    } else {
+        pd.ndt = x11Display;
+        pd.nwh = x11Win;
+    }
+#endif
+
+    bgfx::Init init;
+    init.platformData = pd;   // also set via init struct (required for some bgfx versions)
+    init.resolution.width  = width;
+    init.resolution.height = height;
+
+    // On Wayland, only Vulkan is supported by bgfx
+    if (pd.type == bgfx::NativeWindowHandleType::Wayland)
+        init.type = bgfx::RendererType::Vulkan;
+
+    uint32_t resetFlags = BGFX_RESET_MSAA_X16;
+    if (msaa >= 16)      resetFlags |= BGFX_RESET_MSAA_X16;
+    else if (msaa >= 8)  resetFlags |= BGFX_RESET_MSAA_X8;
+    else if (msaa >= 4)  resetFlags |= BGFX_RESET_MSAA_X4;
+    else if (msaa >= 2)  resetFlags |= BGFX_RESET_MSAA_X2;
+    init.resolution.reset = resetFlags;
+
+    if (!bgfx::init(init)) {
+        std::fprintf(stderr, "[UILO] bgfx::init failed\n");
+        return false;
+    }
+
+    bgfx::setDebug(BGFX_DEBUG_NONE);
+
+    ensureLayout();
+    initShaders();
+
+    m_msaa        = msaa;
+    m_initialised = true;
+    return true;
+}
+
+// ---- Renderer::shutdown ----------------------------------------------------
+
+Renderer::~Renderer() { shutdown(); }
+
+void Renderer::shutdown() {
+    if (!m_initialised) return;
+    bgfx::shutdown();
+    if (m_window) { SDL_DestroyWindow(m_window); m_window = nullptr; }
+    SDL_Quit();
+    m_initialised = false;
+}
+
+// ---- Window ----------------------------------------------------------------
+
+Vec2u Renderer::getSize() const {
+    if (!m_window) return {0u, 0u};
+    int w, h;
+    // Use pixel size (not logical size) so the view rect matches the actual backbuffer
+    SDL_GetWindowSizeInPixels(m_window, &w, &h);
+    return { (unsigned)w, (unsigned)h };
+}
+
+void Renderer::setTitle(const std::string& title) {
+    if (m_window) SDL_SetWindowTitle(m_window, title.c_str());
+}
+
+// ---- Cursor ----------------------------------------------------------------
+
+void Renderer::setCursor(CursorType type) {
+    SDL_SystemCursor sdlType = SDL_SYSTEM_CURSOR_DEFAULT;
+    switch (type) {
+        case CursorType::Arrow:         sdlType = SDL_SYSTEM_CURSOR_DEFAULT;  break;
+        case CursorType::Hand:          sdlType = SDL_SYSTEM_CURSOR_POINTER;  break;
+        case CursorType::SizeHorizontal:sdlType = SDL_SYSTEM_CURSOR_EW_RESIZE;break;
+        case CursorType::SizeVertical:  sdlType = SDL_SYSTEM_CURSOR_NS_RESIZE;break;
+        case CursorType::Text:          sdlType = SDL_SYSTEM_CURSOR_TEXT;     break;
+    }
+    SDL_Cursor* cur = SDL_CreateSystemCursor(sdlType);
+    if (cur) { SDL_SetCursor(cur); SDL_DestroyCursor(cur); }
+}
+
+// ---- Frame lifecycle -------------------------------------------------------
+
+void Renderer::beginFrame() {
+    Vec2u sz = getSize();
+    // Keep bgfx backbuffer in sync with the actual window pixel size
+    if (sz.x != m_lastWidth || sz.y != m_lastHeight) {
+        bgfx::reset(sz.x, sz.y, BGFX_RESET_MSAA_X8);
+        m_lastWidth  = sz.x;
+        m_lastHeight = sz.y;
+    }
+    bgfx::setViewRect(0, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
+    bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.f, 0);
+    submitOrtho(0, sz);
+    bgfx::touch(0);
+}
+
+void Renderer::endFrame() {
+    bgfx::frame();
+}
+
+// ---- Ortho projection ------------------------------------------------------
+
+void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
+    // Row-major column-vector ortho matrix (bgfx convention), y-down
+    const float W  = (float)size.x;
+    const float H  = (float)size.y;
+    const float nd = 0.f, fd = 1.f;
+    const bool  hd = bgfx::getCaps()->homogeneousDepth; // OpenGL: [-1,1], others: [0,1]
+    const float zScale = hd ? 2.f/(fd-nd)    : 1.f/(fd-nd);
+    const float zBias  = hd ? -(fd+nd)/(fd-nd) : -nd/(fd-nd);
+    const float ortho[16] = {
+        2.f/W,  0.f,    0.f,    0.f,
+        0.f,    2.f/H,  0.f,    0.f,   // note: positive (screen y-down)
+        0.f,    0.f,    zScale, 0.f,
+       -1.f,   -1.f,    zBias,  1.f
+    };
+    // Flip y: bgfx maps +1 at top, we want +0 at top (y-down)
+    // Correct ortho for y-down: top=0, bottom=H → -2/H and offset +1
+    const float orthoCorrect[16] = {
+        2.f/W, 0.f,   0.f,   0.f,
+        0.f,  -2.f/H, 0.f,   0.f,
+        0.f,   0.f,   zScale,0.f,
+       -1.f,   1.f,   zBias, 1.f
+    };
+    (void)ortho;
+    bgfx::setViewTransform(viewId, nullptr, orthoCorrect);
+}
+
+// ---- Active view -----------------------------------------------------------
+
+uint16_t Renderer::currentViewId() const {
+    if (m_viewStackTop > 0) return m_viewStack[m_viewStackTop - 1].viewId;
+    return 0;
+}
+
+// ---- Framebuffer management ------------------------------------------------
+
+FrameBuffer Renderer::createFrameBuffer(Vec2u size) {
+    FrameBuffer fb;
+    fb.size   = size;
+    fb.viewId = m_nextViewId++;
+
+    bgfx::FrameBufferHandle h = bgfx::createFrameBuffer(
+        (uint16_t)size.x, (uint16_t)size.y,
+        bgfx::TextureFormat::BGRA8,
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+    fb.handle = h.idx;
+
+    bgfx::setViewFrameBuffer(fb.viewId, h);
+    bgfx::setViewRect(fb.viewId, 0, 0, (uint16_t)size.x, (uint16_t)size.y);
+    submitOrtho(fb.viewId, size);
+    return fb;
+}
+
+void Renderer::resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize) {
+    if (fb.size == newSize) return;
+    destroyFrameBuffer(fb);
+    fb = createFrameBuffer(newSize);
+}
+
+void Renderer::destroyFrameBuffer(FrameBuffer& fb) {
+    if (!fb.valid()) return;
+    bgfx::FrameBufferHandle h{ fb.handle };
+    bgfx::destroy(h);
+    fb.handle = UINT16_MAX;
+}
+
+void Renderer::pushFrameBuffer(FrameBuffer& fb) {
+    assert(m_viewStackTop < kMaxViewStack);
+    m_viewStack[m_viewStackTop++] = { fb.viewId };
+    bgfx::setViewRect(fb.viewId, 0, 0, (uint16_t)fb.size.x, (uint16_t)fb.size.y);
+    submitOrtho(fb.viewId, fb.size);
+}
+
+void Renderer::popFrameBuffer() {
+    if (m_viewStackTop > 0) --m_viewStackTop;
+}
+
+void Renderer::pushScissor(Rectf b) {
+    if (s_scissorTop >= 16) return;
+    if (s_scissorTop > 0) {
+        // Intersect with the current scissor so nested containers clip properly
+        auto& p  = s_scissorStack[s_scissorTop - 1];
+        float px = (float)p.x, py = (float)p.y;
+        float px2 = px + (float)p.w, py2 = py + (float)p.h;
+        float bx2 = b.position.x + b.size.x, by2 = b.position.y + b.size.y;
+        float nx  = std::max(b.position.x, px),  ny  = std::max(b.position.y, py);
+        float nx2 = std::min(bx2, px2),           ny2 = std::min(by2, py2);
+        b.position = {nx, ny};
+        b.size     = {std::max(0.f, nx2 - nx), std::max(0.f, ny2 - ny)};
+    }
+    s_scissorStack[s_scissorTop++] = {
+        (uint16_t)std::max(0.f, b.position.x),
+        (uint16_t)std::max(0.f, b.position.y),
+        (uint16_t)std::max(0.f, b.size.x),
+        (uint16_t)std::max(0.f, b.size.y)
+    };
+}
+
+void Renderer::popScissor() {
+    if (s_scissorTop > 0) --s_scissorTop;
+}
+
+void Renderer::clear(Color color) {
+    // bgfx clear colour format: 0xRRGGBBAA
+    uint32_t rgba = (uint32_t(color.r) << 24) | (uint32_t(color.g) << 16) |
+                    (uint32_t(color.b) <<  8) |  uint32_t(color.a);
+    bgfx::setViewClear(currentViewId(), BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, rgba, 1.f, 0);
+    bgfx::touch(currentViewId());
+}
+
+void Renderer::drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size,
+                                Color tint) {
+    // Draws the framebuffer's texture as a quad on the current view.
+    // Full implementation uses a textured quad shader; stub for now.
+    (void)fb; (void)dest; (void)size; (void)tint;
+    // TODO: bind fb texture, submit textured quad
+}
+
+// ---- Shape draw calls (geometry generation) --------------------------------
+// Each draw call builds a transient vertex/index buffer, submits it to the
+// current view, and returns. BGFX batches and sorts automatically.
+
+static constexpr float kDeg2Rad = 3.14159265f / 180.f;
+
+// Submit a triangle list from a local buffer
+static void submitTriangles(uint16_t viewId,
+                             const PosColorVertex* verts, uint32_t nVerts,
+                             const uint16_t* indices,    uint32_t nIdx) {
+    if (!bgfx::isValid(s_solidProgram)) return;
+    if (s_scissorTop > 0) {
+        auto& sc = s_scissorStack[s_scissorTop - 1];
+        if (sc.w == 0 || sc.h == 0) return;
+    }
+
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::TransientIndexBuffer  tib;
+    if (!bgfx::allocTransientBuffers(&tvb, s_posColorLayout, nVerts,
+                                     &tib, nIdx))
+        return;
+
+    std::memcpy(tvb.data, verts,   nVerts * sizeof(PosColorVertex));
+    std::memcpy(tib.data, indices, nIdx   * sizeof(uint16_t));
+
+    bgfx::setVertexBuffer(0, &tvb);
+    bgfx::setIndexBuffer(&tib);
+    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                   BGFX_STATE_BLEND_ALPHA);
+    if (s_scissorTop > 0) {
+        auto& sc = s_scissorStack[s_scissorTop - 1];
+        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
+    }
+    bgfx::submit(viewId, s_solidProgram);
+}
+
+// Pack color to bgfx 0xAABBGGRR
+static uint32_t packColor(Color c) {
+    return (uint32_t(c.a) << 24) | (uint32_t(c.b) << 16) |
+           (uint32_t(c.g) <<  8) |  uint32_t(c.r);
+}
+
+// ---- Rect ------------------------------------------------------------------
+
+void Renderer::draw(const Rect& r) {
+    uint32_t col = packColor(r.fillColor);
+    float x = r.position.x, y = r.position.y;
+    float w = r.size.x,     h = r.size.y;
+
+    PosColorVertex verts[4] = {
+        {x,     y,     col},
+        {x + w, y,     col},
+        {x + w, y + h, col},
+        {x,     y + h, col},
+    };
+    uint16_t idx[6] = {0,1,2, 0,2,3};
+    submitTriangles(currentViewId(), verts, 4, idx, 6);
+
+    // Outline (draw 4 thin rects along the edges)
+    if (r.outlineThickness > 0.f && r.outlineColor.a > 0) {
+        float t = r.outlineThickness;
+        Rect top    { r.position,                         {w,     t  }, r.outlineColor };
+        Rect bottom { {x, y + h - t},                    {w,     t  }, r.outlineColor };
+        Rect left   { r.position,                         {t,     h  }, r.outlineColor };
+        Rect right  { {x + w - t, y},                    {t,     h  }, r.outlineColor };
+        draw(top); draw(bottom); draw(left); draw(right);
+    }
+}
+
+// ---- RoundedRect -----------------------------------------------------------
+
+void Renderer::draw(const RoundedRect& rr) {
+    int   segs = std::max(2, rr.cornerSegments);
+    float r    = std::min(rr.radius, std::min(rr.size.x, rr.size.y) * 0.5f);
+
+    if (r <= 0.f) {
+        draw(Rect{rr.position, rr.size, rr.fillColor,
+                  rr.outlineColor, rr.outlineThickness});
+        return;
+    }
+
+    uint32_t col = packColor(rr.fillColor);
+
+    // Total vertices: 1 center + 4 corners * segs
+    uint32_t nCornerVerts = (uint32_t)segs * 4;
+    uint32_t nVerts       = nCornerVerts + 1;
+    uint32_t nIdx         = nCornerVerts * 3;  // triangle fan from center
+
+    // Use transient buffers directly for variable size
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::TransientIndexBuffer  tib;
+    if (!bgfx::isValid(s_solidProgram)) return;
+    if (!bgfx::allocTransientBuffers(&tvb, s_posColorLayout, nVerts,
+                                     &tib, nIdx))
+        return;
+
+    auto* verts   = reinterpret_cast<PosColorVertex*>(tvb.data);
+    auto* indices = reinterpret_cast<uint16_t*>(tib.data);
+
+    float cx = rr.position.x + rr.size.x * 0.5f;
+    float cy = rr.position.y + rr.size.y * 0.5f;
+
+    // Center vertex
+    verts[0] = {cx, cy, col};
+
+    struct CornerDef { float ox, oy, startDeg, endDeg; };
+    float x = rr.position.x, y = rr.position.y;
+    float w = rr.size.x,     h = rr.size.y;
+    const CornerDef corners[4] = {
+        { w - r, r,     -90.f,   0.f },  // top-right
+        { w - r, h - r,   0.f,  90.f },  // bottom-right
+        { r,     h - r,  90.f, 180.f },  // bottom-left
+        { r,     r,     180.f, 270.f },  // top-left
+    };
+
+    uint32_t vi = 1;
+    uint32_t ii = 0;
+    for (const auto& c : corners) {
+        for (int s = 0; s < segs; ++s, ++vi) {
+            float t     = (float)s / (float)(segs - 1);
+            float angle = (c.startDeg + t * (c.endDeg - c.startDeg)) * kDeg2Rad;
+            verts[vi] = {
+                x + c.ox + r * std::cos(angle),
+                y + c.oy + r * std::sin(angle),
+                col
+            };
+            if (vi > 1) {
+                indices[ii++] = 0;
+                indices[ii++] = (uint16_t)(vi - 1);
+                indices[ii++] = (uint16_t)(vi);
+            }
+        }
+    }
+    // Close the fan
+    indices[ii++] = 0;
+    indices[ii++] = (uint16_t)(nVerts - 1);
+    indices[ii++] = 1;
+
+    bgfx::setVertexBuffer(0, &tvb);
+    bgfx::setIndexBuffer(&tib);
+    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                   BGFX_STATE_BLEND_ALPHA);
+    if (s_scissorTop > 0) {
+        auto& sc = s_scissorStack[s_scissorTop - 1];
+        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
+    }
+    bgfx::submit(currentViewId(), s_solidProgram);
+}
+
+// ---- Circle ----------------------------------------------------------------
+
+void Renderer::draw(const Circle& c) {
+    int segs = std::max(3, c.segments);
+    uint32_t col  = packColor(c.fillColor);
+    uint32_t nV   = (uint32_t)segs + 1;  // center + rim
+    uint32_t nIdx = (uint32_t)segs * 3;
+
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::TransientIndexBuffer  tib;
+    if (!bgfx::isValid(s_solidProgram)) return;
+    if (!bgfx::allocTransientBuffers(&tvb, s_posColorLayout, nV, &tib, nIdx))
+        return;
+
+    auto* verts   = reinterpret_cast<PosColorVertex*>(tvb.data);
+    auto* indices = reinterpret_cast<uint16_t*>(tib.data);
+
+    verts[0] = {c.center.x, c.center.y, col};
+    for (int i = 0; i < segs; ++i) {
+        float angle = (float)i / (float)segs * 360.f * kDeg2Rad;
+        verts[i + 1] = {
+            c.center.x + c.radius * std::cos(angle),
+            c.center.y + c.radius * std::sin(angle),
+            col
+        };
+        indices[i*3 + 0] = 0;
+        indices[i*3 + 1] = (uint16_t)(i + 1);
+        indices[i*3 + 2] = (uint16_t)((i + 1) % segs + 1);
+    }
+
+    bgfx::setVertexBuffer(0, &tvb);
+    bgfx::setIndexBuffer(&tib);
+    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                   BGFX_STATE_BLEND_ALPHA);
+    if (s_scissorTop > 0) {
+        auto& sc = s_scissorStack[s_scissorTop - 1];
+        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
+    }
+    bgfx::submit(currentViewId(), s_solidProgram);
+}
+
+// ---- Triangle --------------------------------------------------------------
+
+void Renderer::draw(const Triangle& t) {
+    uint32_t col = packColor(t.fillColor);
+    PosColorVertex verts[3] = {
+        {t.a.x, t.a.y, col},
+        {t.b.x, t.b.y, col},
+        {t.c.x, t.c.y, col},
+    };
+    uint16_t idx[3] = {0,1,2};
+    submitTriangles(currentViewId(), verts, 3, idx, 3);
+}
+
+// ---- Line ------------------------------------------------------------------
+
+void Renderer::draw(const Line& l) {
+    // Expand the line into a quad with the given thickness
+    float dx = l.end.x - l.start.x;
+    float dy = l.end.y - l.start.y;
+    float len = std::sqrt(dx*dx + dy*dy);
+    if (len < 0.001f) return;
+
+    float nx = -dy / len * l.thickness * 0.5f;
+    float ny =  dx / len * l.thickness * 0.5f;
+
+    uint32_t col = packColor(l.color);
+    PosColorVertex verts[4] = {
+        {l.start.x + nx, l.start.y + ny, col},
+        {l.start.x - nx, l.start.y - ny, col},
+        {l.end.x   - nx, l.end.y   - ny, col},
+        {l.end.x   + nx, l.end.y   + ny, col},
+    };
+    uint16_t idx[6] = {0,1,2, 0,2,3};
+    submitTriangles(currentViewId(), verts, 4, idx, 6);
+}
+
+} // namespace uilo

@@ -1,8 +1,7 @@
 #pragma once
 
 #include <optional>
-
-#include <SFML/Graphics.hpp>
+#include <string>
 
 #include "../Element.hpp"
 
@@ -12,11 +11,10 @@ class TextOptions {
 public:
     TextOptions() = default;
 
-    TextOptions& setFont(const std::string& path) { m_fontPath = path; m_fontRef = nullptr; return *this; }
-    TextOptions& setFont(const sf::Font& font)    { m_fontRef = &font; m_fontPath.clear();  return *this; }
+    TextOptions& setFont(const std::string& path) { m_fontPath = path; return *this; }
     TextOptions& setContent(const std::string& s) { m_content = s;          return *this; }
     TextOptions& setCharSize(unsigned int n)       { m_charSize = n;         return *this; }
-    TextOptions& setColor(const sf::Color& c)      { m_color = c;            return *this; }
+    TextOptions& setColor(const Color& c)      { m_color = c;            return *this; }
     TextOptions& setWrap(bool v)                   { m_wrap = v;             return *this; }
     TextOptions& setBold(bool v)                   { m_bold = v;             return *this; }
     TextOptions& setItalic(bool v)                 { m_italic = v;           return *this; }
@@ -26,11 +24,10 @@ public:
     TextOptions& setTextAlignY(Align a)            { m_textAlignY = a;       return *this; }
 
     const std::string& getFontPath()       const { return m_fontPath; }
-    const sf::Font*    getFontRef()        const { return m_fontRef; }
     const std::string& getContent()        const { return m_content; }
     unsigned int       getCharSize()       const { return m_charSize.value_or(30); }
     bool               hasCharSize()       const { return m_charSize.has_value(); }
-    sf::Color          getColor()          const { return m_color; }
+    Color          getColor()          const { return m_color; }
     bool               getWrap()           const { return m_wrap; }
     bool               getBold()           const { return m_bold; }
     bool               getItalic()         const { return m_italic; }
@@ -41,10 +38,9 @@ public:
 
 private:
     std::string     m_fontPath;
-    const sf::Font* m_fontRef       = nullptr;
     std::string     m_content;
     std::optional<unsigned int> m_charSize;
-    sf::Color       m_color         = sf::Color::White;
+    Color       m_color         = Color::White;
     bool            m_wrap          = false;
     bool            m_bold          = false;
     bool            m_italic        = false;
@@ -58,8 +54,8 @@ class Text : public Element {
 public:
     explicit Text(Modifier modifier, TextOptions options = {}, const std::string& name = "");
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
 
     void setString(const std::string& content);
 
@@ -74,13 +70,12 @@ private:
     void init();
 
     TextOptions             m_options;
-    sf::Font                m_ownedFont;
-    const sf::Font*         m_fontPtr       = nullptr;
+    uint32_t                m_fontId        = 0xFFFFFFFFu;
     std::string             m_content;
-    unsigned int            m_charSize      = 30;  // resolved value (auto-computed or from options)
+    std::string             m_wrappedContent;
+    unsigned int            m_charSize      = 30;
     float                   m_lastBoundsH   = 0.f;
-    std::optional<sf::Text> m_text;
-    sf::Color               m_lastColor     = sf::Color::White;
+    Color                   m_lastColor     = Color::White;
     float                   m_lastWrapWidth = 0.f;
     float                   m_lastScale     = 1.f;
     bool                    m_loaded        = false;

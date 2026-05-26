@@ -21,7 +21,7 @@ Modifier& Modifier::setOnRightClick(FuncPtr rightClick) { m_onRightClick = right
 Modifier& Modifier::setOnScroll(ScrollFuncPtr scroll) { m_onScroll = scroll; return *this; }
 Modifier& Modifier::setOuterPadding(float padding) { m_outerPadding = padding; return *this; }
 Modifier& Modifier::setVisible(bool visible) { m_visible = visible; return *this; }
-Modifier& Modifier::setFreePosition(const sf::Vector2f& freePos) { m_freePosition = freePos; return *this; }
+Modifier& Modifier::setFreePosition(const Vec2f& freePos) { m_freePosition = freePos; return *this; }
 Modifier& Modifier::setOnHover(FuncPtr hover, float delay) {
     m_onHover = hover;
     m_hoverDelay = delay;
@@ -38,6 +38,6 @@ const ScrollFuncPtr& Modifier::getOnScroll() const { return m_onScroll; }
 float Modifier::getHoverDelay() const { return m_hoverDelay; }
 float Modifier::getOuterPadding() const { return m_outerPadding; }
 bool Modifier::getVisible() const { return m_visible; }
-sf::Vector2f Modifier::getFreePosition() const { return m_freePosition; }
+Vec2f Modifier::getFreePosition() const { return m_freePosition; }
 
 } // namespace uilo

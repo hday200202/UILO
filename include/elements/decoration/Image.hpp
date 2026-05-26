@@ -1,8 +1,7 @@
 #pragma once
 
 #include <optional>
-
-#include <SFML/Graphics.hpp>
+#include <string>
 
 #include "../Element.hpp"
 
@@ -12,9 +11,8 @@ class ImageOptions {
 public:
     ImageOptions() = default;
 
-    ImageOptions& setPath(const std::string& path) { m_path = path;            return *this; }
-    ImageOptions& setImage(sf::Image img)           { m_image = std::move(img); return *this; }
-    ImageOptions& setColor(const sf::Color& c)      { m_color = c;              return *this; }
+    ImageOptions& setPath(const std::string& path) { m_path = path;  return *this; }
+    ImageOptions& setColor(const Color& c)          { m_color = c;    return *this; }
     ImageOptions& setLockAspectWidth(bool v)        { m_lockAspectWidth  = v;   return *this; }
     ImageOptions& setLockAspectHeight(bool v)       { m_lockAspectHeight = v;   return *this; }
     ImageOptions& setRecolor(bool v)                { m_recolor          = v;   return *this; }
@@ -22,9 +20,8 @@ public:
     ImageOptions& setFlipH(bool v)                  { m_flipH            = v;   return *this; }
     ImageOptions& setFlipV(bool v)                  { m_flipV            = v;   return *this; }
 
-    const std::string&              getPath()             const { return m_path; }
-    const std::optional<sf::Image>& getImage()            const { return m_image; }
-    sf::Color                       getColor()            const { return m_color; }
+    const std::string& getPath()             const { return m_path; }
+    Color              getColor()            const { return m_color; }
     bool                            getLockAspectWidth()  const { return m_lockAspectWidth; }
     bool                            getLockAspectHeight() const { return m_lockAspectHeight; }
     bool                            getRecolor()          const { return m_recolor; }
@@ -33,9 +30,8 @@ public:
     bool                            getFlipV()            const { return m_flipV; }
 
 private:
-    std::string              m_path;
-    std::optional<sf::Image> m_image;
-    sf::Color m_color           = sf::Color::White;
+    std::string m_path;
+    Color       m_color           = Color::White;
     bool m_lockAspectWidth  = false;
     bool m_lockAspectHeight = false;
     bool m_recolor          = false;
@@ -48,8 +44,8 @@ class Image : public Element {
 public:
     explicit Image(Modifier modifier, ImageOptions options = {}, const std::string& name = "");
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
 
     const ImageOptions& getOptions() const     { return m_options; }
     void setOptions(const ImageOptions& opts)  { m_options = opts; rebuildTexture(); }
@@ -60,12 +56,12 @@ private:
     void rebuildTexture();
     void init();
 
-    ImageOptions              m_options;
-    sf::Image                 m_originalImage;
-    sf::Texture               m_texture;
-    std::optional<sf::Sprite> m_sprite;
-    sf::Color                 m_lastRecolor = sf::Color::White;
-    bool                      m_loaded      = false;
+    ImageOptions  m_options;
+    uint16_t      m_textureHandle = 0xFFFFu;
+    uint32_t      m_textureWidth  = 0;
+    uint32_t      m_textureHeight = 0;
+    Color         m_lastRecolor   = Color::White;
+    bool          m_loaded        = false;
 };
 
 }

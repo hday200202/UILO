@@ -18,21 +18,21 @@ void Button::setOptions(const ButtonOptions& opts) {
     if (opts.getLabel()) m_children.push_back(opts.getLabel());
 }
 
-bool Button::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Button::checkLeftClick(const Vec2f& mousePosition) {
     return Element::checkLeftClick(mousePosition);
 }
 
-bool Button::checkRightClick(const sf::Vector2f& mousePosition) {
+bool Button::checkRightClick(const Vec2f& mousePosition) {
     return Element::checkRightClick(mousePosition);
 }
 
-bool Button::checkHover(const sf::Vector2f& mousePosition) {
+bool Button::checkHover(const Vec2f& mousePosition) {
     if (m_bounds.contains(mousePosition) && m_uiloRef)
-        m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
+        m_uiloRef->requestCursor(CursorType::Hand, 1);
     return Element::checkHover(mousePosition);
 }
 
-bool Button::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+bool Button::checkScroll(const Vec2f& mousePosition, float delta) {
     return Element::checkScroll(mousePosition, delta);
 }
 

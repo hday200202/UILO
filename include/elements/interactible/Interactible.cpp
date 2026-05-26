@@ -3,14 +3,14 @@
 
 namespace uilo {
 
-bool Interactible::checkLeftClick(const sf::Vector2f& mousePosition) {
+bool Interactible::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     m_uiloRef->setCurrInteractible(this);
     if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
     return true;
 }
 
-bool Interactible::checkRightClick(const sf::Vector2f& mousePosition) {
+bool Interactible::checkRightClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     m_uiloRef->setCurrInteractible(this);
     if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();

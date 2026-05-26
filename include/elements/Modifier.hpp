@@ -1,7 +1,7 @@
 #pragma once
 
-#include <SFML/Graphics.hpp>
 #include <functional>
+#include "../../include/utils/Math.hpp"
 #include "../utils/Utils.hpp"
 
 namespace uilo {
@@ -22,7 +22,7 @@ public:
     Modifier& setOnScroll(ScrollFuncPtr scroll);
     Modifier& setOuterPadding(float padding);
     Modifier& setVisible(bool visible);
-    Modifier& setFreePosition(const sf::Vector2f& freePos);
+    Modifier& setFreePosition(const Vec2f& freePos);
 
     Dimension getWidth()                const;
     Dimension getHeight()               const;
@@ -34,7 +34,7 @@ public:
     float getHoverDelay()               const;
     float getOuterPadding()             const;
     bool getVisible()                   const;
-    sf::Vector2f getFreePosition()      const;
+    Vec2f getFreePosition() const;
 
 private:
     Dimension m_width                   = 100_pct;
@@ -47,7 +47,7 @@ private:
     float m_hoverDelay                  = 0.f;
     float m_outerPadding                = 0.f;
     bool m_visible                      = true;
-    sf::Vector2f m_freePosition         = {0.f, 0.f};
+    Vec2f m_freePosition = {0.f, 0.f};
 };
 
 }

@@ -10,7 +10,7 @@ class ResizerOptions {
 public:
     ResizerOptions& setDirection(ResizerDir d)      { m_direction       = d; return *this; }
     ResizerOptions& setThickness(float t)           { m_thickness       = t; return *this; }
-    ResizerOptions& setColor(sf::Color c)           { m_color           = c; return *this; }
+    ResizerOptions& setColor(Color c)   { m_color = c; return *this; }
     ResizerOptions& setResizeWidthMin(Dimension d)  { m_resizeWidthMin  = d; return *this; }
     ResizerOptions& setResizeWidthMax(Dimension d)  { m_resizeWidthMax  = d; return *this; }
     ResizerOptions& setResizeHeightMin(Dimension d) { m_resizeHeightMin = d; return *this; }
@@ -18,7 +18,7 @@ public:
 
     ResizerDir getDirection()       const { return m_direction; }
     float      getThickness()       const { return m_thickness; }
-    sf::Color  getColor()           const { return m_color; }
+    Color  getColor()           const { return m_color; }
     Dimension  getResizeWidthMin()  const { return m_resizeWidthMin; }
     Dimension  getResizeWidthMax()  const { return m_resizeWidthMax; }
     Dimension  getResizeHeightMin() const { return m_resizeHeightMin; }
@@ -27,7 +27,7 @@ public:
 private:
     ResizerDir m_direction       = ResizerDir::Right;
     float      m_thickness       = 8.f;
-    sf::Color  m_color           = sf::Color::Transparent;
+    Color  m_color = Color{0,0,0,0};
     Dimension  m_resizeWidthMin  = {0.f,       false};
     Dimension  m_resizeWidthMax  = {100000.f,  false};
     Dimension  m_resizeHeightMin = {0.f,       false};
@@ -49,16 +49,16 @@ class Resizer : public Interactible {
 public:
     explicit Resizer(Modifier modifier = {}, ResizerOptions options = {}, const std::string& name = "");
 
-    void update(sf::FloatRect& parentBounds, float dt) override;
-    void render(sf::RenderTarget& target) override;
+    void update(Rectf& parentBounds, float dt) override;
+    void render() override;
 
-    bool checkHover(const sf::Vector2f& mousePosition) override;
-    bool checkLeftClick(const sf::Vector2f& mousePosition) override;
+    bool checkHover(const Vec2f& mousePosition) override;
+    bool checkLeftClick(const Vec2f& mousePosition) override;
     void onDeactivate() override;
 
     // Called by Row/Column during layout
     void          setTarget(Element* t)          { m_target          = t; }
-    void          setContainerBounds(sf::FloatRect b) { m_containerBounds = b; }
+    void          setContainerBounds(Rectf b) { m_containerBounds = b; }
 
     Element*   getTarget()    const { return m_target; }
     ResizerDir getDirection() const { return m_options.getDirection(); }
@@ -67,9 +67,9 @@ public:
 private:
     ResizerOptions m_options;
     Element*       m_target           = nullptr;
-    sf::FloatRect  m_containerBounds;
-    bool           m_dragging         = false;
-    sf::Vector2f   m_dragStart;
+    Rectf   m_containerBounds;
+    bool    m_dragging         = false;
+    Vec2f   m_dragStart;
     float          m_dragStartW       = 0.f;
     float          m_dragStartH       = 0.f;
 };

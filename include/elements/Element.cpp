@@ -3,13 +3,13 @@
 
 namespace uilo {
     
-    sf::FloatRect Element::getBounds() const { return m_bounds; }
+    Rectf Element::getBounds() const { return m_bounds; }
     Modifier& Element::getModifier() { return m_modifier; }
     bool Element::isDirty() const { return m_dirty; }
     void Element::erase() { m_markedForDeletion = true; }
     ElementType Element::getType() const { return m_type; }
 
-    void Element::resize(const sf::FloatRect& parent) {
+    void Element::resize(const Rectf& parent) {
         float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
         float op = m_modifier.getOuterPadding() * scale;
 
@@ -17,13 +17,12 @@ namespace uilo {
             return dim.percent ? (dim.value / 100.f * parentSize) : (dim.value * scale);
         };
 
-        // Resolve against parent, shrink by outer padding on lrtb
-        const sf::Vector2f oldSize = m_bounds.size;
+        const Vec2f oldSize = m_bounds.size;
         m_bounds.size.x = resolveScaled(m_modifier.getWidth(),  parent.size.x) - (2.f * op);
         m_bounds.size.y = resolveScaled(m_modifier.getHeight(), parent.size.y) - (2.f * op);
         if (m_bounds.size != oldSize) m_dirty = true;
 
-        sf::FloatRect inner = {
+        Rectf inner = {
             {parent.position.x + op, parent.position.y + op},
             {parent.size.x - (2.f * op), parent.size.y - (2.f * op)}
         };
@@ -49,19 +48,19 @@ namespace uilo {
         else m_bounds.position.y = inner.position.y;
     }
 
-    bool Element::checkLeftClick(const sf::Vector2f& mousePosition) {
+    bool Element::checkLeftClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
         return true;
     }
 
-    bool Element::checkRightClick(const sf::Vector2f& mousePosition) {
+    bool Element::checkRightClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
         return true;
     }
 
-    bool Element::checkHover(const sf::Vector2f& mousePosition) {
+    bool Element::checkHover(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) {
             if (m_hovered) { m_hovered = false; m_dirty = true; }
             return false;
@@ -72,11 +71,11 @@ namespace uilo {
             if (m_modifier.getOnHover()) m_modifier.getOnHover()();
         }
         if (m_uiloRef && m_modifier.getOnLeftClick())
-            m_uiloRef->requestCursor(sf::Cursor::Type::Hand, 1);
+            m_uiloRef->requestCursor(CursorType::Hand, 1);
         return true;
     }
 
-    bool Element::checkScroll(const sf::Vector2f& mousePosition, float delta) {
+    bool Element::checkScroll(const Vec2f& mousePosition, float delta) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnScroll()) {
             m_modifier.getOnScroll()(delta);

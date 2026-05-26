@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "Elements.hpp"
+#include "../include/renderer/Renderer.hpp"
 
 namespace uilo {
 
@@ -15,13 +16,14 @@ class Interactible;
 class UILO {
 public:
     UILO() = default;
-    UILO(sf::RenderWindow& window, Page* page);
+    // Takes ownership of the Renderer (call renderer.init() before passing).
+    UILO(Renderer& renderer, Page* page);
 
     void update();
     void render();
-    void handleEvent(const sf::Event& event);
+    void handleEvent(const SDL_Event& event);
 
-    void setRenderWindow(sf::RenderWindow& window) { m_window = &window; }
+    void setRenderer(Renderer& renderer) { m_renderer = &renderer; }
 
     void addPage(Page* page);
     void setPage(const std::string& pageName);
@@ -33,16 +35,13 @@ public:
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
     
-    float getScale() const { return m_scale; }
-    float getDeltaTime() const { return m_deltaTime; }
-    sf::Vector2u getWindowSize() const { return m_window ? m_window->getSize() : sf::Vector2u{0u, 0u}; }
-    sf::ContextSettings getContextSettings() const { return m_window ? m_window->getSettings() : sf::ContextSettings{}; }
-    sf::Vector2f getMousePosition() const {
-        sf::Vector2i raw = sf::Mouse::getPosition(*m_window);
-        return { static_cast<float>(raw.x), static_cast<float>(raw.y) };
-    }
+    float getScale()      const { return m_scale; }
+    float getDeltaTime()  const { return m_deltaTime; }
+    Vec2u  getWindowSize() const { return m_renderer ? m_renderer->getSize() : Vec2u{}; }
+    Vec2f  getMousePosition() const { return m_mousePos; }
+    Renderer& getRenderer() { return *m_renderer; }
 
-    void requestCursor(sf::Cursor::Type type, int priority = 0);
+    void requestCursor(CursorType type, int priority = 0);
 
     template <typename T>
     T* getElement(const std::string& name) {
@@ -70,20 +69,16 @@ private:
 
     Timer m_timer;
 
-    sf::RenderWindow* m_window = nullptr;
-    sf::Vector2u m_prevWindowSize  = {0u, 0u};
+    Renderer* m_renderer = nullptr;
+    Vec2u     m_prevWindowSize = {0u, 0u};
+    Vec2f     m_mousePos       = {};
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
 
-    sf::Cursor::Type          m_pendingCursor         = sf::Cursor::Type::Arrow;
-    int                       m_pendingCursorPriority = 0;
-    sf::Cursor::Type          m_activeCursor          = sf::Cursor::Type::Arrow;
-    std::optional<sf::Cursor> m_curArrow;
-    std::optional<sf::Cursor> m_curHand;
-    std::optional<sf::Cursor> m_curSizeH;
-    std::optional<sf::Cursor> m_curSizeV;
-    std::optional<sf::Cursor> m_curText;
+    CursorType m_pendingCursor         = CursorType::Arrow;
+    int        m_pendingCursorPriority = 0;
+    CursorType m_activeCursor          = CursorType::Arrow;
 
     Interactible* m_currInteractible             = nullptr;
     bool          m_interactibleActivatedThisFrame = false;

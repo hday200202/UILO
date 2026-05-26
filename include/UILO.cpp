@@ -1,11 +1,12 @@
 #include "UILO.hpp"
 #include "elements/interactible/Interactible.hpp"
+#include <SDL3/SDL.h>
 #include <algorithm>
 
 namespace uilo {
 
-UILO::UILO(sf::RenderWindow& window, Page* page) {
-    m_window = &window; 
+UILO::UILO(Renderer& renderer, Page* page) {
+    m_renderer = &renderer;
     addPage(page);
     setPage(page->m_name);
 }
@@ -30,6 +31,15 @@ void UILO::setCurrInteractible(Interactible* i) {
     if (m_currInteractible == i) return;
     if (m_currInteractible) m_currInteractible->onDeactivate();
     m_currInteractible = i;
+
+    if (m_renderer && m_renderer->sdlWindow()) {
+        SDL_Window* w = m_renderer->sdlWindow();
+        if (i && i->wantsTextInput()) {
+            if (!SDL_TextInputActive(w)) SDL_StartTextInput(w);
+        } else {
+            if (SDL_TextInputActive(w))  SDL_StopTextInput(w);
+        }
+    }
 }
 
 void UILO::setScale(float scale) { if (scale > 0.f) m_scale = scale; }
@@ -48,7 +58,7 @@ void UILO::unregisterOverlay(Element* e) {
     );
 }
 
-void UILO::requestCursor(sf::Cursor::Type type, int priority) {
+void UILO::requestCursor(CursorType type, int priority) {
     if (priority >= m_pendingCursorPriority) {
         m_pendingCursor         = type;
         m_pendingCursorPriority = priority;
@@ -57,20 +67,20 @@ void UILO::requestCursor(sf::Cursor::Type type, int priority) {
 
 void UILO::update() {
     m_deltaTime = m_timer.restart();
-    m_pendingCursor         = sf::Cursor::Type::Arrow;
+    m_pendingCursor         = CursorType::Arrow;
     m_pendingCursorPriority = 0;
 
     if (!m_activePage) return;
 
-    const sf::Vector2u windowSize = m_window->getSize();
+    const Vec2u windowSize = m_renderer->getSize();
     if (windowSize != m_prevWindowSize) {
         for (auto& e : m_elementPool) e->m_dirty = true;
         m_prevWindowSize = windowSize;
     }
 
-    sf::FloatRect logicalBounds = {
+    Rectf logicalBounds = {
         { 0.f, 0.f },
-        { static_cast<float>(m_window->getSize().x), static_cast<float>(m_window->getSize().y) }
+        { static_cast<float>(windowSize.x), static_cast<float>(windowSize.y) }
     };
 
     m_activePage->update(logicalBounds, m_deltaTime);
@@ -91,11 +101,22 @@ void UILO::update() {
         ), m_elementPool.end()
     );
 
-    sf::Vector2i mouseRaw = sf::Mouse::getPosition(*m_window);
-    sf::Vector2f mouse = { static_cast<float>(mouseRaw.x), static_cast<float>(mouseRaw.y) };
+    float mx, my;
+    SDL_GetMouseState(&mx, &my);
+    // SDL reports mouse in logical (point) coordinates, but our layout is
+    // sized in backing pixels. Convert by the window's pixel density.
+    if (SDL_Window* w = m_renderer->sdlWindow()) {
+        int lw = 1, lh = 1, pw = 1, ph = 1;
+        SDL_GetWindowSize(w, &lw, &lh);
+        SDL_GetWindowSizeInPixels(w, &pw, &ph);
+        if (lw > 0) mx *= (float)pw / (float)lw;
+        if (lh > 0) my *= (float)ph / (float)lh;
+    }
+    m_mousePos = { mx, my };
+    const Vec2f mouse = m_mousePos;
 
-    bool leftDown  = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
-    bool rightDown = sf::Mouse::isButtonPressed(sf::Mouse::Button::Right);
+    bool leftDown  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
+    bool rightDown = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
 
     auto* root = m_activePage->m_rootContainer;
 
@@ -107,40 +128,15 @@ void UILO::update() {
     if (hoveredOverlay) hoveredOverlay->checkHover(mouse);
     else                root->checkHover(mouse);
 
-    // Apply pending cursor (lazy-init, only swap when type changes)
+    // Apply pending cursor
     if (m_pendingCursor != m_activeCursor) {
-        const sf::Cursor* cur = nullptr;
-        switch (m_pendingCursor) {
-            case sf::Cursor::Type::Arrow:
-                if (!m_curArrow) m_curArrow = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow);
-                if (m_curArrow) cur = &*m_curArrow;
-                break;
-            case sf::Cursor::Type::Hand:
-                if (!m_curHand) m_curHand = sf::Cursor::createFromSystem(sf::Cursor::Type::Hand);
-                if (m_curHand) cur = &*m_curHand;
-                break;
-            case sf::Cursor::Type::SizeHorizontal:
-                if (!m_curSizeH) m_curSizeH = sf::Cursor::createFromSystem(sf::Cursor::Type::SizeHorizontal);
-                if (m_curSizeH) cur = &*m_curSizeH;
-                break;
-            case sf::Cursor::Type::SizeVertical:
-                if (!m_curSizeV) m_curSizeV = sf::Cursor::createFromSystem(sf::Cursor::Type::SizeVertical);
-                if (m_curSizeV) cur = &*m_curSizeV;
-                break;
-            case sf::Cursor::Type::Text:
-                if (!m_curText) m_curText = sf::Cursor::createFromSystem(sf::Cursor::Type::Text);
-                if (m_curText) cur = &*m_curText;
-                break;
-            default: break;
-        }
-        if (cur && m_window) m_window->setMouseCursor(*cur);
+        m_renderer->setCursor(m_pendingCursor);
         m_activeCursor = m_pendingCursor;
     }
 
     if (leftDown && !m_prevLeftMouse) {
         m_interactibleActivatedThisFrame = false;
 
-        // Resizers get click priority (they render on top)
         bool resizerClicked = false;
         for (auto* r : m_resizers) {
             if (r->getBounds().contains(mouse)) {
@@ -151,14 +147,12 @@ void UILO::update() {
         }
 
         if (!resizerClicked) {
-            // Find which overlay (if any) was clicked
             Element* clickedOverlay = nullptr;
             for (auto& ov : m_overlays)
                 if (ov.element->getBounds().contains(mouse)) { clickedOverlay = ov.element; break; }
 
             if (clickedOverlay) clickedOverlay->checkLeftClick(mouse);
             else {
-                // Outside all overlays — dismiss them, then pass click to page
                 auto copy = m_overlays;
                 m_overlays.clear();
                 for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
@@ -185,43 +179,51 @@ void UILO::update() {
 void UILO::render() {
     if (!m_activePage) return;
 
-    // Set a pixel-accurate view based on the current window size before rendering.
-    // Without this, a resized window would leave the view based on the original
-    // creation size (getDefaultView()), causing overlays and resizers to render
-    // at the wrong screen position even though their m_bounds are correct.
-    const auto ws = m_window->getSize();
-    m_window->setView(sf::View(sf::FloatRect{
-        {0.f, 0.f},
-        {static_cast<float>(ws.x), static_cast<float>(ws.y)}
-    }));
-
-    m_activePage->render(*m_window);
+    m_activePage->render();
     for (auto& ov : m_overlays)
-        ov.element->render(*m_window);
+        ov.element->render();
     for (auto* r : m_resizers)
-        r->render(*m_window);
+        r->render();
 }
 
-void UILO::handleEvent(const sf::Event& event) {
+void UILO::handleEvent(const SDL_Event& event) {
     if (!m_activePage) return;
 
-    if (const auto* scroll = event.getIf<sf::Event::MouseWheelScrolled>()) {
-        sf::Vector2f mouse = {
-            static_cast<float>(scroll->position.x),
-            static_cast<float>(scroll->position.y)
-        };
+    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        const Vec2f mouse = m_mousePos;
+        float delta = event.wheel.y;  // positive = scroll up
         Element* scrollOverlay = nullptr;
         for (auto& ov : m_overlays)
             if (ov.element->getBounds().contains(mouse)) { scrollOverlay = ov.element; break; }
-        if (scrollOverlay) scrollOverlay->checkScroll(mouse, scroll->delta);
-        else               m_activePage->m_rootContainer->checkScroll(mouse, scroll->delta);
+        if (scrollOverlay) scrollOverlay->checkScroll(mouse, delta);
+        else               m_activePage->m_rootContainer->checkScroll(mouse, delta);
     }
 
-    if (const auto* te = event.getIf<sf::Event::TextEntered>())
-        if (m_currInteractible) m_currInteractible->handleTextInput(te->unicode);
+    if (event.type == SDL_EVENT_TEXT_INPUT)
+        if (m_currInteractible) {
+            // SDL_EVENT_TEXT_INPUT gives a UTF-8 string that may contain
+            // multiple codepoints (IME / batched repeats on Wayland).
+            // Dispatch every codepoint so we don't drop characters.
+            const unsigned char* s = reinterpret_cast<const unsigned char*>(event.text.text);
+            while (*s) {
+                uint32_t cp = 0;
+                int n = 1;
+                if ((*s & 0x80) == 0)         { cp = *s; n = 1; }
+                else if ((*s & 0xE0) == 0xC0) { cp = ((*s & 0x1F) << 6)  | (s[1] & 0x3F); n = 2; }
+                else if ((*s & 0xF0) == 0xE0) { cp = ((*s & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F); n = 3; }
+                else if ((*s & 0xF8) == 0xF0) { cp = ((*s & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F); n = 4; }
+                else { ++s; continue; }
+                m_currInteractible->handleTextInput(cp);
+                s += n;
+            }
+        }
 
-    if (const auto* kp = event.getIf<sf::Event::KeyPressed>())
-        if (m_currInteractible) m_currInteractible->handleKeyInput(kp->code, kp->shift, kp->control);
+    if (event.type == SDL_EVENT_KEY_DOWN)
+        if (m_currInteractible) {
+            bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+            bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
+            m_currInteractible->handleKeyInput(event.key.key, shift, ctrl);
+        }
 }
 
 }
