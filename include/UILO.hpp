@@ -83,6 +83,8 @@ private:
     Interactible* m_currInteractible             = nullptr;
     bool          m_interactibleActivatedThisFrame = false;
 
+    Uint64 m_lastKeyUpNs = 0;
+
     friend class Element;
     friend class Interactible;
 };

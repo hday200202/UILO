@@ -199,8 +199,27 @@ void UILO::handleEvent(const SDL_Event& event) {
         else               m_activePage->m_rootContainer->checkScroll(mouse, delta);
     }
 
+    if (event.type == SDL_EVENT_KEY_UP) {
+        m_lastKeyUpNs = event.common.timestamp;
+    }
+
     if (event.type == SDL_EVENT_TEXT_INPUT)
         if (m_currInteractible) {
+            // Wayland tends to deliver key-repeat events (and their
+            // matching TEXT_INPUTs) a moment after the user has physically
+            // released the key. If this TEXT_INPUT was generated AFTER
+            // the most recent KEY_UP and no key is currently held, treat
+            // it as a stale repeat and drop it.
+            if (event.common.timestamp > m_lastKeyUpNs) {
+                int nKeys = 0;
+                const bool* state = SDL_GetKeyboardState(&nKeys);
+                bool anyDown = false;
+                for (int i = 0; i < nKeys; ++i) {
+                    if (state[i]) { anyDown = true; break; }
+                }
+                if (!anyDown) return;
+            }
+
             // SDL_EVENT_TEXT_INPUT gives a UTF-8 string that may contain
             // multiple codepoints (IME / batched repeats on Wayland).
             // Dispatch every codepoint so we don't drop characters.
@@ -220,6 +239,17 @@ void UILO::handleEvent(const SDL_Event& event) {
 
     if (event.type == SDL_EVENT_KEY_DOWN)
         if (m_currInteractible) {
+            // Same stale-repeat filter for key-only events (backspace,
+            // arrows, etc. don't produce TEXT_INPUT).
+            if (event.key.repeat && event.common.timestamp > m_lastKeyUpNs) {
+                int nKeys = 0;
+                const bool* state = SDL_GetKeyboardState(&nKeys);
+                bool anyDown = false;
+                for (int i = 0; i < nKeys; ++i) {
+                    if (state[i]) { anyDown = true; break; }
+                }
+                if (!anyDown) return;
+            }
             bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
             bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
             m_currInteractible->handleKeyInput(event.key.key, shift, ctrl);
