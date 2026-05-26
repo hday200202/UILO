@@ -34,6 +34,8 @@ void Row::update(sf::FloatRect& parentBounds, float dt) {
             cursorX       += rw;
             m_contentWidth += rw;
         }
+        const float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
+        if (m_scrollOffset > maxScroll) { m_scrollOffset = maxScroll; m_dirty = true; }
         return;
     }
 
