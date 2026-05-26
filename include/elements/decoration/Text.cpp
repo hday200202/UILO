@@ -154,6 +154,7 @@ void Text::render(sf::RenderTarget& target) {
 
     m_text->setPosition({std::round(x), std::round(y)});
     target.draw(*m_text);
+    m_dirty = false;
 }
 
 }

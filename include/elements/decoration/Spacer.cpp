@@ -31,6 +31,7 @@ void Spacer::render(sf::RenderTarget& target) {
         rounded.setFillColor(c);
         target.draw(rounded);
     }
+    m_dirty = false;
 }
 
 }

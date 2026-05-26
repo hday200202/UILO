@@ -34,6 +34,7 @@ void Slider::update(sf::FloatRect& parentBounds, float /*dt*/) {
 
 void Slider::render(sf::RenderTarget& target) {
     if (!m_modifier.getVisible()) return;
+    m_dirty = false;
 
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const sf::Vector2f pos  = m_bounds.position;
@@ -229,6 +230,7 @@ void Slider::applyValue(float raw) {
     }
     if (v == m_value) return;
     m_value = v;
+    m_dirty = true;
     if (m_options.getOnValueChanged()) m_options.getOnValueChanged()(m_value);
 }
 

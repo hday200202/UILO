@@ -221,6 +221,7 @@ void Dropdown::update(sf::FloatRect& parentBounds, float dt) {
 
 void Dropdown::render(sf::RenderTarget& target) {
     m_header->render(target);
+    m_dirty = false;
 }
 
 bool Dropdown::checkLeftClick(const sf::Vector2f& mousePosition) {

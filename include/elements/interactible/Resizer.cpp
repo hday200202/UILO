@@ -100,6 +100,7 @@ void Resizer::render(sf::RenderTarget& target) {
     target.draw(rect);
 
     target.setView(saved);
+    m_dirty = false;
 }
 
 bool Resizer::checkHover(const sf::Vector2f& mousePosition) {
