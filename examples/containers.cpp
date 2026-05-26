@@ -24,7 +24,7 @@ int main() {
         settings
     );
     
-    window.setVerticalSyncEnabled(true);
+    // window.setVerticalSyncEnabled(true);
     // window.setFramerateLimit(1600);
 
     UILO ui(window, page(buildRootContainer(), "main_page"));
@@ -214,7 +214,6 @@ Container* buildRootContainer() {
                                             TextOptions()
                                                 .setFont("assets/fonts/Montserrat.ttf")
                                                 .setContent("TEST")
-                                                .setCharSize(36)
                                                 .setColor(sf::Color::White)
                                                 .setTextAlignX(Align::CenterX)
                                                 .setTextAlignY(Align::CenterY)
@@ -230,7 +229,6 @@ Container* buildRootContainer() {
                                     .setHeight(32_px),
                                 DropdownOptions()
                                     .setFont("assets/fonts/Montserrat.ttf")
-                                    .setCharSize(18)
                                     .setPopupRounding(ROUNDING)
                                     .setHeaderRounding(ROUNDING)
                                     .setPlaceholder("Choose...")
@@ -290,8 +288,8 @@ Container* buildRootContainer() {
                             .setThumbShape(ThumbShape::Rect)
                             .setThumbSize(16, 48)
                             .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
-                            .setFillColor(sf::Color::Black)
-                            .setThumbRounding(8.f)
+                            .setFillColor({151, 120, 206})
+                            .setThumbRounding(ROUNDING)
                             .setStep(0.01f),
                         ""
                     )

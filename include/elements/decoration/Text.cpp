@@ -10,7 +10,8 @@ Text::Text(
     Modifier modifier,
     TextOptions options,
     const std::string& name
-) : m_options(options), m_content(options.getContent()), m_charSize(options.getCharSize()) {
+) : m_options(options), m_content(options.getContent()),
+  m_charSize(options.hasCharSize() ? options.getCharSize() : 30) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Text;
@@ -34,7 +35,7 @@ void Text::init() {
 std::string Text::wrapContent(float maxWidth) const {
     if (maxWidth <= 0.f) return m_content;
 
-    unsigned int cs = static_cast<unsigned int>(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f));
+    unsigned int cs = static_cast<unsigned int>(std::round(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f)));
     sf::Text probe(*m_fontPtr, "", cs);
     std::string result;
 
@@ -68,7 +69,7 @@ std::string Text::wrapContent(float maxWidth) const {
 void Text::rebuildText() {
     if (!m_fontPtr) return;
 
-    unsigned int cs = static_cast<unsigned int>(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f));
+    unsigned int cs = static_cast<unsigned int>(std::round(m_charSize * (m_uiloRef ? m_uiloRef->getScale() : 1.f)));
     float wrapWidth = m_bounds.size.x;
     std::string str = (m_options.getWrap() && wrapWidth > 0.f)
                     ? wrapContent(wrapWidth)
@@ -108,6 +109,16 @@ void Text::update(sf::FloatRect& parentBounds, float dt) {
 
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     bool needRebuild = false;
+
+    // Auto char size: 60% of the element's own height when setCharSize was not called.
+    if (!m_options.hasCharSize()) {
+        const unsigned int autoCs = std::max(1u,
+            static_cast<unsigned int>(m_bounds.size.y * 0.6f / scale));
+        if (autoCs != m_charSize) {
+            m_charSize   = autoCs;
+            needRebuild  = true;
+        }
+    }
     if (m_options.getWrap() && m_bounds.size.x != m_lastWrapWidth) {
         m_lastWrapWidth = m_bounds.size.x;
         needRebuild = true;
@@ -146,7 +157,7 @@ void Text::render(sf::RenderTarget& target) {
     else
         y = m_bounds.position.y - lb.position.y;
 
-    m_text->setPosition({x, y});
+    m_text->setPosition({std::round(x), std::round(y)});
     target.draw(*m_text);
 }
 

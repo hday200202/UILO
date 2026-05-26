@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <string>
+#include <optional>
 
 #include "../Element.hpp"
 #include "../decoration/Text.hpp"
@@ -56,7 +57,8 @@ public:
     int          getMaxItems()       const { return m_maxItems; }
     float        getItemRounding()    const { return m_itemRounding; }
     float        getPopupRounding()   const { return m_popupRounding; }
-    unsigned int getCharSize()        const { return m_charSize; }
+    unsigned int getCharSize()        const { return m_charSize.value_or(14); }
+    bool         hasCharSize()        const { return m_charSize.has_value(); }
     sf::Color    getTextColor()       const { return m_textColor; }
     sf::Color    getHeaderTextColor() const { return m_headerTextColor; }
     const std::string& getPlaceholder() const { return m_placeholder; }
@@ -81,7 +83,7 @@ private:
     int          m_maxItems        = 6;
     float        m_itemRounding    = 0.f;
     float        m_popupRounding   = 0.f;
-    unsigned int m_charSize        = 14;
+    std::optional<unsigned int> m_charSize;
     sf::Color    m_textColor       = sf::Color::White;
     sf::Color    m_headerTextColor = sf::Color::White;
     std::string  m_placeholder;
