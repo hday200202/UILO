@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(UILO LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -60,6 +60,60 @@ if(NOT bgfx_FOUND)
 endif()
 
 # ---------------------------------------------------------------------------
+# Shaders (compiled per-backend by bgfx-shaderc, embedded as headers)
+# ---------------------------------------------------------------------------
+# bgfxToolUtils provides bgfx_compile_shaders(). It is included automatically
+# by bgfxConfig.cmake. For the FetchContent path the wrapper also exposes it.
+if(NOT COMMAND bgfx_compile_shaders)
+    if(DEFINED bgfx_SOURCE_DIR AND EXISTS "${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
+        include("${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
+    endif()
+endif()
+
+set(_SHADER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders")
+set(_SHADER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/shaders")
+file(MAKE_DIRECTORY "${_SHADER_OUT_DIR}")
+
+# Profiles: spirv (Vulkan), 120 (OpenGL), 300_es (GLES/WebGL2), metal (Apple),
+# s_5_0 / s_6_0 (D3D11 / D3D12 on Windows).
+set(_UILO_SHADER_PROFILES spirv 120 300_es)
+if(APPLE)
+    list(APPEND _UILO_SHADER_PROFILES metal)
+endif()
+if(WIN32)
+    list(APPEND _UILO_SHADER_PROFILES s_5_0 s_6_0)
+endif()
+
+bgfx_compile_shaders(
+    TYPE VERTEX
+    SHADERS
+        "${_SHADER_SRC_DIR}/vs_solid.sc"
+        "${_SHADER_SRC_DIR}/vs_tex.sc"
+    VARYING_DEF "${_SHADER_SRC_DIR}/varying.def.sc"
+    OUTPUT_DIR  "${_SHADER_OUT_DIR}"
+    OUT_FILES_VAR UILO_VS_HEADERS
+    INCLUDE_DIRS "${_SHADER_SRC_DIR}"
+    PROFILES ${_UILO_SHADER_PROFILES}
+    AS_HEADERS
+)
+
+bgfx_compile_shaders(
+    TYPE FRAGMENT
+    SHADERS
+        "${_SHADER_SRC_DIR}/fs_solid.sc"
+        "${_SHADER_SRC_DIR}/fs_tex.sc"
+        "${_SHADER_SRC_DIR}/fs_text.sc"
+    VARYING_DEF "${_SHADER_SRC_DIR}/varying.def.sc"
+    OUTPUT_DIR  "${_SHADER_OUT_DIR}"
+    OUT_FILES_VAR UILO_FS_HEADERS
+    INCLUDE_DIRS "${_SHADER_SRC_DIR}"
+    PROFILES ${_UILO_SHADER_PROFILES}
+    AS_HEADERS
+)
+
+add_custom_target(uilo_shaders DEPENDS ${UILO_VS_HEADERS} ${UILO_FS_HEADERS})
+
+# ---------------------------------------------------------------------------
 # UILO library
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
@@ -67,6 +121,7 @@ file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
 )
 
 add_library(uilo STATIC ${UILO_SRCS})
+add_dependencies(uilo uilo_shaders)
 
 target_include_directories(uilo PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -75,6 +130,7 @@ target_include_directories(uilo PUBLIC
 
 target_include_directories(uilo PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+    "${_SHADER_OUT_DIR}"
 )
 
 target_link_libraries(uilo PUBLIC
