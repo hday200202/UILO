@@ -377,7 +377,7 @@ Container* buildRootContainer() {
                                     .setRounding(ROUNDING)
                                     .setPlaceholder("Type Something...")
                                     .setBackgroundColor({100, 100, 100})
-                                    // .setMultiline(true)
+                                    .setMultiline(true)
                                     .setPaddingLeft(16.f)
                                     .setPaddingRight(16.f)
                                     .setOutlineColor({151, 120, 206})
@@ -434,12 +434,14 @@ Container* buildRootContainer() {
                             .setHeight(100_pct),
                         WaveformOptions()
                             .setColor(Color::White)
+                            .setLeftChannelColor(Color::Green)
+                            .setRightChannelColor(Color::Red)
                             .setBackgroundColor(Color::Transparent)
                             .setRounding(ROUNDING - 2.f)
                             .setLineThickness(1.f)
-                            .setLayout(WaveformLayout::SumMono)
-                            .setGain(0.75f)
-                            .setStyle(WaveformStyle::Filled)
+                            .setLayout(WaveformLayout::Stacked)
+                            .setGain(0.8f)
+                            .setStyle(WaveformStyle::Line)
                             .setResolution(1.f),
                         "main_waveform"
                     ),
