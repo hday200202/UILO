@@ -78,8 +78,13 @@ void Waveform::zoomAt(float anchorNorm, float factor) {
     if (newStart < 0.0)                    newStart = 0.0;
     if (newStart + newCnt > total)         newStart = total - newCnt;
 
-    const std::size_t start = (std::size_t)newStart;
-    const std::size_t count = (newCnt >= total) ? 0 : (std::size_t)newCnt;
+    // Round to nearest instead of truncating; std::size_t cast on a positive
+    // double otherwise floors, biasing newStart down by up to one frame each
+    // call. Over many zoom events that accumulates as a steady leftward drift
+    // of the anchor point under the cursor.
+    const std::size_t start = (std::size_t)std::llround(newStart);
+    const std::size_t cnt   = (std::size_t)std::llround(newCnt);
+    const std::size_t count = (cnt >= m_numFrames) ? 0 : cnt;
     setRange(start, count);
 }
 
