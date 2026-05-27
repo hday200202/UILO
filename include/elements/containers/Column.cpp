@@ -234,9 +234,12 @@ void Column::render() {
 
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
-        if (m_uiloRef) m_uiloRef->getRenderer().pushScissor(m_bounds);
+        if (m_uiloRef) {
+            const float rr = m_options.getRounding() * (m_uiloRef->getScale());
+            m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+        }
         child->render();
-        if (m_uiloRef) m_uiloRef->getRenderer().popScissor();
+        if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
     }
 
     m_dirty = false;

@@ -172,6 +172,14 @@ public:
     void pushScissor(Rectf bounds);
     void popScissor();
 
+    // ---- Rounded-rect clipping (SDF in fragment shaders) ------------------
+    // Pushes a rounded clip region. All subsequent draws (solid/tex/text)
+    // are alpha-masked to a rounded rect of the given bounds + radius.
+    // Also pushes an axis-aligned scissor of `bounds` for early-out.
+    // A radius <= 0 falls back to a plain rectangular scissor.
+    void pushRoundClip(Rectf bounds, float radius);
+    void popRoundClip();
+
 private:
     SDL_Window* m_window      = nullptr;
     uint32_t    m_lastWidth   = 0;

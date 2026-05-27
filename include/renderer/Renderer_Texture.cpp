@@ -8,11 +8,29 @@
 namespace uilo {
 
 namespace {
+inline void applyRoundClipInner(const Renderer::Impl& impl) {
+    float rect[4]   = {0.f, 0.f, 0.f, 0.f};
+    float params[4] = {0.f, 0.f, 0.f, 0.f};
+    if (impl.roundClipTop > 0) {
+        const auto& c = impl.roundClipStack[impl.roundClipTop - 1];
+        if (c.radius > 0.f) {
+            rect[0] = c.cx; rect[1] = c.cy;
+            rect[2] = c.halfW; rect[3] = c.halfH;
+            params[0] = c.radius; params[1] = 1.f;
+        }
+    }
+    if (bgfx::isValid(impl.u_clipRect))   bgfx::setUniform(impl.u_clipRect,   rect);
+    if (bgfx::isValid(impl.u_clipParams)) bgfx::setUniform(impl.u_clipParams, params);
+}
 inline void applyScissor(const Renderer::Impl& impl) {
     if (impl.scissorTop > 0) {
         auto& sc = impl.scissorStack[impl.scissorTop - 1];
         bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
     }
+    applyRoundClipInner(impl);
+}
+inline void applyRoundClip(const Renderer::Impl& impl) {
+    applyRoundClipInner(impl);
 }
 inline bool scissorEmpty(const Renderer::Impl& impl) {
     if (impl.scissorTop == 0) return false;

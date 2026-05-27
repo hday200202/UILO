@@ -139,6 +139,8 @@ bool Renderer::Impl::initShaders() {
     u_glassAnim  = bgfx::createUniform("u_glassAnim",  bgfx::UniformType::Vec4);
     u_glassBase  = bgfx::createUniform("u_glassBase",  bgfx::UniformType::Vec4);
     u_glassMouse = bgfx::createUniform("u_glassMouse", bgfx::UniformType::Vec4);
+    u_clipRect   = bgfx::createUniform("u_clipRect",   bgfx::UniformType::Vec4);
+    u_clipParams = bgfx::createUniform("u_clipParams", bgfx::UniformType::Vec4);
     if (!bgfx::isValid(solidProgram) ||
         !bgfx::isValid(texProgram)   ||
         !bgfx::isValid(textProgram)  ||
@@ -181,6 +183,8 @@ void Renderer::Impl::shutdownResources() {
     if (bgfx::isValid(u_glassAnim))  bgfx::destroy(u_glassAnim);
     if (bgfx::isValid(u_glassBase))  bgfx::destroy(u_glassBase);
     if (bgfx::isValid(u_glassMouse)) bgfx::destroy(u_glassMouse);
+    if (bgfx::isValid(u_clipRect))   bgfx::destroy(u_clipRect);
+    if (bgfx::isValid(u_clipParams)) bgfx::destroy(u_clipParams);
     if (bgfx::isValid(solidProgram)) bgfx::destroy(solidProgram);
     if (bgfx::isValid(texProgram))   bgfx::destroy(texProgram);
     if (bgfx::isValid(textProgram))  bgfx::destroy(textProgram);
@@ -374,6 +378,12 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     // also reset the u_imgFlags uniform (no ellipse clipping).
     const float flags[4] = { 0.f, 0.f, 0.f, 0.f };
     bgfx::setUniform(u_imgFlags, flags);
+
+    // The full-screen blit must not inherit a stale rounded-clip from the
+    // last in-scene draw call. Reset clip uniforms to "disabled".
+    const float clipZero[4] = { 0.f, 0.f, 0.f, 0.f };
+    if (bgfx::isValid(u_clipRect))   bgfx::setUniform(u_clipRect,   clipZero);
+    if (bgfx::isValid(u_clipParams)) bgfx::setUniform(u_clipParams, clipZero);
 
     bgfx::setTexture(0, s_texColor, sceneColorTex);
     submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV);
@@ -721,6 +731,49 @@ void Renderer::popScissor() {
     if (m_impl->scissorTop > 0) --m_impl->scissorTop;
 }
 
+void Renderer::pushRoundClip(Rectf b, float radius) {
+    auto& impl = *m_impl;
+    pushScissor(b);
+    if (impl.roundClipTop >= Impl::kMaxRoundClip) return;
+    float r = std::max(0.f, radius);
+    if (r <= 0.f && impl.roundClipTop == 0) {
+        // Plain rectangle: still record an "off" entry so pop balances.
+        impl.roundClipStack[impl.roundClipTop++] = {0.f, 0.f, 0.f, 0.f, -1.f};
+        return;
+    }
+    float halfW = b.size.x * 0.5f;
+    float halfH = b.size.y * 0.5f;
+    float cx    = b.position.x + halfW;
+    float cy    = b.position.y + halfH;
+    // Intersect with the parent rounded clip (if any) by shrinking the
+    // smaller of the two rects. A perfect intersection of two rounded rects
+    // is hairy; in practice nested rounded containers are concentric or
+    // the child stays well inside the parent so the inner clip dominates.
+    if (impl.roundClipTop > 0) {
+        const auto& p = impl.roundClipStack[impl.roundClipTop - 1];
+        if (p.radius >= 0.f) {
+            float pCx = p.cx, pCy = p.cy, pHw = p.halfW, pHh = p.halfH;
+            float nx1 = std::max(cx - halfW, pCx - pHw);
+            float ny1 = std::max(cy - halfH, pCy - pHh);
+            float nx2 = std::min(cx + halfW, pCx + pHw);
+            float ny2 = std::min(cy + halfH, pCy + pHh);
+            halfW = std::max(0.f, (nx2 - nx1) * 0.5f);
+            halfH = std::max(0.f, (ny2 - ny1) * 0.5f);
+            cx    = (nx1 + nx2) * 0.5f;
+            cy    = (ny1 + ny2) * 0.5f;
+            r     = std::min(r, std::min(halfW, halfH));
+        }
+    }
+    r = std::min(r, std::min(halfW, halfH));
+    impl.roundClipStack[impl.roundClipTop++] = {cx, cy, halfW, halfH, r};
+}
+
+void Renderer::popRoundClip() {
+    auto& impl = *m_impl;
+    if (impl.roundClipTop > 0) --impl.roundClipTop;
+    popScissor();
+}
+
 void Renderer::setMouseState(Vec2f mousePosFbPx) {
     // Detect motion vs the previous frame so animated materials can fade
     // the ripple amplitude when the cursor sits still. Threshold avoids
@@ -749,11 +802,29 @@ void Renderer::clear(Color color) {
 static constexpr float kDeg2Rad = 3.14159265f / 180.f;
 
 namespace {
+inline void applyRoundClipInner(const Renderer::Impl& impl) {
+    float rect[4]   = {0.f, 0.f, 0.f, 0.f};
+    float params[4] = {0.f, 0.f, 0.f, 0.f};
+    if (impl.roundClipTop > 0) {
+        const auto& c = impl.roundClipStack[impl.roundClipTop - 1];
+        if (c.radius > 0.f) {
+            rect[0] = c.cx; rect[1] = c.cy;
+            rect[2] = c.halfW; rect[3] = c.halfH;
+            params[0] = c.radius; params[1] = 1.f;
+        }
+    }
+    if (bgfx::isValid(impl.u_clipRect))   bgfx::setUniform(impl.u_clipRect,   rect);
+    if (bgfx::isValid(impl.u_clipParams)) bgfx::setUniform(impl.u_clipParams, params);
+}
 inline void applyScissor(const Renderer::Impl& impl) {
     if (impl.scissorTop > 0) {
         auto& sc = impl.scissorStack[impl.scissorTop - 1];
         bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
     }
+    applyRoundClipInner(impl);
+}
+inline void applyRoundClip(const Renderer::Impl& impl) {
+    applyRoundClipInner(impl);
 }
 inline bool scissorEmpty(const Renderer::Impl& impl) {
     if (impl.scissorTop == 0) return false;
