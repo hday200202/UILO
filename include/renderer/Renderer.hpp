@@ -97,6 +97,11 @@ public:
     void draw(const Triangle&    triangle);
     void draw(const Line&        line);
 
+    // Batched line draw: emits all `count` lines in a single transient
+    // vertex buffer / submit. Far cheaper than calling draw(Line) in a
+    // loop when rendering many primitives (e.g. waveforms, grids).
+    void drawLines(const Line* lines, size_t count);
+
     // ---- Texture / image --------------------------------------------------
     // Load an image file (png/jpg/etc.). Cached by path; safe to call
     // multiple times. Returns invalid Texture on failure.

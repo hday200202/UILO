@@ -4,6 +4,8 @@
 #include <bgfx/bgfx.h>
 #include <iostream>
 #include <cstdio>
+#include <cmath>
+#include <vector>
 
 using namespace uilo;
 
@@ -25,6 +27,42 @@ int main() {
 
     UILO ui(renderer, page(buildRootContainer(), "main_page"));
     ui.setScale(1.5f);
+
+    // ----- Synthesize a stereo "track" so the Waveform widget has data ----
+    constexpr float    kSampleRate = 48000.f;
+    constexpr float    kDuration   = 4.0f; // seconds
+    const std::size_t  kFrames     = (std::size_t)(kSampleRate * kDuration);
+    std::vector<float> bufL(kFrames), bufR(kFrames);
+    for (std::size_t i = 0; i < kFrames; ++i) {
+        const float t  = (float)i / kSampleRate;
+        // Two sine partials + a slow tremolo envelope + a little drift
+        // between L/R so the channels look different in Stacked layout.
+        const float env  = 0.5f * (1.f + std::sin(2.f * 3.14159265f * 0.8f * t));
+        const float fade = std::min(1.f, t / 0.05f) *
+                           std::min(1.f, (kDuration - t) / 0.4f);
+        const float wL = std::sin(2.f * 3.14159265f * 220.f * t)
+                       + 0.5f * std::sin(2.f * 3.14159265f * 440.f * t);
+        const float wR = std::sin(2.f * 3.14159265f * 246.94f * t)
+                       + 0.4f * std::sin(2.f * 3.14159265f * 523.25f * t);
+        bufL[i] = 0.55f * fade * env * wL;
+        bufR[i] = 0.55f * fade * env * wR;
+    }
+    if (auto* wf = ui.getElement<Waveform>("main_waveform")) {
+        const float* channels[2] = { bufL.data(), bufR.data() };
+        wf->setSamples(channels, 2, kFrames);
+
+        // Ctrl + scroll wheel zooms the waveform around the mouse x.
+        wf->getModifier().setOnScroll([&ui, wf](Element* self, float delta) {
+            const SDL_Keymod mods = SDL_GetModState();
+            if (!(mods & SDL_KMOD_CTRL)) return;
+            const Rectf b = self->getBounds();
+            if (b.size.x <= 0.f) return;
+            const float mx = ui.getMousePosition().x;
+            const float anchor = std::clamp((mx - b.position.x) / b.size.x, 0.f, 1.f);
+            const float factor = std::pow(1.2f, delta);
+            wf->zoomAt(anchor, factor);
+        });
+    }
 
     Font fpsFont = renderer.loadFont("assets/fonts/Montserrat.ttf");
 
@@ -115,7 +153,21 @@ Container* buildRootContainer() {
                     .setHeight(96_px)
                     .setOuterPadding(8.f),
                 panelRow,
-                contains {}
+                contains {
+                    slider(
+                        Modifier()
+                            .setHeight(32_px)
+                            .setAlign(Align::CenterX | Align::CenterY), 
+                        SliderOptions()
+                            .setThumbShape(ThumbShape::Rect)
+                            .setThumbSize(16, 48)
+                            .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
+                            .setFillColor({151, 120, 206})
+                            .setThumbRounding(ROUNDING)
+                            .setStep(0.01f),
+                        ""
+                    )
+                }
             ),
             
             row(
@@ -324,19 +376,21 @@ Container* buildRootContainer() {
                     .setOuterPadding(8.f),
                 panelRow,
                 contains {
-                    slider(
+                    waveform(
                         Modifier()
-                            .setHeight(32_px)
-                            .setAlign(Align::CenterX | Align::CenterY), 
-                        SliderOptions()
-                            .setThumbShape(ThumbShape::Rect)
-                            .setThumbSize(16, 48)
-                            .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
-                            .setFillColor({151, 120, 206})
-                            .setThumbRounding(ROUNDING)
-                            .setStep(0.01f),
-                        ""
-                    )
+                            .setWidth(100_pct)
+                            .setHeight(100_pct),
+                        WaveformOptions()
+                            .setColor(Color::White)
+                            .setBackgroundColor(Color::Transparent)
+                            .setRounding(ROUNDING - 2.f)
+                            .setLineThickness(1.f)
+                            .setLayout(WaveformLayout::SumMono)
+                            .setGain(0.75f)
+                            .setStyle(WaveformStyle::Filled)
+                            .setResolution(1.f),
+                        "main_waveform"
+                    ),
                 }
             ),
         }, "root"
