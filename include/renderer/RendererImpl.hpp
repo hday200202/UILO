@@ -117,6 +117,30 @@ struct Renderer::Impl {
     RoundClipEntry                  roundClipStack[kMaxRoundClip]{};
     int                             roundClipTop = 0;
 
+    // ---- Affine rotation (applied CPU-side to draw vertices) -------------
+    // Convention: degrees, +x at 0, +y at 90 (matches a (cos t, sin t)
+    // direction vector in screen-pixel coords).
+    struct RotState {
+        float pivotX  = 0.f;
+        float pivotY  = 0.f;
+        float angleDeg = 0.f;
+        float cosA    = 1.f;
+        float sinA    = 0.f;
+        bool  enabled = false;
+    };
+    RotState rotation;
+
+    // Rotate a screen-space point around the current pivot. Identity when
+    // rotation is disabled, so callers can pipe every emitted vertex through
+    // this without a branch at each call site.
+    inline void rotPt(float& x, float& y) const {
+        if (!rotation.enabled) return;
+        const float dx = x - rotation.pivotX;
+        const float dy = y - rotation.pivotY;
+        x = rotation.pivotX + dx * rotation.cosA - dy * rotation.sinA;
+        y = rotation.pivotY + dx * rotation.sinA + dy * rotation.cosA;
+    }
+
     // ---- Texture cache ----
     // path -> Texture
     std::unordered_map<std::string, Texture> textureCache;

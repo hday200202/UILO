@@ -58,7 +58,7 @@ int main() {
             const Rectf b = self->getBounds();
             if (b.size.x <= 0.f) return;
             const float mx = ui.getMousePosition().x;
-            const float anchor = std::clamp((mx - b.position.x) / b.size.x, 0.f, 1.f);
+            const float anchor = std::max(0.f, std::min(1.f, (mx - b.position.x) / b.size.x));
             const float factor = std::pow(1.2f, delta);
             wf->zoomAt(anchor, factor);
         });
@@ -164,7 +164,8 @@ Container* buildRootContainer() {
                             .setOnValueChanged([&](float v){std::cout << "Value to " << v << std::endl; })
                             .setFillColor({151, 120, 206})
                             .setThumbRounding(ROUNDING)
-                            .setStep(0.01f),
+                            .setStep(0.01f)
+                            .setDefaultValue(0.f),
                         ""
                     )
                 }
@@ -292,6 +293,57 @@ Container* buildRootContainer() {
                                         )
                                     ),
                                 "test_button"
+                            ),
+                            spacer(Modifier().setHeight(16_px).setAlign(Align::CenterY)),
+                            row(
+                                Modifier()
+                                    .setHeight(96_px)
+                                    .setAlign(Align::CenterX | Align::CenterY),
+                                RowOptions(),
+                                contains {
+                                    knob(
+                                        Modifier()
+                                            .setWidth(96_px)
+                                            .setHeight(96_px)
+                                            .setAlign(Align::CenterX | Align::CenterY),
+                                        KnobOptions()
+                                            .setBodyColor({44, 47, 60})
+                                            .setOutlineColor({80, 84, 100})
+                                            .setOutlineThickness(1.f)
+                                            .setTrackColor({30, 32, 42})
+                                            .setArcColor({151, 120, 206})
+                                            .setIndicatorColor(Color::White)
+                                            .setArcThickness(8.f)
+                                            .setArcGap(4.f)
+                                            .setIndicatorThickness(4.f)
+                                            .setIndicatorInset(0.35f)
+                                            .setIndicatorLength(0.85f)
+                                            .setRange(0.f, 1.f)
+                                            .setDefaultValue(0.5f)
+                                            .setOnValueChanged([](float v){
+                                                std::cout << "Knob: " << v << std::endl;
+                                            }),
+                                        "knob_a"
+                                    ),
+                                    spacer(Modifier().setWidth(16_px).setAlign(Align::CenterX)),
+                                    knob(
+                                        Modifier()
+                                            .setWidth(96_px)
+                                            .setHeight(96_px)
+                                            .setAlign(Align::CenterX | Align::CenterY),
+                                        KnobOptions()
+                                            .setBodyColor({44, 47, 60})
+                                            .setOutlineColor({80, 84, 100})
+                                            .setOutlineThickness(1.f)
+                                            .setArcColor({120, 200, 170})
+                                            .setStartAngle(180.f)
+                                            .setEndAngle(0.f)
+                                            .setArcDirection(KnobArcDir::CounterClockwise)
+                                            .setRange(-1.f, 1.f)
+                                            .setDefaultValue(0.f),
+                                        "knob_pan"
+                                    )
+                                }
                             ),
                             spacer(Modifier().setHeight(16_px).setAlign(Align::CenterY)),
                             dropdown(

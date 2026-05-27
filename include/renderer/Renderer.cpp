@@ -586,6 +586,9 @@ void Renderer::beginFrame() {
     bgfx::setViewMode(0, bgfx::ViewMode::Sequential);
     submitOrtho(0, sz);
     bgfx::touch(0);
+    // Defensively clear any rotation left set by user code from the last
+    // frame so internal/system draws (composite, blur, etc.) never inherit.
+    clearRotation();
 }
 
 void Renderer::endFrame() {
@@ -774,6 +777,34 @@ void Renderer::popRoundClip() {
     popScissor();
 }
 
+void Renderer::setRotation(float degrees, Vec2f pivot) {
+    auto& r = m_impl->rotation;
+    r.pivotX   = pivot.x;
+    r.pivotY   = pivot.y;
+    r.angleDeg = degrees;
+    const float rad = degrees * (3.14159265f / 180.f);
+    r.cosA = std::cos(rad);
+    r.sinA = std::sin(rad);
+    r.enabled = std::abs(r.sinA) > 1e-6f || std::abs(r.cosA - 1.f) > 1e-6f;
+}
+
+void Renderer::rotate(float deltaDegrees) {
+    auto& r = m_impl->rotation;
+    r.angleDeg += deltaDegrees;
+    const float rad = r.angleDeg * (3.14159265f / 180.f);
+    r.cosA = std::cos(rad);
+    r.sinA = std::sin(rad);
+    r.enabled = std::abs(r.sinA) > 1e-6f || std::abs(r.cosA - 1.f) > 1e-6f;
+}
+
+void Renderer::clearRotation() {
+    auto& r = m_impl->rotation;
+    r.angleDeg = 0.f;
+    r.cosA = 1.f;
+    r.sinA = 0.f;
+    r.enabled = false;
+}
+
 void Renderer::setMouseState(Vec2f mousePosFbPx) {
     // Detect motion vs the previous frame so animated materials can fade
     // the ripple amplitude when the cursor sits still. Threshold avoids
@@ -841,11 +872,18 @@ void Renderer::draw(const Rect& r) {
     float x = r.position.x, y = r.position.y;
     float w = r.size.x,     h = r.size.y;
 
+    float x0 = x,     y0 = y;
+    float x1 = x + w, y1 = y;
+    float x2 = x + w, y2 = y + h;
+    float x3 = x,     y3 = y + h;
+    impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+    impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+
     PosColorVertex verts[4] = {
-        {x,     y,     col},
-        {x + w, y,     col},
-        {x + w, y + h, col},
-        {x,     y + h, col},
+        {x0, y0, col},
+        {x1, y1, col},
+        {x2, y2, col},
+        {x3, y3, col},
     };
     uint16_t idx[6] = {0,1,2, 0,2,3};
 
@@ -887,11 +925,17 @@ void Renderer::draw(const RoundedRect& rr) {
     // SDF clip — anti-aliased corners with no per-corner tessellation.
     auto submitQuad = [&](float x, float y, float w, float h, Color color) {
         uint32_t col = packColor(color);
+        float x0 = x,     y0 = y;
+        float x1 = x + w, y1 = y;
+        float x2 = x + w, y2 = y + h;
+        float x3 = x,     y3 = y + h;
+        impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+        impl.rotPt(x2, y2); impl.rotPt(x3, y3);
         PosColorVertex verts[4] = {
-            {x,     y,     col},
-            {x + w, y,     col},
-            {x + w, y + h, col},
-            {x,     y + h, col},
+            {x0, y0, col},
+            {x1, y1, col},
+            {x2, y2, col},
+            {x3, y3, col},
         };
         uint16_t idx[6] = {0,1,2, 0,2,3};
 
@@ -929,39 +973,52 @@ void Renderer::draw(const RoundedRect& rr) {
 void Renderer::draw(const Circle& c) {
     auto& impl = *m_impl;
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (c.radius <= 0.f || c.fillColor.a == 0) return;
 
-    int segs       = std::max(3, c.segments);
-    uint32_t col   = packColor(c.fillColor);
-    uint32_t nV    = (uint32_t)segs + 1;
-    uint32_t nIdx  = (uint32_t)segs * 3;
+    // Render as a rounded-rect with radius == half-size — the fragment
+    // shader SDF gives proper sub-pixel AA, matching Button/Dropdown.
+    // Inflate the quad by 1px so the AA falloff has room outside the
+    // disc's geometric bounds (the SDF eats ~1px of edge).
+    const float r   = c.radius;
+    const float pad = 1.f;
+    const float x   = c.center.x - r - pad;
+    const float y   = c.center.y - r - pad;
+    const float w   = (r + pad) * 2.f;
+    const float h   = (r + pad) * 2.f;
+
+    pushRoundClip({{c.center.x - r, c.center.y - r}, {r * 2.f, r * 2.f}}, r);
+
+    uint32_t col = packColor(c.fillColor);
+    float x0 = x,     y0 = y;
+    float x1 = x + w, y1 = y;
+    float x2 = x + w, y2 = y + h;
+    float x3 = x,     y3 = y + h;
+    impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+    impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+    PosColorVertex verts[4] = {
+        {x0, y0, col},
+        {x1, y1, col},
+        {x2, y2, col},
+        {x3, y3, col},
+    };
+    uint16_t idx[6] = {0,1,2, 0,2,3};
 
     bgfx::TransientVertexBuffer tvb;
     bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nV, &tib, nIdx))
+    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 4, &tib, 6)) {
+        popRoundClip();
         return;
-
-    auto* verts   = reinterpret_cast<PosColorVertex*>(tvb.data);
-    auto* indices = reinterpret_cast<uint16_t*>(tib.data);
-
-    verts[0] = {c.center.x, c.center.y, col};
-    for (int i = 0; i < segs; ++i) {
-        float angle = (float)i / (float)segs * 360.f * kDeg2Rad;
-        verts[i + 1] = {
-            c.center.x + c.radius * std::cos(angle),
-            c.center.y + c.radius * std::sin(angle),
-            col
-        };
-        indices[i*3 + 0] = 0;
-        indices[i*3 + 1] = (uint16_t)(i + 1);
-        indices[i*3 + 2] = (uint16_t)((i + 1) % segs + 1);
     }
-
+    std::memcpy(tvb.data, verts, sizeof(verts));
+    std::memcpy(tib.data, idx,   sizeof(idx));
     bgfx::setVertexBuffer(0, &tvb);
     bgfx::setIndexBuffer(&tib);
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
                    BGFX_STATE_BLEND_ALPHA);
     applyScissor(impl);
     bgfx::submit(currentViewId(), impl.solidProgram);
+
+    popRoundClip();
 }
 
 void Renderer::draw(const Triangle& t) {
@@ -969,10 +1026,16 @@ void Renderer::draw(const Triangle& t) {
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
 
     uint32_t col = packColor(t.fillColor);
+    float ax = t.a.x, ay = t.a.y;
+    float bx = t.b.x, by = t.b.y;
+    float cx = t.c.x, cy = t.c.y;
+    impl.rotPt(ax, ay);
+    impl.rotPt(bx, by);
+    impl.rotPt(cx, cy);
     PosColorVertex verts[3] = {
-        {t.a.x, t.a.y, col},
-        {t.b.x, t.b.y, col},
-        {t.c.x, t.c.y, col},
+        {ax, ay, col},
+        {bx, by, col},
+        {cx, cy, col},
     };
     uint16_t idx[3] = {0,1,2};
 
@@ -999,21 +1062,53 @@ void Renderer::draw(const Line& l) {
     float len = std::sqrt(dx*dx + dy*dy);
     if (len < 0.001f) return;
 
-    float nx = -dy / len * l.thickness * 0.5f;
-    float ny =  dx / len * l.thickness * 0.5f;
-    uint32_t col = packColor(l.color);
+    // Unit normal (perp to line direction).
+    const float ux = -dy / len;
+    const float uy =  dx / len;
+    const float half = l.thickness * 0.5f;
+    const float pad  = 1.f; // skirt width in pixels for edge AA
 
-    PosColorVertex verts[4] = {
-        {l.start.x + nx, l.start.y + ny, col},
-        {l.start.x - nx, l.start.y - ny, col},
-        {l.end.x   - nx, l.end.y   - ny, col},
-        {l.end.x   + nx, l.end.y   + ny, col},
-    };
-    uint16_t idx[6] = {0,1,2, 0,2,3};
+    // Six vertices per line endpoint: outer skirt | edge | inner edge twice
+    // simplifies to 4 rows along the normal at offsets:
+    //   +half+pad (a=0), +half (a=1), -half (a=1), -half-pad (a=0)
+    const float offs[4]   = {  half + pad,  half, -half, -half - pad };
+    const uint8_t alphas[4] = { 0, 255, 255, 0 };
+
+    const uint8_t baseA = l.color.a;
+    float vx[8], vy[8]; // 2 endpoints * 4 rows
+    uint32_t vc[8];
+    for (int ep = 0; ep < 2; ++ep) {
+        const float bx = (ep == 0) ? l.start.x : l.end.x;
+        const float by = (ep == 0) ? l.start.y : l.end.y;
+        for (int r = 0; r < 4; ++r) {
+            float x = bx + ux * offs[r];
+            float y = by + uy * offs[r];
+            impl.rotPt(x, y);
+            vx[ep*4 + r] = x;
+            vy[ep*4 + r] = y;
+            uint8_t a = (uint8_t)((uint16_t)baseA * (uint16_t)alphas[r] / 255);
+            vc[ep*4 + r] = packColor(Color{l.color.r, l.color.g, l.color.b, a});
+        }
+    }
+
+    PosColorVertex verts[8];
+    for (int i = 0; i < 8; ++i) verts[i] = { vx[i], vy[i], vc[i] };
+
+    // 3 quads (skirt, body, skirt) between the two endpoints.
+    uint16_t idx[18];
+    int ii = 0;
+    for (int r = 0; r < 3; ++r) {
+        const uint16_t v00 = (uint16_t)(0*4 + r);
+        const uint16_t v01 = (uint16_t)(0*4 + r + 1);
+        const uint16_t v10 = (uint16_t)(1*4 + r);
+        const uint16_t v11 = (uint16_t)(1*4 + r + 1);
+        idx[ii++] = v00; idx[ii++] = v01; idx[ii++] = v11;
+        idx[ii++] = v00; idx[ii++] = v11; idx[ii++] = v10;
+    }
 
     bgfx::TransientVertexBuffer tvb;
     bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 4, &tib, 6))
+    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 8, &tib, 18))
         return;
     std::memcpy(tvb.data, verts, sizeof(verts));
     std::memcpy(tib.data, idx,   sizeof(idx));
@@ -1068,10 +1163,16 @@ void Renderer::drawLines(const Line* lines, size_t count) {
             float nx = -dy / len * l.thickness * 0.5f;
             float ny =  dx / len * l.thickness * 0.5f;
             uint32_t col = packColor(l.color);
-            verts[vi+0] = {l.start.x + nx, l.start.y + ny, col};
-            verts[vi+1] = {l.start.x - nx, l.start.y - ny, col};
-            verts[vi+2] = {l.end.x   - nx, l.end.y   - ny, col};
-            verts[vi+3] = {l.end.x   + nx, l.end.y   + ny, col};
+            float x0 = l.start.x + nx, y0 = l.start.y + ny;
+            float x1 = l.start.x - nx, y1 = l.start.y - ny;
+            float x2 = l.end.x   - nx, y2 = l.end.y   - ny;
+            float x3 = l.end.x   + nx, y3 = l.end.y   + ny;
+            impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+            impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+            verts[vi+0] = {x0, y0, col};
+            verts[vi+1] = {x1, y1, col};
+            verts[vi+2] = {x2, y2, col};
+            verts[vi+3] = {x3, y3, col};
             idx[ii+0] = (uint16_t)(vi+0);
             idx[ii+1] = (uint16_t)(vi+1);
             idx[ii+2] = (uint16_t)(vi+2);
@@ -1090,6 +1191,113 @@ void Renderer::drawLines(const Line* lines, size_t count) {
 
         offset += chunk;
     }
+}
+
+void Renderer::drawArc(Vec2f center, float innerR, float outerR,
+                       float startDeg, float endDeg, Color color, int segments) {
+    auto& impl = *m_impl;
+    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (color.a == 0) return;
+
+    if (innerR > outerR) std::swap(innerR, outerR);
+    if (outerR <= 0.f) return;
+    if (innerR < 0.f) innerR = 0.f;
+
+    int segs = std::max(1, segments);
+    // We emit (segs + 2 angular skirt) slices x 4 radial rows. Cap so
+    // vertex / index counts stay in 16-bit range. Per slice = 4 verts,
+    // 6 quads (between adjacent slices) x 6 indices = 18 indices.
+    constexpr int kMaxSlices = (65535 / 6);
+    if (segs + 2 > kMaxSlices) segs = kMaxSlices - 2;
+
+    const float startRad = startDeg * kDeg2Rad;
+    const float endRad   = endDeg   * kDeg2Rad;
+    const float step     = (endRad - startRad) / (float)segs;
+
+    // Angular skirt width = ~1 pixel of arc length at outerR.
+    const float angSkirt = (outerR > 0.5f) ? (1.f / outerR) : 0.f;
+    const float startSk  = startRad - (step >= 0.f ? angSkirt : -angSkirt);
+    const float endSk    = endRad   + (step >= 0.f ? angSkirt : -angSkirt);
+
+    // Radial rows: outer skirt | outer | inner | inner skirt.
+    const float innerSk = std::max(0.f, innerR - 1.f);
+    const float outerSk = outerR + 1.f;
+    const float radii[4] = { outerSk, outerR, innerR, innerSk };
+    // Alpha modulation per row (skirts fade to 0).
+    const uint8_t alphaMul[4] = { 0, 255, 255, 0 };
+    // If innerR <= 0 we draw a wedge; pull the inner skirt in and keep it
+    // at alpha 1 (no inner hole, no AA needed).
+    const bool solidCore = innerR <= 0.f;
+
+    const int sliceCount = segs + 3; // [-1, 0..segs, segs+1]
+    const uint32_t nV = (uint32_t)sliceCount * 4;
+    // Quads per slice gap: 3 normally, or 2 if solidCore (skip inner-skirt row).
+    const int rowsPerGap = solidCore ? 2 : 3;
+    const uint32_t nI = (uint32_t)(sliceCount - 1) * rowsPerGap * 6;
+
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::TransientIndexBuffer  tib;
+    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nV, &tib, nI))
+        return;
+
+    auto* verts = reinterpret_cast<PosColorVertex*>(tvb.data);
+    auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
+
+    auto sliceAngle = [&](int s) -> float {
+        // s = 0       -> startSk
+        // s = 1       -> startRad
+        // s = segs+1  -> endRad
+        // s = segs+2  -> endSk
+        if (s == 0)              return startSk;
+        if (s == sliceCount - 1) return endSk;
+        return startRad + step * (float)(s - 1);
+    };
+    auto sliceAngularAlpha = [&](int s) -> uint8_t {
+        return (s == 0 || s == sliceCount - 1) ? 0 : 255;
+    };
+
+    for (int s = 0; s < sliceCount; ++s) {
+        const float a   = sliceAngle(s);
+        const float ca  = std::cos(a);
+        const float sa  = std::sin(a);
+        const uint8_t am = sliceAngularAlpha(s);
+        for (int r = 0; r < 4; ++r) {
+            float px = center.x + radii[r] * ca;
+            float py = center.y + radii[r] * sa;
+            impl.rotPt(px, py);
+            // Combine radial-skirt alpha with angular-skirt alpha
+            // (multiplicative). Solid-core forces inner skirt alpha to 1.
+            uint8_t ra = (solidCore && r == 3) ? 255 : alphaMul[r];
+            uint16_t a16 = (uint16_t)ra * (uint16_t)am;
+            uint8_t finalA = (uint8_t)((a16 + 127) / 255);
+            Color cc{color.r, color.g, color.b,
+                     (uint8_t)((uint16_t)color.a * (uint16_t)finalA / 255)};
+            verts[s*4 + r] = { px, py, packColor(cc) };
+        }
+    }
+
+    uint32_t ii = 0;
+    for (int s = 0; s < sliceCount - 1; ++s) {
+        for (int r = 0; r < rowsPerGap; ++r) {
+            const uint16_t v00 = (uint16_t)(s*4 + r);
+            const uint16_t v01 = (uint16_t)(s*4 + r + 1);
+            const uint16_t v10 = (uint16_t)((s+1)*4 + r);
+            const uint16_t v11 = (uint16_t)((s+1)*4 + r + 1);
+            idx[ii++] = v00;
+            idx[ii++] = v01;
+            idx[ii++] = v11;
+            idx[ii++] = v00;
+            idx[ii++] = v11;
+            idx[ii++] = v10;
+        }
+    }
+
+    bgfx::setVertexBuffer(0, &tvb);
+    bgfx::setIndexBuffer(&tib);
+    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                   BGFX_STATE_BLEND_ALPHA);
+    applyScissor(impl);
+    bgfx::submit(currentViewId(), impl.solidProgram);
 }
 
 } // namespace uilo
