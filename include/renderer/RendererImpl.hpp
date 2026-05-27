@@ -65,8 +65,43 @@ struct Renderer::Impl {
     bgfx::ProgramHandle             solidProgram = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle             texProgram   = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle             textProgram  = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle             blurProgram  = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle             glassProgram = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle             s_texColor   = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_imgFlags   = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_blurParams = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassParams= BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassTint  = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassRect  = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassAnim  = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassBase  = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_glassMouse = BGFX_INVALID_HANDLE;
     bool                            layoutsInit  = false;
+
+    // Wall-clock elapsed seconds since renderer init, fed into animated
+    // materials (Holographic / Liquid / Shimmer / Aurora) via u_glassAnim.y.
+    float                           elapsed      = 0.f;
+
+    // ---- Offscreen scene + blur ladder (for Material::Glass) ----
+    // Layout per frame (bgfx executes views in ascending viewId order):
+    //   View 0: app draws the scene into sceneFB.
+    //   View 1: horizontal blur, sceneFB -> blurFB_A (half-res).
+    //   View 2: vertical   blur, blurFB_A -> blurFB_B (half-res, final blur).
+    //   View 3: composite, sceneFB -> backbuffer.
+    // Glass elements sample blurFB_B which therefore lags the scene by one
+    // frame — perceptually invisible for typical UI.
+    bgfx::FrameBufferHandle         sceneFB       = BGFX_INVALID_HANDLE;
+    bgfx::FrameBufferHandle         blurFB_A      = BGFX_INVALID_HANDLE;
+    bgfx::FrameBufferHandle         blurFB_B      = BGFX_INVALID_HANDLE;
+    bgfx::TextureHandle             sceneColorTex = BGFX_INVALID_HANDLE;
+    bgfx::TextureHandle             blurColorA    = BGFX_INVALID_HANDLE;
+    bgfx::TextureHandle             blurColorB    = BGFX_INVALID_HANDLE;
+    uint32_t                        fbWidth       = 0;
+    uint32_t                        fbHeight      = 0;
+    static constexpr uint16_t       kSceneViewId     = 0;
+    static constexpr uint16_t       kBlurHViewId     = 1;
+    static constexpr uint16_t       kBlurVViewId     = 2;
+    static constexpr uint16_t       kCompositeViewId = 3;
 
     // ---- Scissor stack ----
     struct ScissorEntry { uint16_t x, y, w, h; };
@@ -95,6 +130,18 @@ struct Renderer::Impl {
     bool initShaders();
     void ensureLayouts();
     void shutdownResources();
+
+    // ---- Offscreen FB management for glass effect ----
+    // Recreates sceneFB / blurFB_A / blurFB_B if (width,height) changed.
+    void ensureSceneFramebuffers(uint32_t width, uint32_t height);
+    void destroySceneFramebuffers();
+    // Submits views kBlurHViewId and kBlurVViewId; assumes sceneFB has been
+    // rendered into during this or the previous frame.
+    void runBlurPasses(uint32_t width, uint32_t height);
+    // Submits view kCompositeViewId: full-screen blit of sceneFB to backbuffer.
+    void compositeSceneToBackbuffer(uint32_t width, uint32_t height,
+                                    const bgfx::VertexLayout& layout,
+                                    bgfx::ProgramHandle program);
 
     // ---- Helpers ----
     FontFace* getFace(uint32_t fontId, float pixelHeight);

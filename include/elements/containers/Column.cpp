@@ -36,7 +36,7 @@ void Column::update(Rectf& parentBounds, float dt) {
             Dimension dim = child->getModifier().getHeight();
             float rh = dim.percent ? (m_bounds.size.y * dim.value / 100.f) : dim.value * scale;
             Rectf slot{ {m_bounds.position.x, cursorY}, {m_bounds.size.x, rh} };
-            child->update(slot, dt);
+            child->tick(slot, dt);
             cursorY      += rh;
             m_contentHeight += rh;
         }
@@ -131,7 +131,7 @@ void Column::update(Rectf& parentBounds, float dt) {
             Rectf slot;
             slot.position   = { m_bounds.position.x, slotY };
             slot.size       = { m_bounds.size.x, sh};
-            child->update(slot, dt);
+            child->tick(slot, dt);
             cursorY += rh;
         }
     };
@@ -203,7 +203,7 @@ void Column::update(Rectf& parentBounds, float dt) {
         }
         r->setTarget(resizerTarget);
         r->setContainerBounds(m_bounds);
-        child->update(rBounds, dt);
+        child->tick(rBounds, dt);
     }
 }
 
@@ -216,13 +216,19 @@ void Column::render() {
     (void)scale;
 
     if (m_uiloRef) {
-        Color c = m_options.getColor();
-        if (c.a > 0) {
-            float r = m_options.getRounding() * scale;
-            if (r <= 0.f)
-                m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
-            else
-                m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
+        const Material& mat = m_modifier.getMaterial();
+        if (mat.kind != Material::Kind::None) {
+            m_uiloRef->getRenderer().drawGlass(m_bounds, mat,
+                                              m_options.getColor());
+        } else {
+            Color c = m_options.getColor();
+            if (c.a > 0) {
+                float r = m_options.getRounding() * scale;
+                if (r <= 0.f)
+                    m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
+                else
+                    m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
+            }
         }
     }
 

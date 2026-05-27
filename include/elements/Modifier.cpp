@@ -16,28 +16,26 @@ Modifier& Modifier::setHeight(Dimension dim) {
 }
 
 Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *this; }
-Modifier& Modifier::setOnLeftClick(FuncPtr leftClick) { m_onLeftClick = leftClick; return *this; }
-Modifier& Modifier::setOnRightClick(FuncPtr rightClick) { m_onRightClick = rightClick; return *this; }
-Modifier& Modifier::setOnScroll(ScrollFuncPtr scroll) { m_onScroll = scroll; return *this; }
 Modifier& Modifier::setOuterPadding(float padding) { m_outerPadding = padding; return *this; }
 Modifier& Modifier::setVisible(bool visible) { m_visible = visible; return *this; }
 Modifier& Modifier::setFreePosition(const Vec2f& freePos) { m_freePosition = freePos; return *this; }
-Modifier& Modifier::setOnHover(FuncPtr hover, float delay) {
-    m_onHover = hover;
-    m_hoverDelay = delay;
-    return *this;
-}
+Modifier& Modifier::setMaterial(const Material& m) { m_material = m; return *this; }
+// setOnLeftClick / setOnRightClick / setOnHover / setOnScroll are templated
+// in the header so they can auto-wrap user lambdas with different shapes.
 
 Dimension Modifier::getWidth() const { return m_width; }
 Dimension Modifier::getHeight() const { return m_height; }
 Align Modifier::getAlign() const { return m_align; }
 const FuncPtr& Modifier::getOnLeftClick() const { return m_onLeftClick; }
 const FuncPtr& Modifier::getOnRightClick() const { return m_onRightClick; }
-const FuncPtr& Modifier::getOnHover() const { return m_onHover; }
+const FuncPtr& Modifier::getOnHoverEnter() const { return m_onHoverEnter; }
+const FuncPtr& Modifier::getOnHoverExit() const { return m_onHoverExit; }
+const FuncPtr& Modifier::getOnUpdateStart() const { return m_onUpdateStart; }
+const FuncPtr& Modifier::getOnUpdateEnd() const { return m_onUpdateEnd; }
 const ScrollFuncPtr& Modifier::getOnScroll() const { return m_onScroll; }
-float Modifier::getHoverDelay() const { return m_hoverDelay; }
 float Modifier::getOuterPadding() const { return m_outerPadding; }
 bool Modifier::getVisible() const { return m_visible; }
 Vec2f Modifier::getFreePosition() const { return m_freePosition; }
+const Material& Modifier::getMaterial() const { return m_material; }
 
 } // namespace uilo

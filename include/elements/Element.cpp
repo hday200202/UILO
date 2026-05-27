@@ -9,6 +9,8 @@ namespace uilo {
     void Element::erase() { m_markedForDeletion = true; }
     ElementType Element::getType() const { return m_type; }
 
+    float Element::getDeltaTime() const { return m_uiloRef ? m_uiloRef->getDeltaTime() : 0.f; }
+
     void Element::resize(const Rectf& parent) {
         float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
         float op = m_modifier.getOuterPadding() * scale;
@@ -50,25 +52,28 @@ namespace uilo {
 
     bool Element::checkLeftClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
-        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
         return true;
     }
 
     bool Element::checkRightClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
-        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
+        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
         return true;
     }
 
     bool Element::checkHover(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) {
-            if (m_hovered) { m_hovered = false; m_dirty = true; }
+            if (m_hovered) {
+                m_hovered = false; m_dirty = true;
+                if (m_modifier.getOnHoverExit()) m_modifier.getOnHoverExit()(this);
+            }
             return false;
         }
         if (!m_hovered) {
             m_hovered = true;
             m_dirty = true;
-            if (m_modifier.getOnHover()) m_modifier.getOnHover()();
+            if (m_modifier.getOnHoverEnter()) m_modifier.getOnHoverEnter()(this);
         }
         if (m_uiloRef && m_modifier.getOnLeftClick())
             m_uiloRef->requestCursor(CursorType::Hand, 1);
@@ -78,7 +83,7 @@ namespace uilo {
     bool Element::checkScroll(const Vec2f& mousePosition, float delta) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnScroll()) {
-            m_modifier.getOnScroll()(delta);
+            m_modifier.getOnScroll()(this, delta);
             return true;
         }
         return false;

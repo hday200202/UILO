@@ -35,7 +35,7 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
     }
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
-        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
         return true;
     }
 
@@ -50,7 +50,7 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
             childClicked |= child->checkRightClick(mousePosition);
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
-        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()();
+        if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
         return true;
     }
 
@@ -58,22 +58,30 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
 }
 
 bool Container::checkHover(const Vec2f& mousePosition) {
+    // Recurse into ALL children unconditionally so each one can fire its
+    // own onHoverExit when the cursor leaves it. (Previously the parent
+    // skipped children whose bounds did not contain the mouse, which
+    // left their `m_hovered` flag stuck on `true` forever.)
     bool childHovered = false;
 
     for (auto& child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
-        if (child->getBounds().contains(mousePosition))
-            childHovered |= child->checkHover(mousePosition);
+        if (child->checkHover(mousePosition)) childHovered = true;
     }
 
-    if (!childHovered && m_bounds.contains(mousePosition)) {
-        if (m_modifier.getOnHover()) m_modifier.getOnHover()();
-        if (m_uiloRef && m_modifier.getOnLeftClick())
-            m_uiloRef->requestCursor(CursorType::Hand, 1);
-        return true;
+    const bool inside = !childHovered && m_bounds.contains(mousePosition);
+
+    if (inside && !m_hovered) {
+        m_hovered = true; m_dirty = true;
+        if (m_modifier.getOnHoverEnter()) m_modifier.getOnHoverEnter()(this);
+    } else if (!inside && m_hovered) {
+        m_hovered = false; m_dirty = true;
+        if (m_modifier.getOnHoverExit()) m_modifier.getOnHoverExit()(this);
     }
 
-    return childHovered;
+    if (inside && m_uiloRef && m_modifier.getOnLeftClick())
+        m_uiloRef->requestCursor(CursorType::Hand, 1);
+    return inside;
 }
 
 bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
@@ -82,7 +90,7 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
             if (child->checkScroll(mousePosition, delta)) return true;
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
-        m_modifier.getOnScroll()(delta);
+        m_modifier.getOnScroll()(this, delta);
         return true;
     }
 

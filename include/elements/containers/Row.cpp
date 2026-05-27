@@ -30,7 +30,7 @@ void Row::update(Rectf& parentBounds, float dt) {
             Dimension dim = child->getModifier().getWidth();
             float rw = dim.percent ? (m_bounds.size.x * dim.value / 100.f) : dim.value * scale;
             Rectf slot{ {cursorX, m_bounds.position.y}, {rw, m_bounds.size.y} };
-            child->update(slot, dt);
+            child->tick(slot, dt);
             cursorX       += rw;
             m_contentWidth += rw;
         }
@@ -125,7 +125,7 @@ void Row::update(Rectf& parentBounds, float dt) {
             Rectf slot;
             slot.position   = { slotX, m_bounds.position.y };
             slot.size       = { sw, m_bounds.size.y };
-            child->update(slot, dt);
+            child->tick(slot, dt);
             cursorX += rw;
         }
     };
@@ -197,7 +197,7 @@ void Row::update(Rectf& parentBounds, float dt) {
         }
         r->setTarget(resizerTarget);
         r->setContainerBounds(m_bounds);
-        child->update(rBounds, dt);
+        child->tick(rBounds, dt);
     }
 }
 
@@ -209,13 +209,22 @@ void Row::render() {
     (void)scale;
 
     if (m_uiloRef) {
-        Color c = m_options.getColor();
-        if (c.a > 0) {
-            float r = m_options.getRounding() * scale;
-            if (r <= 0.f)
-                m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
-            else
-                m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
+        const Material& mat = m_modifier.getMaterial();
+        if (mat.kind != Material::Kind::None) {
+            // The material owns the background: fs_glass draws its own
+            // rounded rect (radius from mat.cornerRadius), tint and per-kind
+            // effect, so don't double-fill.
+            m_uiloRef->getRenderer().drawGlass(m_bounds, mat,
+                                              m_options.getColor());
+        } else {
+            Color c = m_options.getColor();
+            if (c.a > 0) {
+                float r = m_options.getRounding() * scale;
+                if (r <= 0.f)
+                    m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
+                else
+                    m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
+            }
         }
     }
 

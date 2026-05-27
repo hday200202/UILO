@@ -32,6 +32,7 @@ public:
     explicit Column(Modifier modifier, ColumnOptions options, contains children, const std::string& name = "");
 
     const ColumnOptions& getOptions() const        { return m_options; }
+    ColumnOptions&       getOptions()              { return m_options; }
     void setOptions(const ColumnOptions& opts)      { m_options = opts; m_dirty = true; }
     void setScrollOffset(float offset);
 

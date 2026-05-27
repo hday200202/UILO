@@ -1,6 +1,7 @@
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
 #include <SDL3/SDL.h>
+#include <bgfx/bgfx.h>
 #include <iostream>
 #include <cstdio>
 
@@ -14,17 +15,20 @@ Container* buildRootContainer();
 
 int main() {
     Renderer renderer;
-    if (!renderer.init(3840, 2160, "Containers", 0)) {
+    if (!renderer.init(1280, 720, "Containers", 0)) {
         std::fprintf(stderr, "Failed to initialize renderer\n");
         return 1;
     }
 
-    renderer.setVsync(false);
+    // renderer.setFramerateLimit(60);
+    // renderer.setVsync(false);
 
     UILO ui(renderer, page(buildRootContainer(), "main_page"));
-    ui.setScale(0.75f);
+    ui.setScale(1.5f);
 
     Font fpsFont = renderer.loadFont("assets/fonts/Montserrat.ttf");
+
+    std::fprintf(stderr, "[UILO] bgfx renderer: %s\n", bgfx::getRendererName(bgfx::getCaps()->rendererType));
 
     bool prevPlus  = false;
     bool prevMinus = false;
@@ -74,6 +78,7 @@ int main() {
                 if (k == SDLK_EQUALS || k == SDLK_KP_PLUS)  prevPlus  = false;
                 if (k == SDLK_MINUS  || k == SDLK_KP_MINUS) prevMinus = false;
                 if (k == SDLK_F10)                          prevF10   = false;
+                if (k == SDLK_V)                            prevV     = false;
             }
             ui.handleEvent(event);
         }
@@ -184,10 +189,22 @@ Container* buildRootContainer() {
                         }, "1"
                     ),
 
-                    // resizer(...)
                     resizer(
                         Modifier()
-                            .setWidth(48_px), 
+                            .setWidth(48_px)
+                            .setOnUpdateEnd([](Resizer* r){
+                                constexpr Color target = {255, 255, 255, 100};
+                                constexpr float fadeSec = 0.18f;
+                                const bool active = r->isHovered() || r->isDragging();
+                                Color c = r->getOptions().getColor();
+                                const float step = (r->getDeltaTime() / fadeSec) * (float)target.a;
+                                float a = (float)c.a + (active ? +step : -step);
+                                if (a < 0.f) a = 0.f;
+                                if (a > (float)target.a) a = (float)target.a;
+                                c.r = target.r; c.g = target.g; c.b = target.b;
+                                c.a = (uint8_t)a;
+                                r->getOptions().setColor(c);
+                            }),
                         ResizerOptions()
                             .setDirection(ResizerDir::Left)
                             .setResizeWidthMin(10_pct)
@@ -204,7 +221,9 @@ Container* buildRootContainer() {
                                     .setAlign(Align::CenterX | Align::CenterY)
                                     .setWidth(192_px)
                                     .setHeight(64_px)
-                                    .setOnLeftClick([&](){ std::cout << "Test button clicked!!!" << std::endl; }),
+                                    .setOnLeftClick([&](Button* b){ std::cout << "Test button clicked!!!" << std::endl; })
+                                    .setOnHoverEnter([&](Button* b){ b->getOptions().setColor({171, 140, 226}); })
+                                    .setOnHoverExit([&](Button* b){ b->getOptions().setColor({151, 120, 206}); }),
                                 ButtonOptions()
                                     .setColor({151, 120, 206})
                                     .setRounding(ROUNDING)
@@ -254,12 +273,23 @@ Container* buildRootContainer() {
                                     .setRounding(ROUNDING)
                                     .setPlaceholder("Type Something...")
                                     .setBackgroundColor({100, 100, 100})
-                                    .setMultiline(true)                                    
+                                    // .setMultiline(true)
                                     .setPaddingLeft(16.f)
                                     .setPaddingRight(16.f)
                                     .setOutlineColor({151, 120, 206})
                                     .setOutlineThickness(2.f)
                                     .setMaxResizeLines(6)
+                                    .setOnEnterPressed([&](const std::string& s){ std::cout << "TextBox: " << s << std::endl;})
+                            ),
+                            spacer(Modifier().setHeight(16_px).setAlign(Align::CenterY)),
+                            image(
+                                Modifier()
+                                    .setWidth(256_px)
+                                    .setAlign(Align::CenterX | Align::CenterY),
+                                ImageOptions()
+                                    .setClipEllipse(true)
+                                    .setPath("assets/images/stones.jpg")
+                                    .setLockAspectWidth(true)
                             )
                         }, "2"
                     )
@@ -268,7 +298,20 @@ Container* buildRootContainer() {
 
             resizer(
                 Modifier()
-                    .setHeight(48_px), 
+                    .setHeight(48_px)
+                    .setOnUpdateEnd([](Resizer* r){
+                        constexpr Color target = {255, 255, 255, 100};
+                        constexpr float fadeSec = 0.18f;
+                        const bool active = r->isHovered() || r->isDragging();
+                        Color c = r->getOptions().getColor();
+                        const float step = (r->getDeltaTime() / fadeSec) * (float)target.a;
+                        float a = (float)c.a + (active ? +step : -step);
+                        if (a < 0.f) a = 0.f;
+                        if (a > (float)target.a) a = (float)target.a;
+                        c.r = target.r; c.g = target.g; c.b = target.b;
+                        c.a = (uint8_t)a;
+                        r->getOptions().setColor(c);
+                    }),
                 ResizerOptions()
                     .setDirection(ResizerDir::Bottom)
                     .setResizeHeightMin(10_pct)

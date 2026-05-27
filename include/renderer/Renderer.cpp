@@ -14,6 +14,9 @@
 
 #include <bgfx/embedded_shader.h>
 #include <cassert>
+#include <chrono>
+#include <cmath>
+#include <thread>
 
 #if defined(SDL_PLATFORM_LINUX)
 #  include <X11/Xlib.h>
@@ -28,18 +31,24 @@
 #include "spirv/fs_solid.sc.bin.h"
 #include "spirv/fs_tex.sc.bin.h"
 #include "spirv/fs_text.sc.bin.h"
+#include "spirv/fs_blur.sc.bin.h"
+#include "spirv/fs_glass.sc.bin.h"
 
 #include "glsl/vs_solid.sc.bin.h"
 #include "glsl/vs_tex.sc.bin.h"
 #include "glsl/fs_solid.sc.bin.h"
 #include "glsl/fs_tex.sc.bin.h"
 #include "glsl/fs_text.sc.bin.h"
+#include "glsl/fs_blur.sc.bin.h"
+#include "glsl/fs_glass.sc.bin.h"
 
 #include "essl/vs_solid.sc.bin.h"
 #include "essl/vs_tex.sc.bin.h"
 #include "essl/fs_solid.sc.bin.h"
 #include "essl/fs_tex.sc.bin.h"
 #include "essl/fs_text.sc.bin.h"
+#include "essl/fs_blur.sc.bin.h"
+#include "essl/fs_glass.sc.bin.h"
 
 #if BX_PLATFORM_OSX || BX_PLATFORM_IOS
 #  include "metal/vs_solid.sc.bin.h"
@@ -47,6 +56,8 @@
 #  include "metal/fs_solid.sc.bin.h"
 #  include "metal/fs_tex.sc.bin.h"
 #  include "metal/fs_text.sc.bin.h"
+#  include "metal/fs_blur.sc.bin.h"
+#  include "metal/fs_glass.sc.bin.h"
 #endif
 
 #if BX_PLATFORM_WINDOWS
@@ -55,6 +66,8 @@
 #  include "dx11/fs_solid.sc.bin.h"
 #  include "dx11/fs_tex.sc.bin.h"
 #  include "dx11/fs_text.sc.bin.h"
+#  include "dx11/fs_blur.sc.bin.h"
+#  include "dx11/fs_glass.sc.bin.h"
 #endif
 
 namespace uilo {
@@ -66,6 +79,8 @@ namespace {
         BGFX_EMBEDDED_SHADER(vs_tex),
         BGFX_EMBEDDED_SHADER(fs_tex),
         BGFX_EMBEDDED_SHADER(fs_text),
+        BGFX_EMBEDDED_SHADER(fs_blur),
+        BGFX_EMBEDDED_SHADER(fs_glass),
         BGFX_EMBEDDED_SHADER_END(),
     };
 }
@@ -95,11 +110,17 @@ bool Renderer::Impl::initShaders() {
     bgfx::ShaderHandle fs   = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_solid");
     bgfx::ShaderHandle vst1 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
     bgfx::ShaderHandle vst2 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
+    bgfx::ShaderHandle vst3 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
+    bgfx::ShaderHandle vst4 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
     bgfx::ShaderHandle fst  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tex");
     bgfx::ShaderHandle ftx  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_text");
-    if (!bgfx::isValid(vs)  || !bgfx::isValid(fs)  ||
-        !bgfx::isValid(vst1)|| !bgfx::isValid(vst2)||
-        !bgfx::isValid(fst) || !bgfx::isValid(ftx)) {
+    bgfx::ShaderHandle fbl  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_blur");
+    bgfx::ShaderHandle fgl  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_glass");
+    if (!bgfx::isValid(vs)   || !bgfx::isValid(fs)   ||
+        !bgfx::isValid(vst1) || !bgfx::isValid(vst2) ||
+        !bgfx::isValid(vst3) || !bgfx::isValid(vst4) ||
+        !bgfx::isValid(fst)  || !bgfx::isValid(ftx)  ||
+        !bgfx::isValid(fbl)  || !bgfx::isValid(fgl)) {
         std::fprintf(stderr, "[UILO] Failed to create shaders (renderer=%s)\n",
                      bgfx::getRendererName(type));
         return false;
@@ -107,10 +128,22 @@ bool Renderer::Impl::initShaders() {
     solidProgram = bgfx::createProgram(vs,   fs,  true);
     texProgram   = bgfx::createProgram(vst1, fst, true);
     textProgram  = bgfx::createProgram(vst2, ftx, true);
-    s_texColor   = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler);
+    blurProgram  = bgfx::createProgram(vst3, fbl, true);
+    glassProgram = bgfx::createProgram(vst4, fgl, true);
+    s_texColor   = bgfx::createUniform("s_texColor",   bgfx::UniformType::Sampler);
+    u_imgFlags   = bgfx::createUniform("u_imgFlags",   bgfx::UniformType::Vec4);
+    u_blurParams = bgfx::createUniform("u_blurParams", bgfx::UniformType::Vec4);
+    u_glassParams= bgfx::createUniform("u_glassParams",bgfx::UniformType::Vec4);
+    u_glassTint  = bgfx::createUniform("u_glassTint",  bgfx::UniformType::Vec4);
+    u_glassRect  = bgfx::createUniform("u_glassRect",  bgfx::UniformType::Vec4);
+    u_glassAnim  = bgfx::createUniform("u_glassAnim",  bgfx::UniformType::Vec4);
+    u_glassBase  = bgfx::createUniform("u_glassBase",  bgfx::UniformType::Vec4);
+    u_glassMouse = bgfx::createUniform("u_glassMouse", bgfx::UniformType::Vec4);
     if (!bgfx::isValid(solidProgram) ||
         !bgfx::isValid(texProgram)   ||
-        !bgfx::isValid(textProgram)) {
+        !bgfx::isValid(textProgram)  ||
+        !bgfx::isValid(blurProgram)  ||
+        !bgfx::isValid(glassProgram)) {
         std::fprintf(stderr, "[UILO] Failed to create shader programs\n");
         return false;
     }
@@ -140,13 +173,210 @@ void Renderer::Impl::shutdownResources() {
     cursors.clear();
 
     if (bgfx::isValid(s_texColor))   bgfx::destroy(s_texColor);
+    if (bgfx::isValid(u_imgFlags))   bgfx::destroy(u_imgFlags);
+    if (bgfx::isValid(u_blurParams)) bgfx::destroy(u_blurParams);
+    if (bgfx::isValid(u_glassParams))bgfx::destroy(u_glassParams);
+    if (bgfx::isValid(u_glassTint))  bgfx::destroy(u_glassTint);
+    if (bgfx::isValid(u_glassRect))  bgfx::destroy(u_glassRect);
+    if (bgfx::isValid(u_glassAnim))  bgfx::destroy(u_glassAnim);
+    if (bgfx::isValid(u_glassBase))  bgfx::destroy(u_glassBase);
+    if (bgfx::isValid(u_glassMouse)) bgfx::destroy(u_glassMouse);
     if (bgfx::isValid(solidProgram)) bgfx::destroy(solidProgram);
     if (bgfx::isValid(texProgram))   bgfx::destroy(texProgram);
     if (bgfx::isValid(textProgram))  bgfx::destroy(textProgram);
+    if (bgfx::isValid(blurProgram))  bgfx::destroy(blurProgram);
+    if (bgfx::isValid(glassProgram)) bgfx::destroy(glassProgram);
+    destroySceneFramebuffers();
     s_texColor   = BGFX_INVALID_HANDLE;
     solidProgram = BGFX_INVALID_HANDLE;
     texProgram   = BGFX_INVALID_HANDLE;
     textProgram  = BGFX_INVALID_HANDLE;
+    u_imgFlags   = BGFX_INVALID_HANDLE;
+    blurProgram  = BGFX_INVALID_HANDLE;
+    glassProgram = BGFX_INVALID_HANDLE;
+    u_blurParams = BGFX_INVALID_HANDLE;
+    u_glassParams= BGFX_INVALID_HANDLE;
+    u_glassTint  = BGFX_INVALID_HANDLE;
+    u_glassRect  = BGFX_INVALID_HANDLE;
+    u_glassAnim  = BGFX_INVALID_HANDLE;
+    u_glassBase  = BGFX_INVALID_HANDLE;
+    u_glassMouse = BGFX_INVALID_HANDLE;
+}
+
+// ============================================================================
+//  Offscreen scene + blur ladder (Material::Glass)
+// ============================================================================
+
+void Renderer::Impl::destroySceneFramebuffers() {
+    if (bgfx::isValid(sceneFB))  bgfx::destroy(sceneFB);
+    if (bgfx::isValid(blurFB_A)) bgfx::destroy(blurFB_A);
+    if (bgfx::isValid(blurFB_B)) bgfx::destroy(blurFB_B);
+    sceneFB  = BGFX_INVALID_HANDLE;
+    blurFB_A = BGFX_INVALID_HANDLE;
+    blurFB_B = BGFX_INVALID_HANDLE;
+    sceneColorTex = BGFX_INVALID_HANDLE;
+    blurColorA    = BGFX_INVALID_HANDLE;
+    blurColorB    = BGFX_INVALID_HANDLE;
+    fbWidth = fbHeight = 0;
+}
+
+void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
+    if (width == 0 || height == 0) return;
+    if (bgfx::isValid(sceneFB) && fbWidth == width && fbHeight == height) return;
+
+    destroySceneFramebuffers();
+
+    const uint64_t fbFlags = BGFX_TEXTURE_RT
+                           | BGFX_SAMPLER_U_CLAMP
+                           | BGFX_SAMPLER_V_CLAMP
+                           | BGFX_SAMPLER_MIN_ANISOTROPIC
+                           | BGFX_SAMPLER_MAG_ANISOTROPIC;
+
+    // Full-res scene target.
+    sceneFB = bgfx::createFrameBuffer(
+        (uint16_t)width, (uint16_t)height,
+        bgfx::TextureFormat::BGRA8, fbFlags);
+    sceneColorTex = bgfx::getTexture(sceneFB, 0);
+
+    // Half-res ping/pong blur targets. Min 1px to avoid 0-sized FBs.
+    const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
+    const uint16_t halfH = (uint16_t)std::max(1u, height / 2u);
+
+    blurFB_A = bgfx::createFrameBuffer(halfW, halfH,
+                                       bgfx::TextureFormat::BGRA8, fbFlags);
+    blurFB_B = bgfx::createFrameBuffer(halfW, halfH,
+                                       bgfx::TextureFormat::BGRA8, fbFlags);
+    blurColorA = bgfx::getTexture(blurFB_A, 0);
+    blurColorB = bgfx::getTexture(blurFB_B, 0);
+
+    fbWidth  = width;
+    fbHeight = height;
+
+    // Bind FBs to their reserved view IDs. View 0 (scene) clears, blur views
+    // overwrite, composite writes backbuffer (FB = invalid).
+    bgfx::setViewFrameBuffer(kSceneViewId,     sceneFB);
+    bgfx::setViewFrameBuffer(kBlurHViewId,     blurFB_A);
+    bgfx::setViewFrameBuffer(kBlurVViewId,     blurFB_B);
+    bgfx::setViewFrameBuffer(kCompositeViewId, BGFX_INVALID_HANDLE);
+
+    // Static view rects (they don't change between frames at this size).
+    bgfx::setViewRect(kSceneViewId, 0, 0, (uint16_t)width, (uint16_t)height);
+    bgfx::setViewRect(kBlurHViewId, 0, 0, halfW, halfH);
+    bgfx::setViewRect(kBlurVViewId, 0, 0, halfW, halfH);
+    bgfx::setViewRect(kCompositeViewId, 0, 0, (uint16_t)width, (uint16_t)height);
+
+    // Composite + blur views always go straight through (no depth, no clear).
+    bgfx::setViewClear(kBlurHViewId, BGFX_CLEAR_NONE);
+    bgfx::setViewClear(kBlurVViewId, BGFX_CLEAR_NONE);
+    bgfx::setViewClear(kCompositeViewId, BGFX_CLEAR_NONE);
+    bgfx::setViewMode(kBlurHViewId,     bgfx::ViewMode::Sequential);
+    bgfx::setViewMode(kBlurVViewId,     bgfx::ViewMode::Sequential);
+    bgfx::setViewMode(kCompositeViewId, bgfx::ViewMode::Sequential);
+}
+
+namespace {
+    // Submit a full-screen textured quad covering [0,0]-[w,h] in pixels with
+    // UVs [0,0]-[1,1]. Vertex color is white. Caller is responsible for
+    // setting texture, uniforms, state, and view.
+    void submitFullscreenQuad(const bgfx::VertexLayout& layout,
+                              uint16_t viewId,
+                              float dstW, float dstH,
+                              bgfx::ProgramHandle program,
+                              bool flipV) {
+        bgfx::TransientVertexBuffer tvb;
+        if (bgfx::getAvailTransientVertexBuffer(6, layout) < 6) return;
+        bgfx::allocTransientVertexBuffer(&tvb, 6, layout);
+
+        struct V { float x, y; uint32_t abgr; float u, v; };
+        V* v = (V*)tvb.data;
+        const uint32_t white = 0xffffffffu;
+        const float v0 = flipV ? 1.f : 0.f;
+        const float v1 = flipV ? 0.f : 1.f;
+
+        // Triangle 1
+        v[0] = { 0.f,  0.f,  white, 0.f, v0 };
+        v[1] = { dstW, 0.f,  white, 1.f, v0 };
+        v[2] = { dstW, dstH, white, 1.f, v1 };
+        // Triangle 2
+        v[3] = { 0.f,  0.f,  white, 0.f, v0 };
+        v[4] = { dstW, dstH, white, 1.f, v1 };
+        v[5] = { 0.f,  dstH, white, 0.f, v1 };
+
+        bgfx::setVertexBuffer(0, &tvb);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
+        bgfx::submit(viewId, program);
+    }
+}
+
+void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
+    if (!bgfx::isValid(sceneFB) || !bgfx::isValid(blurProgram)) return;
+    const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
+    const uint16_t halfH = (uint16_t)std::max(1u, height / 2u);
+
+    const bool flipV = bgfx::getCaps()->originBottomLeft;
+
+    // Set ortho for blur views matching their FB sizes.
+    auto setOrtho = [](uint16_t viewId, uint32_t w, uint32_t h) {
+        const float W = (float)w, H = (float)h;
+        const bool  hd = bgfx::getCaps()->homogeneousDepth;
+        const float zScale = hd ? 2.f : 1.f;
+        const float zBias  = hd ? -1.f : 0.f;
+        const float m[16] = {
+            2.f/W, 0.f,   0.f,   0.f,
+            0.f,  -2.f/H, 0.f,   0.f,
+            0.f,   0.f,   zScale,0.f,
+           -1.f,   1.f,   zBias, 1.f
+        };
+        bgfx::setViewTransform(viewId, nullptr, m);
+    };
+    setOrtho(kBlurHViewId, halfW, halfH);
+    setOrtho(kBlurVViewId, halfW, halfH);
+
+    // ---- Horizontal blur: sceneFB color -> blurFB_A ----
+    {
+        const float step[4] = { 1.f / (float)halfW, 0.f, 0.f, 0.f };
+        bgfx::setUniform(u_blurParams, step);
+        bgfx::setTexture(0, s_texColor, sceneColorTex);
+        submitFullscreenQuad(texLayout, kBlurHViewId,
+                             (float)halfW, (float)halfH,
+                             blurProgram, flipV);
+    }
+    // ---- Vertical blur: blurFB_A -> blurFB_B ----
+    {
+        const float step[4] = { 0.f, 1.f / (float)halfH, 0.f, 0.f };
+        bgfx::setUniform(u_blurParams, step);
+        bgfx::setTexture(0, s_texColor, blurColorA);
+        submitFullscreenQuad(texLayout, kBlurVViewId,
+                             (float)halfW, (float)halfH,
+                             blurProgram, false /* sampling our own RT in same orient */);
+    }
+}
+
+void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
+                                                const bgfx::VertexLayout& layout,
+                                                bgfx::ProgramHandle program) {
+    if (!bgfx::isValid(sceneFB)) return;
+    const bool flipV = bgfx::getCaps()->originBottomLeft;
+
+    const float W = (float)width, H = (float)height;
+    const bool  hd = bgfx::getCaps()->homogeneousDepth;
+    const float zScale = hd ? 2.f : 1.f;
+    const float zBias  = hd ? -1.f : 0.f;
+    const float ortho[16] = {
+        2.f/W, 0.f,   0.f,    0.f,
+        0.f,  -2.f/H, 0.f,    0.f,
+        0.f,   0.f,   zScale, 0.f,
+       -1.f,   1.f,   zBias,  1.f
+    };
+    bgfx::setViewTransform(kCompositeViewId, nullptr, ortho);
+
+    // For the composite step we want the fs_tex shader path so we need to
+    // also reset the u_imgFlags uniform (no ellipse clipping).
+    const float flags[4] = { 0.f, 0.f, 0.f, 0.f };
+    bgfx::setUniform(u_imgFlags, flags);
+
+    bgfx::setTexture(0, s_texColor, sceneColorTex);
+    submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV);
 }
 
 // ============================================================================
@@ -221,6 +451,8 @@ bool Renderer::init(uint32_t width, uint32_t height,
     else if (msaa >=  4) resetFlags |= BGFX_RESET_MSAA_X4;
     else if (msaa >=  2) resetFlags |= BGFX_RESET_MSAA_X2;
     init.resolution.reset = resetFlags;
+    // Limit swapchain queued frames (Metal/DXGI) to 1 to minimise input lag.
+    init.resolution.maxFrameLatency = 1;
     m_resetFlags = resetFlags;
 
     if (!bgfx::init(init)) {
@@ -269,6 +501,7 @@ void Renderer::setVsync(bool enabled) {
     if (f == m_resetFlags) return;
     m_resetFlags = f;
     Vec2u sz = getSize();
+    // maxFrameLatency only applies on full reset with width/height; keep 1.
     bgfx::reset(sz.x, sz.y, m_resetFlags);
     m_lastWidth  = sz.x;
     m_lastHeight = sz.y;
@@ -276,6 +509,20 @@ void Renderer::setVsync(bool enabled) {
 
 bool Renderer::getVsync() const {
     return (m_resetFlags & BGFX_RESET_VSYNC) != 0;
+}
+
+void Renderer::setFramerateLimit(float fps) {
+    if (fps <= 0.f || !std::isfinite(fps)) {
+        m_frameInterval = 0.0;
+        m_nextFrameTick = 0;
+        return;
+    }
+    m_frameInterval = 1.0 / (double)fps;
+    m_nextFrameTick = 0; // re-anchor on next endFrame()
+}
+
+float Renderer::getFramerateLimit() const {
+    return m_frameInterval > 0.0 ? (float)(1.0 / m_frameInterval) : 0.f;
 }
 
 void Renderer::setCursor(CursorType type) {
@@ -311,6 +558,19 @@ void Renderer::beginFrame() {
         m_lastWidth  = sz.x;
         m_lastHeight = sz.y;
     }
+    // Wall-clock timer for animated materials. Use real time (not dt) so
+    // animation rate is independent of vsync / framerate-cap.
+    {
+        using clock = std::chrono::steady_clock;
+        static const auto s_t0 = clock::now();
+        const auto now = clock::now();
+        m_impl->elapsed = std::chrono::duration<float>(now - s_t0).count();
+    }
+    // (Re)create offscreen scene + blur framebuffers if the window resized.
+    m_impl->ensureSceneFramebuffers(sz.x, sz.y);
+
+    // View 0 → sceneFB (set every frame in case bgfx reset clobbered it).
+    bgfx::setViewFrameBuffer(0, m_impl->sceneFB);
     bgfx::setViewRect(0, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
     bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.f, 0);
     bgfx::setViewMode(0, bgfx::ViewMode::Sequential);
@@ -318,7 +578,45 @@ void Renderer::beginFrame() {
     bgfx::touch(0);
 }
 
-void Renderer::endFrame() { bgfx::frame(); }
+void Renderer::endFrame() {
+    // After the scene has been submitted to sceneFB, run the blur ladder
+    // (consumed by glass elements next frame) and composite sceneFB to the
+    // backbuffer.
+    Vec2u sz = getSize();
+    m_impl->runBlurPasses(sz.x, sz.y);
+    m_impl->compositeSceneToBackbuffer(sz.x, sz.y,
+                                       m_impl->texLayout,
+                                       m_impl->texProgram);
+
+    bgfx::frame();
+    if (m_frameInterval > 0.0) {
+        using clock = std::chrono::steady_clock;
+        const auto now    = clock::now();
+        const auto nowNs  = (uint64_t)std::chrono::duration_cast<
+                                std::chrono::nanoseconds>(now.time_since_epoch()).count();
+        const uint64_t intervalNs = (uint64_t)(m_frameInterval * 1e9);
+        if (m_nextFrameTick == 0 || nowNs > m_nextFrameTick + intervalNs) {
+            // First call or we drifted way behind: re-anchor.
+            m_nextFrameTick = nowNs + intervalNs;
+        } else {
+            if (nowNs < m_nextFrameTick) {
+                const uint64_t waitNs = m_nextFrameTick - nowNs;
+                // Sleep most of the remaining time, leaving ~0.5 ms for a
+                // short spin so we don't overshoot due to scheduler latency.
+                constexpr uint64_t spinMarginNs = 500'000; // 0.5 ms
+                if (waitNs > spinMarginNs) {
+                    std::this_thread::sleep_for(
+                        std::chrono::nanoseconds(waitNs - spinMarginNs));
+                }
+                while ((uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           clock::now().time_since_epoch()).count() < m_nextFrameTick) {
+                    std::this_thread::yield();
+                }
+            }
+            m_nextFrameTick += intervalNs;
+        }
+    }
+}
 
 void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
     const float W  = (float)size.x;
@@ -421,6 +719,19 @@ void Renderer::pushScissor(Rectf b) {
 
 void Renderer::popScissor() {
     if (m_impl->scissorTop > 0) --m_impl->scissorTop;
+}
+
+void Renderer::setMouseState(Vec2f mousePosFbPx) {
+    // Detect motion vs the previous frame so animated materials can fade
+    // the ripple amplitude when the cursor sits still. Threshold avoids
+    // sub-pixel noise from triggering constant "moving" state.
+    const float dx = mousePosFbPx.x - m_mousePosPrev.x;
+    const float dy = mousePosFbPx.y - m_mousePosPrev.y;
+    if (dx * dx + dy * dy > 0.25f) {
+        m_mouseLastMoveT = m_impl->elapsed;
+    }
+    m_mousePosPrev = m_mousePos;
+    m_mousePos     = mousePosFbPx;
 }
 
 void Renderer::clear(Color color) {

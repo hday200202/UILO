@@ -148,6 +148,9 @@ public:
     void        setString(const std::string& s);
     bool        isFocused() const { return m_focused; }
 
+    const TextboxOptions& getOptions() const { return m_options; }
+    TextboxOptions&       getOptions()       { return m_options; }
+
 private:
     Rectf         textArea()              const;
     float         lineHeight()            const;
