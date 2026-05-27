@@ -76,6 +76,7 @@ public:
     float getValue() const { return m_value; }
 
     const SliderOptions& getOptions() const      { return m_options; }
+    SliderOptions&       getOptions()            { return m_options; }
     void setOptions(const SliderOptions& opts)   { m_options = opts; }
 
 private:

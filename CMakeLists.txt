@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -46,14 +47,25 @@ if(NOT bgfx_FOUND)
     if(UILO_AUTO_FETCH)
         message(STATUS "[UILO] bgfx not found; fetching bgfx.cmake from GitHub...")
         set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(BGFX_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
+        set(BGFX_BUILD_TOOLS    ON  CACHE BOOL "" FORCE)  # needed for shaderc
         set(BGFX_INSTALL        OFF CACHE BOOL "" FORCE)
         set(BGFX_CUSTOM_TARGETS OFF CACHE BOOL "" FORCE)
         FetchContent_Declare(bgfx
             GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-            GIT_TAG        v1.128.8786-475
+            GIT_TAG        v1.143.9257-544
+            GIT_SHALLOW    TRUE
         )
         FetchContent_MakeAvailable(bgfx)
+        # bgfx.cmake does not create namespace aliases when used via FetchContent
+        add_library(bgfx::bgfx ALIAS bgfx)
+        add_library(bgfx::bx   ALIAS bx)
+        add_library(bgfx::bimg ALIAS bimg)
+        # bgfxToolUtils.cmake (bgfx_compile_shaders) is only auto-included by
+        # bgfxConfig.cmake in the find_package path; include it explicitly here.
+        include("${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
+        # BGFX_SHADER_INCLUDE_PATH is only set by Config.cmake.in (find_package
+        # path). Set it manually so bgfx_compile_shaders passes -i to shaderc.
+        set(BGFX_SHADER_INCLUDE_PATH "${bgfx_SOURCE_DIR}/bgfx/src")
     else()
         message(FATAL_ERROR "bgfx not found and UILO_AUTO_FETCH is OFF")
     endif()
@@ -62,13 +74,8 @@ endif()
 # ---------------------------------------------------------------------------
 # Shaders (compiled per-backend by bgfx-shaderc, embedded as headers)
 # ---------------------------------------------------------------------------
-# bgfxToolUtils provides bgfx_compile_shaders(). It is included automatically
-# by bgfxConfig.cmake. For the FetchContent path the wrapper also exposes it.
-if(NOT COMMAND bgfx_compile_shaders)
-    if(DEFINED bgfx_SOURCE_DIR AND EXISTS "${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
-        include("${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
-    endif()
-endif()
+# bgfxToolUtils / bgfx_compile_shaders: included in the bgfx block above
+# (FetchContent path) or by bgfxConfig.cmake (find_package path).
 
 set(_SHADER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders")
 set(_SHADER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/shaders")
@@ -103,6 +110,8 @@ bgfx_compile_shaders(
         "${_SHADER_SRC_DIR}/fs_solid.sc"
         "${_SHADER_SRC_DIR}/fs_tex.sc"
         "${_SHADER_SRC_DIR}/fs_text.sc"
+        "${_SHADER_SRC_DIR}/fs_blur.sc"
+        "${_SHADER_SRC_DIR}/fs_glass.sc"
     VARYING_DEF "${_SHADER_SRC_DIR}/varying.def.sc"
     OUTPUT_DIR  "${_SHADER_OUT_DIR}"
     OUT_FILES_VAR UILO_FS_HEADERS

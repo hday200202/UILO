@@ -112,6 +112,9 @@ public:
     const std::string& getSelectedItem()  const;
     void               setSelectedIndex(int idx);
 
+    const DropdownOptions& getOptions() const { return m_options; }
+    DropdownOptions&       getOptions()       { return m_options; }
+
 private:
     Rectf computePopupBounds() const;
     void          openPopup();

@@ -18,7 +18,7 @@ public:
 
     ResizerDir getDirection()       const { return m_direction; }
     float      getThickness()       const { return m_thickness; }
-    Color  getColor()           const { return m_color; }
+    Color      getColor()           const { return m_color; }
     Dimension  getResizeWidthMin()  const { return m_resizeWidthMin; }
     Dimension  getResizeWidthMax()  const { return m_resizeWidthMax; }
     Dimension  getResizeHeightMin() const { return m_resizeHeightMin; }
@@ -27,7 +27,7 @@ public:
 private:
     ResizerDir m_direction       = ResizerDir::Right;
     float      m_thickness       = 8.f;
-    Color  m_color = Color{0,0,0,0};
+    Color   m_color = Color{0,0,0,0};
     Dimension  m_resizeWidthMin  = {0.f,       false};
     Dimension  m_resizeWidthMax  = {100000.f,  false};
     Dimension  m_resizeHeightMin = {0.f,       false};
@@ -63,6 +63,11 @@ public:
     Element*   getTarget()    const { return m_target; }
     ResizerDir getDirection() const { return m_options.getDirection(); }
     float      getThickness() const { return m_options.getThickness(); }
+
+    const ResizerOptions& getOptions() const { return m_options; }
+    ResizerOptions&       getOptions()       { return m_options; }
+
+    bool isDragging() const { return m_dragging; }
 
 private:
     ResizerOptions m_options;

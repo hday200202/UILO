@@ -121,7 +121,7 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     m_dragging = true;
     const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
     applyValue(isHoriz ? valueFromMouseX(mousePosition.x) : valueFromMouseY(mousePosition.y));
-    if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()();
+    if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
     return true;
 }
 
@@ -132,7 +132,7 @@ bool Slider::checkScroll(const Vec2f& mousePosition, float delta) {
         ? m_options.getStep()
         : range * 0.05f;
     applyValue(m_value + delta * step);
-    if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(delta);
+    if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(this, delta);
     return true;
 }
 

@@ -8,6 +8,7 @@
 #include "../utils/Math.hpp"
 #include "../utils/Color.hpp"
 #include "../utils/Alignment.hpp"
+#include "../utils/Material.hpp"
 #include "Shapes.hpp"
 
 // Forward-declare SDL and bgfx types so elements never need to include those
@@ -80,6 +81,10 @@ public:
     void   setTitle(const std::string& title);
     void   setVsync(bool enabled);
     bool   getVsync() const;
+    // Throttle the frame rate. Pass 0 (or any non-positive value) to disable.
+    // With vsync also on, the effective rate is min(vsync, this limit).
+    void   setFramerateLimit(float fps);
+    float  getFramerateLimit() const;
     SDL_Window* sdlWindow() const { return m_window; }
 
     // ---- Cursor -----------------------------------------------------------
@@ -99,10 +104,31 @@ public:
     void    destroyTexture(Texture& tex);
 
     // Draw a textured quad in screen space. uv defaults to the whole image.
+    // If `clipEllipse` is true, alpha is masked to the inscribed ellipse of
+    // the destination rectangle.
     void drawImage(const Rectf& dst, const Texture& tex,
                    Color tint = Color::White,
                    Rectf uv   = {{0.f, 0.f}, {1.f, 1.f}},
-                   bool flipH = false, bool flipV = false);
+                   bool flipH = false, bool flipV = false,
+                   bool clipEllipse = false);
+
+    // ---- Material effects -------------------------------------------------
+    // Render an Apple-style "glass" panel of the given size at `dst`. Samples
+    // the blurred backdrop captured in the previous frame's scene FB. Safe to
+    // call from any element's render(). When the material is not Glass, this
+    // is a no-op.
+    //
+    // `baseColor` is the element's own set color — Material kinds Tinted /
+    // Ripple / Hover blend it into the panel so the original colour shows
+    // through. Other kinds ignore it.
+    void drawGlass(const Rectf& dst, const Material& mat,
+                   Color baseColor = Color::Transparent);
+
+    // ---- Mouse state for interactive materials ----------------------------
+    // UILO calls this each frame after sampling the cursor. The renderer
+    // uses it to drive Material::Ripple / Material::Hover (mouse trail
+    // ripples and proximity glow). Coordinates are in framebuffer pixels.
+    void setMouseState(Vec2f mousePosFbPx);
 
     // ---- Text -------------------------------------------------------------
     // Load a TTF font file. Cached by path. Returns invalid Font on failure.
@@ -153,8 +179,19 @@ private:
     uint8_t     m_msaa        = 4;
     uint32_t    m_resetFlags  = 0;
     bool        m_initialised = false;
+    double      m_frameInterval = 0.0; // seconds per frame; 0 = unlimited
+    uint64_t    m_nextFrameTick = 0;   // steady_clock ns of next frame deadline
 
-    uint16_t m_nextViewId = 1;
+    // Mouse state plumbed through by UILO each frame so interactive
+    // materials (Ripple / Hover) can sample a global cursor. Coordinates
+    // are in framebuffer pixels.
+    Vec2f       m_mousePos      = { -1.f, -1.f };
+    Vec2f       m_mousePosPrev  = { -1.f, -1.f };
+    float       m_mouseLastMoveT = 0.f; // value of impl.elapsed at last move
+
+    // Views 0..3 are reserved for the scene FB + blur ladder + composite
+    // (see RendererImpl.hpp::Impl). User framebuffers start at 4.
+    uint16_t m_nextViewId = 4;
 
     struct ViewEntry { uint16_t viewId; };
     static constexpr int kMaxViewStack = 16;

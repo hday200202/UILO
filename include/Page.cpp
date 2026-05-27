@@ -9,7 +9,7 @@ Page::Page(Container* rootContainer, const std::string& name) {
 }
 
 void Page::update(Rectf& screenBounds, float dt) {
-    m_rootContainer->update(screenBounds, dt);
+    m_rootContainer->tick(screenBounds, dt);
 }
 
 void Page::render() {

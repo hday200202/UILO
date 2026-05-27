@@ -91,7 +91,17 @@ void Resizer::render() {
 }
 
 bool Resizer::checkHover(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition)) return false;
+    if (!m_bounds.contains(mousePosition)) {
+        if (m_hovered) {
+            m_hovered = false; m_dirty = true;
+            if (m_modifier.getOnHoverExit()) m_modifier.getOnHoverExit()(this);
+        }
+        return false;
+    }
+    if (!m_hovered) {
+        m_hovered = true; m_dirty = true;
+        if (m_modifier.getOnHoverEnter()) m_modifier.getOnHoverEnter()(this);
+    }
     if (m_uiloRef) {
         const ResizerDir dir = m_options.getDirection();
         const bool isHoriz   = (dir == ResizerDir::Left || dir == ResizerDir::Right);

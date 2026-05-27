@@ -42,10 +42,22 @@ public:
     Rectf getBounds() const;
     Modifier& getModifier();
     virtual bool isDirty() const;
+    bool isHovered() const { return m_hovered; }
+    UILO* getUILO() const { return m_uiloRef; }
+    float getDeltaTime() const; // defined in Element.cpp (needs UILO complete type)
     void erase();
 
     virtual void setUILO(UILO& uiloRef);
     virtual void update(Rectf& parentBounds, float dt) = 0;
+    // Non-virtual wrapper that fires onUpdateStart/onUpdateEnd around the
+    // virtual update(). Callers in the tree (containers, page, dropdown
+    // popup, etc.) should invoke tick() rather than update() directly so
+    // the lifecycle hooks always fire.
+    void tick(Rectf& parentBounds, float dt) {
+        if (m_modifier.getOnUpdateStart()) m_modifier.getOnUpdateStart()(this);
+        update(parentBounds, dt);
+        if (m_modifier.getOnUpdateEnd())   m_modifier.getOnUpdateEnd()(this);
+    }
     virtual void render() = 0;
     virtual bool checkLeftClick(const Vec2f& mousePosition);
     virtual bool checkRightClick(const Vec2f& mousePosition);

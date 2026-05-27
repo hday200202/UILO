@@ -115,6 +115,10 @@ void UILO::update() {
     m_mousePos = { mx, my };
     const Vec2f mouse = m_mousePos;
 
+    // Feed the cursor through to the renderer so interactive Materials
+    // (Ripple / Hover) can sample it without each element needing to.
+    if (m_renderer) m_renderer->setMouseState(mouse);
+
     bool leftDown  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
     bool rightDown = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
 

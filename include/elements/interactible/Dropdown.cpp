@@ -153,7 +153,7 @@ void Dropdown::openPopup() {
     if (!m_uiloRef) return;
     m_isOpen = true;
     Rectf popupBounds = computePopupBounds();
-    m_popup->update(popupBounds, 0.f);
+    m_popup->tick(popupBounds, 0.f);
     m_uiloRef->registerOverlay(m_popup, [this]() { closePopup(); });
 }
 
@@ -177,11 +177,18 @@ void Dropdown::update(Rectf& parentBounds, float dt) {
     m_justDismissed = false;
     resize(parentBounds);
 
-    m_header->update(m_bounds, dt);
+    // Keep header + popup material in sync with the dropdown's modifier so
+    // Material::Glass (or any other) applies to both the collapsed header
+    // and the open popup column.
+    const Material& mat = m_modifier.getMaterial();
+    m_header->getModifier().setMaterial(mat);
+    m_popup->getModifier().setMaterial(mat);
+
+    m_header->tick(m_bounds, dt);
 
     if (m_isOpen) {
         Rectf popupBounds = computePopupBounds();
-        m_popup->update(popupBounds, dt);
+        m_popup->tick(popupBounds, dt);
 
         const Vec2f mousePos = m_uiloRef ? m_uiloRef->getMousePosition() : Vec2f{};
         int newHovered = -1;
@@ -213,6 +220,7 @@ void Dropdown::update(Rectf& parentBounds, float dt) {
 }
 
 void Dropdown::render() {
+    // Material is mirrored onto m_header / m_popup in update().
     m_header->render();
     m_dirty = false;
 }

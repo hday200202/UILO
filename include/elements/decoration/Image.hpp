@@ -48,6 +48,7 @@ public:
     void render() override;
 
     const ImageOptions& getOptions() const     { return m_options; }
+    ImageOptions&       getOptions()           { return m_options; }
     void setOptions(const ImageOptions& opts)  { m_options = opts; rebuildTexture(); }
 
     bool isLoaded() const;

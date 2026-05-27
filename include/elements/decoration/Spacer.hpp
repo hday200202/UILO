@@ -24,6 +24,7 @@ public:
     explicit Spacer(Modifier modifier, SpacerOptions options = {}, const std::string& name = "");
 
     const SpacerOptions& getOptions() const        { return m_options; }
+    SpacerOptions&       getOptions()              { return m_options; }
     void setOptions(const SpacerOptions& opts)      { m_options = opts; }
 
     void update(Rectf& parentBounds, float dt) override;

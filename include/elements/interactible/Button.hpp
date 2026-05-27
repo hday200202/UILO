@@ -28,12 +28,18 @@ public:
     explicit Button(Modifier modifier, ButtonOptions options = {}, const std::string& name = "");
 
     const ButtonOptions& getOptions() const { return m_buttonOptions; }
+    ButtonOptions&       getOptions()       { return m_buttonOptions; }
     void setOptions(const ButtonOptions& opts);
 
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkRightClick(const Vec2f& mousePosition) override;
     bool checkHover(const Vec2f& mousePosition) override;
     bool checkScroll(const Vec2f& mousePosition, float delta) override;
+
+    // Sync ButtonOptions → underlying RowOptions every frame so that
+    // handlers mutating `getOptions()` (e.g. `setColor`) are reflected
+    // in the rendered look without an explicit `setOptions(...)` call.
+    void render() override;
 
 private:
     ButtonOptions m_buttonOptions;

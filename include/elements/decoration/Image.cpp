@@ -22,6 +22,16 @@ void Image::init() {
         m_textureWidth  = tex.width;
         m_textureHeight = tex.height;
         m_loaded = true;
+
+        if (m_textureWidth > 0 && m_textureHeight > 0) {
+            const float aspect = (float)m_textureWidth / (float)m_textureHeight;
+            Dimension w = m_modifier.getWidth();
+            Dimension h = m_modifier.getHeight();
+            if (m_options.getLockAspectWidth() && !w.percent)
+                m_modifier.setHeight(Dimension{ w.value / aspect, false });
+            else if (m_options.getLockAspectHeight() && !h.percent)
+                m_modifier.setWidth(Dimension{ h.value * aspect, false });
+        }
     }
 }
 
@@ -58,7 +68,8 @@ void Image::render() {
     Color tint = m_options.getRecolor() ? m_options.getColor() : Color::White;
     m_uiloRef->getRenderer().drawImage(
         m_bounds, tex, tint, {{0.f, 0.f}, {1.f, 1.f}},
-        m_options.getFlipH(), m_options.getFlipV());
+        m_options.getFlipH(), m_options.getFlipV(),
+        m_options.getClipEllipse());
 }
 
 } // namespace uilo

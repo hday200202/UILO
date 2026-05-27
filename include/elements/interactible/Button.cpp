@@ -36,4 +36,22 @@ bool Button::checkScroll(const Vec2f& mousePosition, float delta) {
     return Element::checkScroll(mousePosition, delta);
 }
 
+void Button::render() {
+    // Push live ButtonOptions into the underlying Row each frame so that
+    // mutations made via `getOptions()` from inside a callback (e.g.
+    // `b->getOptions().setColor(Color::Red)` from an onHover handler) take
+    // effect immediately on the next draw.
+    const RowOptions& cur = Row::getOptions();
+    if (cur.getColor()    != m_buttonOptions.getColor() ||
+        cur.getRounding() != m_buttonOptions.getRounding())
+    {
+        Row::setOptions(RowOptions()
+            .setColor(m_buttonOptions.getColor())
+            .setRounding(m_buttonOptions.getRounding())
+            .setScrollable(cur.getScrollable())
+            .setScrollSpeed(cur.getScrollSpeed()));
+    }
+    Row::render();
+}
+
 }

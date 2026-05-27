@@ -60,6 +60,7 @@ public:
     void setString(const std::string& content);
 
     const TextOptions& getOptions() const      { return m_options; }
+    TextOptions&       getOptions()            { return m_options; }
     void setOptions(const TextOptions& opts)   { m_options = opts; rebuildText(); }
 
     bool isLoaded() const;
