@@ -25,6 +25,11 @@ public:
     WaveformOptions() = default;
 
     WaveformOptions& setColor(Color c)              { m_color = c;       return *this; }
+    // Per-channel overrides. Take effect only when layout is Stacked or
+    // Overlay (SumMono collapses channels and always uses the base color).
+    // An unset channel color (alpha == 0) falls back to setColor().
+    WaveformOptions& setLeftChannelColor(Color c)   { m_leftColor  = c;  return *this; }
+    WaveformOptions& setRightChannelColor(Color c)  { m_rightColor = c;  return *this; }
     WaveformOptions& setBackgroundColor(Color c)    { m_bgColor = c;     return *this; }
     WaveformOptions& setRounding(float r)           { m_rounding = r;    return *this; }
     WaveformOptions& setLineThickness(float t)      { m_lineThickness = t; return *this; }
@@ -43,6 +48,8 @@ public:
     WaveformOptions& setGain(float g)               { m_gain = g;        return *this; }
 
     Color           getColor()          const { return m_color; }
+    Color           getLeftChannelColor()  const { return m_leftColor; }
+    Color           getRightChannelColor() const { return m_rightColor; }
     Color           getBackgroundColor() const { return m_bgColor; }
     float           getRounding()       const { return m_rounding; }
     float           getLineThickness()  const { return m_lineThickness; }
@@ -54,6 +61,8 @@ public:
 
 private:
     Color          m_color         = Color{255, 255, 255, 255};
+    Color          m_leftColor     = Color{0, 0, 0, 0};   // a=0 -> use m_color
+    Color          m_rightColor    = Color{0, 0, 0, 0};   // a=0 -> use m_color
     Color          m_bgColor       = Color{0, 0, 0, 0};
     float          m_rounding      = 0.f;
     float          m_lineThickness = 1.f;
