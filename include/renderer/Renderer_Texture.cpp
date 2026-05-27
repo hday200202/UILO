@@ -100,11 +100,18 @@ void Renderer::drawImage(const Rectf& dst, const Texture& tex,
 
     uint32_t col = packColor(tint);
 
+    float x0 = x,     y0 = y;
+    float x1 = x + w, y1 = y;
+    float x2 = x + w, y2 = y + h;
+    float x3 = x,     y3 = y + h;
+    impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+    impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+
     PosColorUvVertex verts[4] = {
-        {x,     y,     col, u0, v0},
-        {x + w, y,     col, u1, v0},
-        {x + w, y + h, col, u1, v1},
-        {x,     y + h, col, u0, v1},
+        {x0, y0, col, u0, v0},
+        {x1, y1, col, u1, v0},
+        {x2, y2, col, u1, v1},
+        {x3, y3, col, u0, v1},
     };
     uint16_t idx[6] = {0,1,2, 0,2,3};
 

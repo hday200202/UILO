@@ -60,6 +60,12 @@ inline Slider* slider(
     const std::string& name = ""
 ) { return new Slider(modifier, options, name); }
 
+inline Knob* knob(
+    Modifier modifier = {},
+    KnobOptions options = {},
+    const std::string& name = ""
+) { return new Knob(modifier, options, name); }
+
 inline Dropdown* dropdown(
     Modifier modifier = {}, 
     DropdownOptions options = {},

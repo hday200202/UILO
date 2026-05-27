@@ -13,7 +13,9 @@ Slider::Slider(Modifier modifier, SliderOptions options, const std::string& name
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Slider;
-    m_value    = m_options.getMin();
+    m_value    = m_options.hasDefault()
+        ? std::clamp(m_options.getDefaultValue(), m_options.getMin(), m_options.getMax())
+        : m_options.getMin();
 }
 
 void Slider::update(Rectf& parentBounds, float /*dt*/) {
@@ -117,7 +119,20 @@ bool Slider::checkHover(const Vec2f& mousePosition) {
 
 bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
+
+    // Double-click within 350 ms snaps the slider back to its default.
+    const uint64_t now = SDL_GetTicks();
+    const bool isDouble = (now - m_lastClickMs) < 350;
+    m_lastClickMs = now;
+
     m_uiloRef->setCurrInteractible(this);
+    if (isDouble && m_options.hasDefault()) {
+        applyValue(m_options.getDefaultValue());
+        m_dragging = false;
+        if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
+        return true;
+    }
+
     m_dragging = true;
     const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
     applyValue(isHoriz ? valueFromMouseX(mousePosition.x) : valueFromMouseY(mousePosition.y));

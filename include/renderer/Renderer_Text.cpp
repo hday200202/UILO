@@ -333,10 +333,16 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
             float v1 = (g->y + g->h) * invH;
 
             uint16_t base = (uint16_t)vi;
-            verts[vi++] = {gx,      gy,      col, u0, v0};
-            verts[vi++] = {gx + gw, gy,      col, u1, v0};
-            verts[vi++] = {gx + gw, gy + gh, col, u1, v1};
-            verts[vi++] = {gx,      gy + gh, col, u0, v1};
+            float p0x = gx,      p0y = gy;
+            float p1x = gx + gw, p1y = gy;
+            float p2x = gx + gw, p2y = gy + gh;
+            float p3x = gx,      p3y = gy + gh;
+            impl.rotPt(p0x, p0y); impl.rotPt(p1x, p1y);
+            impl.rotPt(p2x, p2y); impl.rotPt(p3x, p3y);
+            verts[vi++] = {p0x, p0y, col, u0, v0};
+            verts[vi++] = {p1x, p1y, col, u1, v0};
+            verts[vi++] = {p2x, p2y, col, u1, v1};
+            verts[vi++] = {p3x, p3y, col, u0, v1};
             idx[ii++] = base;
             idx[ii++] = (uint16_t)(base + 1);
             idx[ii++] = (uint16_t)(base + 2);

@@ -26,6 +26,7 @@ public:
     SliderOptions& setThumbRounding(float r)                { m_thumbRounding = r;      return *this; }
     SliderOptions& setRange(float mn, float mx)             { m_min = mn; m_max = mx;   return *this; }
     SliderOptions& setStep(float s)                         { m_step = s;               return *this; }
+    SliderOptions& setDefaultValue(float v)                 { m_defaultValue = v; m_hasDefault = true; return *this; }
     SliderOptions& setOnValueChanged(ValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
     SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
 
@@ -40,6 +41,8 @@ public:
     float                getMin()             const { return m_min; }
     float                getMax()             const { return m_max; }
     float                getStep()            const { return m_step; }
+    float                getDefaultValue()    const { return m_hasDefault ? m_defaultValue : m_min; }
+    bool                 hasDefault()         const { return m_hasDefault; }
     SliderOrientation    getOrientation()     const { return m_orientation; }
     const ValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
@@ -55,6 +58,8 @@ private:
     float                m_min             = 0.f;
     float                m_max             = 1.f;
     float                m_step            = 0.f;                       // 0 = continuous; >0 = discrete snap increment
+    float                m_defaultValue    = 0.f;
+    bool                 m_hasDefault      = false;
     SliderOrientation    m_orientation     = SliderOrientation::Horizontal;
     ValueChangedFuncPtr  m_onValueChanged;
 };
@@ -89,6 +94,7 @@ private:
     SliderOptions m_options;
     float m_value    = 0.f;
     bool  m_dragging = false;
+    uint64_t m_lastClickMs = 0;
 };
 
 }

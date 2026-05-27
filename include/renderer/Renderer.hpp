@@ -102,6 +102,13 @@ public:
     // loop when rendering many primitives (e.g. waveforms, grids).
     void drawLines(const Line* lines, size_t count);
 
+    // Filled annular arc (gap-free triangle strip between innerR/outerR).
+    // Angles in degrees, cartesian convention (0=+x, sweep increases CCW;
+    // pass endDeg < startDeg for a clockwise sweep). Caller chooses
+    // tessellation density via `segments` (clamped to >= 1).
+    void drawArc(Vec2f center, float innerR, float outerR,
+                 float startDeg, float endDeg, Color color, int segments);
+
     // ---- Texture / image --------------------------------------------------
     // Load an image file (png/jpg/etc.). Cached by path; safe to call
     // multiple times. Returns invalid Texture on failure.
@@ -184,6 +191,17 @@ public:
     // A radius <= 0 falls back to a plain rectangular scissor.
     void pushRoundClip(Rectf bounds, float radius);
     void popRoundClip();
+
+    // ---- Rotation ---------------------------------------------------------
+    // Degrees, standard cartesian convention: 0 = +x, 90 = +y,
+    // 180 = -x, 270 = -y, 360 wraps to 0. Pivot is in screen-pixel coords.
+    // Applied CPU-side to vertex positions of subsequent draws (Rect,
+    // Circle, Triangle, Line, drawLines, drawImage, drawText). Note:
+    // RoundedRect's SDF clip is axis-aligned and won't itself rotate; for
+    // knob indicators prefer Image/Triangle/Line drawn on top of a Circle.
+    void setRotation(float degrees, Vec2f pivot);
+    void rotate(float deltaDegrees);
+    void clearRotation();
 
 private:
     SDL_Window* m_window      = nullptr;
