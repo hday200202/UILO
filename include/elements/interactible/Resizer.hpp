@@ -57,7 +57,16 @@ public:
     void onDeactivate() override;
 
     // Called by Row/Column during layout
-    void          setTarget(Element* t)          { m_target          = t; }
+    void          setTarget(Element* t) {
+        // Capture the target's original width/height the first time a real
+        // target is attached, so double-click can restore it.
+        if (t && t != m_target && !m_haveOriginalSize) {
+            m_originalWidth    = t->getModifier().getWidth();
+            m_originalHeight   = t->getModifier().getHeight();
+            m_haveOriginalSize = true;
+        }
+        m_target = t;
+    }
     void          setContainerBounds(Rectf b) { m_containerBounds = b; }
 
     Element*   getTarget()    const { return m_target; }
@@ -77,6 +86,14 @@ private:
     Vec2f   m_dragStart;
     float          m_dragStartW       = 0.f;
     float          m_dragStartH       = 0.f;
+
+    // Original size of the attached target (captured on first setTarget).
+    Dimension m_originalWidth        = {};
+    Dimension m_originalHeight       = {};
+    bool      m_haveOriginalSize     = false;
+
+    // Last left-click timestamp (SDL ticks, ms) for double-click detection.
+    uint64_t  m_lastClickMs          = 0;
 };
 
 }

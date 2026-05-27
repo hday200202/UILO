@@ -114,6 +114,23 @@ bool Resizer::checkHover(const Vec2f& mousePosition) {
 bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
 
+    // Double-click → restore the target's original size (captured when this
+    // resizer was first attached to it during layout).
+    const uint64_t nowMs = SDL_GetTicks();
+    constexpr uint64_t doubleClickMs = 350;
+    const bool isDoubleClick = (nowMs - m_lastClickMs) <= doubleClickMs;
+    m_lastClickMs = nowMs;
+
+    if (isDoubleClick && m_haveOriginalSize) {
+        const ResizerDir dir = m_options.getDirection();
+        const bool isHoriz   = (dir == ResizerDir::Left || dir == ResizerDir::Right);
+        if (isHoriz) m_target->getModifier().setWidth(m_originalWidth);
+        else         m_target->getModifier().setHeight(m_originalHeight);
+        m_dragging = false;
+        m_uiloRef->setCurrInteractible(this);
+        return true;
+    }
+
     const float scale = m_uiloRef->getScale();
     const float padU  = m_target->getModifier().getOuterPadding();
     m_dragStartW      = m_target->getBounds().size.x / scale + 2.f * padU;
