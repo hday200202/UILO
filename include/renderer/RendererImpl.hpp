@@ -76,6 +76,8 @@ struct Renderer::Impl {
     bgfx::UniformHandle             u_glassAnim  = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle             u_glassBase  = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle             u_glassMouse = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_clipRect   = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_clipParams = BGFX_INVALID_HANDLE;
     bool                            layoutsInit  = false;
 
     // Wall-clock elapsed seconds since renderer init, fed into animated
@@ -108,6 +110,12 @@ struct Renderer::Impl {
     static constexpr int            kMaxScissor = 16;
     ScissorEntry                    scissorStack[kMaxScissor]{};
     int                             scissorTop = 0;
+
+    // ---- Rounded-rect clip stack (SDF in fragment shaders) ----
+    struct RoundClipEntry { float cx, cy, halfW, halfH, radius; };
+    static constexpr int            kMaxRoundClip = 16;
+    RoundClipEntry                  roundClipStack[kMaxRoundClip]{};
+    int                             roundClipTop = 0;
 
     // ---- Texture cache ----
     // path -> Texture
