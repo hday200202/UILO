@@ -875,89 +875,55 @@ void Renderer::draw(const RoundedRect& rr) {
     auto& impl = *m_impl;
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
 
-    int   segs = std::max(2, rr.cornerSegments);
-    float r    = std::min(rr.radius, std::min(rr.size.x, rr.size.y) * 0.5f);
+    float r = std::min(rr.radius, std::min(rr.size.x, rr.size.y) * 0.5f);
     if (r <= 0.f) {
         draw(Rect{rr.position, rr.size, rr.fillColor,
                   rr.outlineColor, rr.outlineThickness});
         return;
     }
 
-    uint32_t col          = packColor(rr.fillColor);
-    uint32_t nCornerVerts = (uint32_t)segs * 4;
-    uint32_t nVerts       = nCornerVerts + 1;
-    uint32_t nIdx         = nCornerVerts * 3;
+    // Render the outline as a slightly larger rounded rect underneath, then
+    // the fill on top. Each is a single quad masked by the fragment-shader
+    // SDF clip — anti-aliased corners with no per-corner tessellation.
+    auto submitQuad = [&](float x, float y, float w, float h, Color color) {
+        uint32_t col = packColor(color);
+        PosColorVertex verts[4] = {
+            {x,     y,     col},
+            {x + w, y,     col},
+            {x + w, y + h, col},
+            {x,     y + h, col},
+        };
+        uint16_t idx[6] = {0,1,2, 0,2,3};
 
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nVerts, &tib, nIdx))
-        return;
-
-    auto* verts   = reinterpret_cast<PosColorVertex*>(tvb.data);
-    auto* indices = reinterpret_cast<uint16_t*>(tib.data);
-
-    float cx = rr.position.x + rr.size.x * 0.5f;
-    float cy = rr.position.y + rr.size.y * 0.5f;
-    verts[0] = {cx, cy, col};
-
-    struct CornerDef { float ox, oy, startDeg, endDeg; };
-    float x = rr.position.x, y = rr.position.y;
-    float w = rr.size.x,     h = rr.size.y;
-    const CornerDef corners[4] = {
-        { w - r, r,     -90.f,   0.f },
-        { w - r, h - r,   0.f,  90.f },
-        { r,     h - r,  90.f, 180.f },
-        { r,     r,     180.f, 270.f },
+        bgfx::TransientVertexBuffer tvb;
+        bgfx::TransientIndexBuffer  tib;
+        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 4, &tib, 6))
+            return;
+        std::memcpy(tvb.data, verts, sizeof(verts));
+        std::memcpy(tib.data, idx,   sizeof(idx));
+        bgfx::setVertexBuffer(0, &tvb);
+        bgfx::setIndexBuffer(&tib);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                       BGFX_STATE_BLEND_ALPHA);
+        applyScissor(impl);
+        bgfx::submit(currentViewId(), impl.solidProgram);
     };
 
-    uint32_t vi = 1, ii = 0;
-    for (const auto& c : corners) {
-        for (int s = 0; s < segs; ++s, ++vi) {
-            float t     = (float)s / (float)(segs - 1);
-            float angle = (c.startDeg + t * (c.endDeg - c.startDeg)) * kDeg2Rad;
-            verts[vi] = {
-                x + c.ox + r * std::cos(angle),
-                y + c.oy + r * std::sin(angle),
-                col
-            };
-            if (vi > 1) {
-                indices[ii++] = 0;
-                indices[ii++] = (uint16_t)(vi - 1);
-                indices[ii++] = (uint16_t)(vi);
-            }
-        }
-    }
-    indices[ii++] = 0;
-    indices[ii++] = (uint16_t)(nVerts - 1);
-    indices[ii++] = 1;
-
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.solidProgram);
-
     if (rr.outlineThickness > 0.f && rr.outlineColor.a > 0) {
-        // Outline approximated as four solid Rects around an inner rounded
-        // shape would leave gaps at corners; instead draw a slightly larger
-        // rounded rect underneath in the outline color.
-        RoundedRect bg = rr;
-        bg.fillColor        = rr.outlineColor;
-        bg.outlineThickness = 0.f;
-        bg.position.x -= rr.outlineThickness;
-        bg.position.y -= rr.outlineThickness;
-        bg.size.x     += rr.outlineThickness * 2.f;
-        bg.size.y     += rr.outlineThickness * 2.f;
-        bg.radius     += rr.outlineThickness;
-        // Draw outline first, then redraw fill on top.
-        // Re-entrant call so the original fill path runs again without the
-        // outline branch (outlineThickness==0).
-        RoundedRect fill = rr;
-        fill.outlineThickness = 0.f;
-        draw(bg);
-        draw(fill);
+        const float t  = rr.outlineThickness;
+        const float ox = rr.position.x - t;
+        const float oy = rr.position.y - t;
+        const float ow = rr.size.x + t * 2.f;
+        const float oh = rr.size.y + t * 2.f;
+        const float orad = r + t;
+        pushRoundClip({{ox, oy}, {ow, oh}}, orad);
+        submitQuad(ox, oy, ow, oh, rr.outlineColor);
+        popRoundClip();
     }
+
+    pushRoundClip({rr.position, rr.size}, r);
+    submitQuad(rr.position.x, rr.position.y, rr.size.x, rr.size.y, rr.fillColor);
+    popRoundClip();
 }
 
 void Renderer::draw(const Circle& c) {
@@ -1057,6 +1023,73 @@ void Renderer::draw(const Line& l) {
                    BGFX_STATE_BLEND_ALPHA);
     applyScissor(impl);
     bgfx::submit(currentViewId(), impl.solidProgram);
+}
+
+void Renderer::drawLines(const Line* lines, size_t count) {
+    auto& impl = *m_impl;
+    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!lines || count == 0) return;
+
+    // Worst case all `count` lines are non-degenerate. Cap so we never
+    // exceed the 16-bit index range (max 65535 indices => 10922 quads).
+    constexpr size_t kMaxQuadsPerBatch = 65535 / 6;
+    size_t offset = 0;
+    while (offset < count) {
+        size_t chunk = std::min(count - offset, kMaxQuadsPerBatch);
+
+        // First pass: count non-degenerate lines so we allocate tightly.
+        size_t valid = 0;
+        for (size_t i = 0; i < chunk; ++i) {
+            const Line& l = lines[offset + i];
+            float dx = l.end.x - l.start.x;
+            float dy = l.end.y - l.start.y;
+            if (dx*dx + dy*dy >= 1e-6f) ++valid;
+        }
+        if (valid == 0) { offset += chunk; continue; }
+
+        const uint32_t nV = (uint32_t)(valid * 4);
+        const uint32_t nI = (uint32_t)(valid * 6);
+        bgfx::TransientVertexBuffer tvb;
+        bgfx::TransientIndexBuffer  tib;
+        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nV, &tib, nI))
+            return;
+
+        auto* verts = reinterpret_cast<PosColorVertex*>(tvb.data);
+        auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
+
+        uint32_t vi = 0, ii = 0;
+        for (size_t i = 0; i < chunk; ++i) {
+            const Line& l = lines[offset + i];
+            float dx = l.end.x - l.start.x;
+            float dy = l.end.y - l.start.y;
+            float len2 = dx*dx + dy*dy;
+            if (len2 < 1e-6f) continue;
+            float len = std::sqrt(len2);
+            float nx = -dy / len * l.thickness * 0.5f;
+            float ny =  dx / len * l.thickness * 0.5f;
+            uint32_t col = packColor(l.color);
+            verts[vi+0] = {l.start.x + nx, l.start.y + ny, col};
+            verts[vi+1] = {l.start.x - nx, l.start.y - ny, col};
+            verts[vi+2] = {l.end.x   - nx, l.end.y   - ny, col};
+            verts[vi+3] = {l.end.x   + nx, l.end.y   + ny, col};
+            idx[ii+0] = (uint16_t)(vi+0);
+            idx[ii+1] = (uint16_t)(vi+1);
+            idx[ii+2] = (uint16_t)(vi+2);
+            idx[ii+3] = (uint16_t)(vi+0);
+            idx[ii+4] = (uint16_t)(vi+2);
+            idx[ii+5] = (uint16_t)(vi+3);
+            vi += 4; ii += 6;
+        }
+
+        bgfx::setVertexBuffer(0, &tvb);
+        bgfx::setIndexBuffer(&tib);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
+                       BGFX_STATE_BLEND_ALPHA);
+        applyScissor(impl);
+        bgfx::submit(currentViewId(), impl.solidProgram);
+
+        offset += chunk;
+    }
 }
 
 } // namespace uilo

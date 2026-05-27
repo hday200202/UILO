@@ -37,6 +37,12 @@ inline Text* text(
     const std::string& name = ""
 ) { return new Text(modifier, options, name); }
 
+inline Waveform* waveform(
+    Modifier modifier = {},
+    WaveformOptions options = {},
+    const std::string& name = ""
+) { return new Waveform(modifier, options, name); }
+
 inline Page* page(
     Container* root, 
     const std::string& name
