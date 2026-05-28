@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "Elements.hpp"
+#include "Palette.hpp"
 #include "../include/renderer/Renderer.hpp"
 
 namespace uilo {
@@ -32,6 +33,14 @@ public:
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
     void unregisterOverlay(Element* e);
 
+    // Floating elements live outside the page layout flow. They are owned
+    // by UILO, updated + rendered every frame at fixed window-space
+    // bounds, and do not participate in hover/click hit-testing. Useful
+    // for HUD overlays (FPS counters, debug readouts, toasts).
+    Element* addFloating(Element* e, Rectf bounds, bool draggable = false);
+    Element* addFloating(FreeElement f) { return addFloating(f.element, f.bounds, f.draggable); }
+    void     removeFloating(Element* e);
+
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
     
@@ -41,6 +50,15 @@ public:
     Vec2f  getMousePosition() const { return m_mousePos; }
     Renderer& getRenderer() { return *m_renderer; }
 
+
+    // Theming. The palette is owned by this UILO instance; elements that
+    // have a non-empty, non-"none" color role read from it at draw time.
+    // Default-constructed UILO has an empty palette (every role resolves
+    // to the per-element literal color, preserving the old behavior).
+    void setPalette(const Palette& palette) { m_palette = palette; }
+    void setPalette(Palette&& palette)      { m_palette = std::move(palette); }
+    Palette&       getPalette()       { return m_palette; }
+    const Palette& getPalette() const { return m_palette; }
     void requestCursor(CursorType type, int priority = 0);
 
     template <typename T>
@@ -62,6 +80,15 @@ private:
     std::vector<OverlayEntry> m_overlays;
     std::vector<Element*>     m_resizers;
 
+    struct FloatingEntry {
+        Element* element;
+        Rectf    bounds;
+        bool     draggable = false;
+        bool     dragging  = false;
+        Vec2f    dragOffset{};
+    };
+    std::vector<FloatingEntry> m_floating;
+
     Page* m_activePage = nullptr;
 
     float m_scale = 1.f;
@@ -75,6 +102,8 @@ private:
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
+
+    Palette m_palette;
 
     CursorType m_pendingCursor         = CursorType::Arrow;
     int        m_pendingCursorPriority = 0;

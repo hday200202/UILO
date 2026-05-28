@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Modifier.hpp"
@@ -46,6 +47,10 @@ public:
     bool isHovered() const { return m_hovered; }
     UILO* getUILO() const { return m_uiloRef; }
     float getDeltaTime() const; // defined in Element.cpp (needs UILO complete type)
+    // Resolves a per-widget color through the owning UILO's Palette.
+    // Returns `literal` unchanged when there's no UILO or the role is
+    // empty/"none" or unknown. Defined in Element.cpp.
+    Color resolveColor(std::string_view role, Color literal) const;
     void erase();
 
     virtual void setUILO(UILO& uiloRef);

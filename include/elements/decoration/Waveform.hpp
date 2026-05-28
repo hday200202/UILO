@@ -25,12 +25,16 @@ public:
     WaveformOptions() = default;
 
     WaveformOptions& setColor(Color c)              { m_color = c;       return *this; }
+    WaveformOptions& setColorRole(const std::string& r)            { m_colorRole = r;       return *this; }
     // Per-channel overrides. Take effect only when layout is Stacked or
     // Overlay (SumMono collapses channels and always uses the base color).
     // An unset channel color (alpha == 0) falls back to setColor().
     WaveformOptions& setLeftChannelColor(Color c)   { m_leftColor  = c;  return *this; }
+    WaveformOptions& setLeftChannelColorRole(const std::string& r) { m_leftColorRole = r;  return *this; }
     WaveformOptions& setRightChannelColor(Color c)  { m_rightColor = c;  return *this; }
+    WaveformOptions& setRightChannelColorRole(const std::string& r){ m_rightColorRole = r; return *this; }
     WaveformOptions& setBackgroundColor(Color c)    { m_bgColor = c;     return *this; }
+    WaveformOptions& setBackgroundColorRole(const std::string& r)  { m_bgColorRole = r;     return *this; }
     WaveformOptions& setRounding(float r)           { m_rounding = r;    return *this; }
     WaveformOptions& setLineThickness(float t)      { m_lineThickness = t; return *this; }
     WaveformOptions& setLayout(WaveformLayout l)    { m_layout = l;      return *this; }
@@ -48,9 +52,13 @@ public:
     WaveformOptions& setGain(float g)               { m_gain = g;        return *this; }
 
     Color           getColor()          const { return m_color; }
+    const std::string& getColorRole()           const { return m_colorRole; }
     Color           getLeftChannelColor()  const { return m_leftColor; }
+    const std::string& getLeftChannelColorRole()  const { return m_leftColorRole; }
     Color           getRightChannelColor() const { return m_rightColor; }
+    const std::string& getRightChannelColorRole() const { return m_rightColorRole; }
     Color           getBackgroundColor() const { return m_bgColor; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
     float           getRounding()       const { return m_rounding; }
     float           getLineThickness()  const { return m_lineThickness; }
     WaveformLayout  getLayout()         const { return m_layout; }
@@ -61,9 +69,13 @@ public:
 
 private:
     Color          m_color         = Color{255, 255, 255, 255};
+    std::string    m_colorRole;
     Color          m_leftColor     = Color{0, 0, 0, 0};   // a=0 -> use m_color
+    std::string    m_leftColorRole;
     Color          m_rightColor    = Color{0, 0, 0, 0};   // a=0 -> use m_color
+    std::string    m_rightColorRole;
     Color          m_bgColor       = Color{0, 0, 0, 0};
+    std::string    m_bgColorRole;
     float          m_rounding      = 0.f;
     float          m_lineThickness = 1.f;
     WaveformLayout m_layout        = WaveformLayout::Stacked;

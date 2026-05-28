@@ -11,6 +11,7 @@ public:
     ResizerOptions& setDirection(ResizerDir d)      { m_direction       = d; return *this; }
     ResizerOptions& setThickness(float t)           { m_thickness       = t; return *this; }
     ResizerOptions& setColor(Color c)   { m_color = c; return *this; }
+    ResizerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     ResizerOptions& setResizeWidthMin(Dimension d)  { m_resizeWidthMin  = d; return *this; }
     ResizerOptions& setResizeWidthMax(Dimension d)  { m_resizeWidthMax  = d; return *this; }
     ResizerOptions& setResizeHeightMin(Dimension d) { m_resizeHeightMin = d; return *this; }
@@ -19,6 +20,7 @@ public:
     ResizerDir getDirection()       const { return m_direction; }
     float      getThickness()       const { return m_thickness; }
     Color      getColor()           const { return m_color; }
+    const std::string& getColorRole() const { return m_colorRole; }
     Dimension  getResizeWidthMin()  const { return m_resizeWidthMin; }
     Dimension  getResizeWidthMax()  const { return m_resizeWidthMax; }
     Dimension  getResizeHeightMin() const { return m_resizeHeightMin; }
@@ -28,6 +30,7 @@ private:
     ResizerDir m_direction       = ResizerDir::Right;
     float      m_thickness       = 8.f;
     Color   m_color = Color{0,0,0,0};
+    std::string m_colorRole;
     Dimension  m_resizeWidthMin  = {0.f,       false};
     Dimension  m_resizeWidthMax  = {100000.f,  false};
     Dimension  m_resizeHeightMin = {0.f,       false};

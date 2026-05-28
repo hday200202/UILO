@@ -65,7 +65,10 @@ void Image::render() {
     tex.handle = m_textureHandle;
     tex.width  = (uint16_t)m_textureWidth;
     tex.height = (uint16_t)m_textureHeight;
-    Color tint = m_options.getRecolor() ? m_options.getColor() : Color::White;
+    const Color literal = m_options.getRecolor() ? m_options.getColor() : Color::White;
+    const Color tint = m_options.getRecolor()
+        ? m_uiloRef->getPalette().resolve(m_options.getColorRole(), literal)
+        : literal;
     m_uiloRef->getRenderer().drawImage(
         m_bounds, tex, tint, {{0.f, 0.f}, {1.f, 1.f}},
         m_options.getFlipH(), m_options.getFlipV(),

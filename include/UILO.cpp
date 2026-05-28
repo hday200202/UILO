@@ -21,6 +21,7 @@ void UILO::setPage(const std::string& pageName) {
     if (it != m_pages.end()) {
         m_overlays.clear();
         m_resizers.clear();
+        m_floating.clear();
         setCurrInteractible(nullptr);
         m_activePage = it->second.get();
     }
@@ -58,6 +59,25 @@ void UILO::unregisterOverlay(Element* e) {
     );
 }
 
+Element* UILO::addFloating(Element* e, Rectf bounds, bool draggable) {
+    if (!e) return nullptr;
+    e->setUILO(*this);  // registers in m_elementPool + m_elements (recursively for containers)
+    FloatingEntry entry;
+    entry.element   = e;
+    entry.bounds    = bounds;
+    entry.draggable = draggable;
+    m_floating.push_back(entry);
+    return e;
+}
+
+void UILO::removeFloating(Element* e) {
+    m_floating.erase(
+        std::remove_if(m_floating.begin(), m_floating.end(),
+            [e](const FloatingEntry& f) { return f.element == e; }),
+        m_floating.end()
+    );
+}
+
 void UILO::requestCursor(CursorType type, int priority) {
     if (priority >= m_pendingCursorPriority) {
         m_pendingCursor         = type;
@@ -84,6 +104,11 @@ void UILO::update() {
     };
 
     m_activePage->update(logicalBounds, m_deltaTime);
+
+    for (auto& f : m_floating) {
+        Rectf b = f.bounds;
+        f.element->tick(b, m_deltaTime);
+    }
 
     m_resizers.clear();
     m_activePage->m_rootContainer->collectResizers(m_resizers);
@@ -124,6 +149,40 @@ void UILO::update() {
 
     auto* root = m_activePage->m_rootContainer;
 
+    // Floating draggable HUDs: start drag on press-in-bounds, follow the
+    // mouse while held, and swallow the click so the page underneath
+    // doesn't also receive it.
+    bool floatingConsumedClick = false;
+    if (leftDown) {
+        if (!m_prevLeftMouse) {
+            for (auto it = m_floating.rbegin(); it != m_floating.rend(); ++it) {
+                if (!it->draggable) continue;
+                if (!it->element->getModifier().getVisible()) continue;
+                if (it->bounds.contains(mouse)) {
+                    it->dragging   = true;
+                    it->dragOffset = { mouse.x - it->bounds.position.x,
+                                       mouse.y - it->bounds.position.y };
+                    floatingConsumedClick = true;
+                    break;
+                }
+            }
+        }
+        for (auto& f : m_floating) {
+            if (f.dragging) {
+                f.bounds.position = { mouse.x - f.dragOffset.x,
+                                      mouse.y - f.dragOffset.y };
+                requestCursor(CursorType::Crosshair, 10);
+            }
+        }
+    } else {
+        for (auto& f : m_floating) f.dragging = false;
+        for (auto& f : m_floating) {
+            if (f.draggable && f.element->getModifier().getVisible()
+                && f.bounds.contains(mouse))
+                requestCursor(CursorType::Crosshair, 5);
+        }
+    }
+
     // Hover: Resizers first (they render on top), then overlays
     for (auto* r : m_resizers) r->checkHover(mouse);
     Element* hoveredOverlay = nullptr;
@@ -138,7 +197,7 @@ void UILO::update() {
         m_activeCursor = m_pendingCursor;
     }
 
-    if (leftDown && !m_prevLeftMouse) {
+    if (leftDown && !m_prevLeftMouse && !floatingConsumedClick) {
         m_interactibleActivatedThisFrame = false;
 
         bool resizerClicked = false;
@@ -184,6 +243,8 @@ void UILO::render() {
     if (!m_activePage) return;
 
     m_activePage->render();
+    for (auto& f : m_floating)
+        f.element->render();
     for (auto& ov : m_overlays)
         ov.element->render();
     for (auto* r : m_resizers)

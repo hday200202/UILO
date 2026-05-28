@@ -9,17 +9,20 @@ public:
     RowOptions() = default;
 
     RowOptions& setColor(const Color& c)    { m_color       = c;  return *this; }
+    RowOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     RowOptions& setRounding(float r)            { m_rounding    = r;  return *this; }
     RowOptions& setScrollable(bool v)           { m_scrollable  = v;  return *this; }
     RowOptions& setScrollSpeed(float s)         { m_scrollSpeed = s;  return *this; }
 
     Color getColor()       const { return m_color; }
+    const std::string& getColorRole() const { return m_colorRole; }
     float     getRounding()    const { return m_rounding; }
     bool      getScrollable()  const { return m_scrollable; }
     float     getScrollSpeed() const { return m_scrollSpeed; }
 
 private:
     Color m_color       = Color{0,0,0,0};
+    std::string m_colorRole;
     float     m_rounding    = 0.f;
     bool      m_scrollable  = false;
     float     m_scrollSpeed = 40.f;

@@ -15,6 +15,7 @@ public:
     TextOptions& setContent(const std::string& s) { m_content = s;          return *this; }
     TextOptions& setCharSize(unsigned int n)       { m_charSize = n;         return *this; }
     TextOptions& setColor(const Color& c)      { m_color = c;            return *this; }
+    TextOptions& setColorRole(const std::string& r){ m_colorRole = r;        return *this; }
     TextOptions& setWrap(bool v)                   { m_wrap = v;             return *this; }
     TextOptions& setBold(bool v)                   { m_bold = v;             return *this; }
     TextOptions& setItalic(bool v)                 { m_italic = v;           return *this; }
@@ -28,6 +29,7 @@ public:
     unsigned int       getCharSize()       const { return m_charSize.value_or(30); }
     bool               hasCharSize()       const { return m_charSize.has_value(); }
     Color          getColor()          const { return m_color; }
+    const std::string& getColorRole()  const { return m_colorRole; }
     bool               getWrap()           const { return m_wrap; }
     bool               getBold()           const { return m_bold; }
     bool               getItalic()         const { return m_italic; }
@@ -41,6 +43,7 @@ private:
     std::string     m_content;
     std::optional<unsigned int> m_charSize;
     Color       m_color         = Color::White;
+    std::string m_colorRole;
     bool            m_wrap          = false;
     bool            m_bold          = false;
     bool            m_italic        = false;

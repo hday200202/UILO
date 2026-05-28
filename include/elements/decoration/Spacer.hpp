@@ -9,13 +9,16 @@ public:
     SpacerOptions() = default;
 
     SpacerOptions& setColor(const Color& c) { m_color    = c; return *this; }
+    SpacerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     SpacerOptions& setRounding(float r)          { m_rounding = r; return *this; }
 
     Color getColor()    const { return m_color; }
+    const std::string& getColorRole() const { return m_colorRole; }
     float     getRounding() const { return m_rounding; }
 
 private:
     Color m_color    = Color{0,0,0,0};
+    std::string m_colorRole;
     float     m_rounding = 0.f;
 };
 

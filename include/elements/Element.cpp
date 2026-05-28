@@ -11,6 +11,11 @@ namespace uilo {
 
     float Element::getDeltaTime() const { return m_uiloRef ? m_uiloRef->getDeltaTime() : 0.f; }
 
+    Color Element::resolveColor(std::string_view role, Color literal) const {
+        if (!m_uiloRef) return literal;
+        return m_uiloRef->getPalette().resolve(role, literal);
+    }
+
     void Element::resize(const Rectf& parent) {
         float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
         float op = m_modifier.getOuterPadding() * scale;

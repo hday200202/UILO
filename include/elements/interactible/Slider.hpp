@@ -17,8 +17,11 @@ public:
     SliderOptions() = default;
     
     SliderOptions& setTrackColor(Color c)               { m_trackColor = c;         return *this; }
+    SliderOptions& setTrackColorRole(const std::string& r) { m_trackColorRole = r;  return *this; }
     SliderOptions& setFillColor(Color c)                { m_fillColor = c;          return *this; }
+    SliderOptions& setFillColorRole(const std::string& r) { m_fillColorRole = r;    return *this; }
     SliderOptions& setThumbColor(Color c)               { m_thumbColor = c;         return *this; }
+    SliderOptions& setThumbColorRole(const std::string& r) { m_thumbColorRole = r;  return *this; }
     SliderOptions& setThumbShape(ThumbShape s)              { m_thumbShape = s;         return *this; }
     SliderOptions& setTrackThickness(float t)               { m_trackThickness = t;     return *this; }
     SliderOptions& setTrackRounding(float r)                { m_trackRounding = r;      return *this; }
@@ -31,8 +34,11 @@ public:
     SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
 
     Color            getTrackColor()      const { return m_trackColor; }
+    const std::string& getTrackColorRole() const { return m_trackColorRole; }
     Color            getFillColor()       const { return m_fillColor; }
+    const std::string& getFillColorRole()  const { return m_fillColorRole; }
     Color            getThumbColor()      const { return m_thumbColor; }
+    const std::string& getThumbColorRole() const { return m_thumbColorRole; }
     ThumbShape           getThumbShape()      const { return m_thumbShape; }
     float                getTrackThickness()  const { return m_trackThickness; }
     float                getTrackRounding()   const { return m_trackRounding; }
@@ -48,8 +54,11 @@ public:
 
 private:
     Color            m_trackColor      = Color{60, 60, 60, 255};
+    std::string          m_trackColorRole;
     Color            m_fillColor       = Color::White;
+    std::string          m_fillColorRole;
     Color            m_thumbColor      = Color::White;
+    std::string          m_thumbColorRole;
     ThumbShape           m_thumbShape      = ThumbShape::Circle;
     float                m_trackThickness  = 0.25f;                     // fraction of element height
     float                m_trackRounding   = 0.f;                       // corner radius of the track bar (px)

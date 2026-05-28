@@ -594,8 +594,10 @@ void Textbox::render() {
     // Background + optional outline
     const float bgScale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float rounding = m_options.getRounding() * bgScale;
-    Color bg = m_options.getBackgroundColor();
-    Color outline = m_focused ? m_options.getOutlineColor() : Color{0,0,0,0};
+    Color bg = resolveColor(m_options.getBackgroundColorRole(), m_options.getBackgroundColor());
+    Color outline = m_focused
+        ? resolveColor(m_options.getOutlineColorRole(), m_options.getOutlineColor())
+        : Color{0,0,0,0};
     float outlineT = m_focused ? m_options.getOutlineThickness() * bgScale : 0.f;
     if (rounding > 0.f) {
         renderer.draw(RoundedRect{
@@ -618,8 +620,9 @@ void Textbox::render() {
     renderer.pushScissor(area);
 
     const bool showPlaceholder = m_text.empty() && !m_focused;
-    Color textColor = showPlaceholder ? m_options.getPlaceholderColor()
-                                       : m_options.getTextColor();
+    Color textColor = showPlaceholder
+        ? resolveColor(m_options.getPlaceholderColorRole(), m_options.getPlaceholderColor())
+        : resolveColor(m_options.getTextColorRole(),        m_options.getTextColor());
 
     if (showPlaceholder) {
         const std::string& ph = m_options.getPlaceholder();
@@ -645,7 +648,7 @@ void Textbox::render() {
         if (m_focused && hasSelection()) {
             const size_t lo = std::min(m_cursorPos, m_anchorPos);
             const size_t hi = std::max(m_cursorPos, m_anchorPos);
-            const Color  selCol = m_options.getSelectionColor();
+            const Color  selCol = resolveColor(m_options.getSelectionColorRole(), m_options.getSelectionColor());
             for (size_t i = lo; i < hi; ++i) {
                 Vec2f p0 = charScreenPos(i);
                 Vec2f p1 = charScreenPos(i + 1);
@@ -677,7 +680,7 @@ void Textbox::render() {
                 { cp.x, cp.y },
                 { cp.x, cp.y + lh },
                 m_options.getCursorWidth() * scale,
-                m_options.getCursorColor() });
+                resolveColor(m_options.getCursorColorRole(), m_options.getCursorColor()) });
         }
     }
 

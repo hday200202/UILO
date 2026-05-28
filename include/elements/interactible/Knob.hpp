@@ -21,10 +21,15 @@ public:
 
     // Colors --------------------------------------------------------------
     KnobOptions& setBodyColor(Color c)        { m_bodyColor = c;       return *this; }
+    KnobOptions& setBodyColorRole(const std::string& r) { m_bodyColorRole = r; return *this; }
     KnobOptions& setOutlineColor(Color c)     { m_outlineColor = c;    return *this; }
+    KnobOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
     KnobOptions& setTrackColor(Color c)       { m_trackColor = c;      return *this; }
+    KnobOptions& setTrackColorRole(const std::string& r) { m_trackColorRole = r; return *this; }
     KnobOptions& setArcColor(Color c)         { m_arcColor = c;        return *this; }
+    KnobOptions& setArcColorRole(const std::string& r) { m_arcColorRole = r; return *this; }
     KnobOptions& setIndicatorColor(Color c)   { m_indicatorColor = c;  return *this; }
+    KnobOptions& setIndicatorColorRole(const std::string& r) { m_indicatorColorRole = r; return *this; }
 
     // Geometry ------------------------------------------------------------
     // Body radius is taken from the element bounds (min(w,h)/2). These
@@ -57,10 +62,15 @@ public:
     KnobOptions& setOnValueChanged(KnobValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
 
     Color getBodyColor()        const { return m_bodyColor; }
+    const std::string& getBodyColorRole() const { return m_bodyColorRole; }
     Color getOutlineColor()     const { return m_outlineColor; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
     Color getTrackColor()       const { return m_trackColor; }
+    const std::string& getTrackColorRole() const { return m_trackColorRole; }
     Color getArcColor()         const { return m_arcColor; }
+    const std::string& getArcColorRole() const { return m_arcColorRole; }
     Color getIndicatorColor()   const { return m_indicatorColor; }
+    const std::string& getIndicatorColorRole() const { return m_indicatorColorRole; }
     float getOutlineThickness() const { return m_outlineThickness; }
     float getArcThickness()     const { return m_arcThickness; }
     float getIndicatorThickness()const{ return m_indicatorThickness; }
@@ -81,10 +91,15 @@ public:
 
 private:
     Color m_bodyColor          = Color{55, 58, 74};
+    std::string m_bodyColorRole;
     Color m_outlineColor       = Color::Transparent;
+    std::string m_outlineColorRole;
     Color m_trackColor         = Color{30, 32, 42};
+    std::string m_trackColorRole;
     Color m_arcColor           = Color{151, 120, 206};
+    std::string m_arcColorRole;
     Color m_indicatorColor     = Color::White;
+    std::string m_indicatorColorRole;
     float m_outlineThickness   = 0.f;
     float m_arcThickness       = 4.f;
     float m_indicatorThickness = 2.f;

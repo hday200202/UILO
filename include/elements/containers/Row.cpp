@@ -202,6 +202,7 @@ void Row::update(Rectf& parentBounds, float dt) {
 }
 
 void Row::render() {
+    if (!m_modifier.getVisible()) return;
     if (m_bounds.size.x <= 0.f || m_bounds.size.y <= 0.f) return;
 
     // TODO: BGFX rendering — background fill + children
@@ -209,21 +210,21 @@ void Row::render() {
     (void)scale;
 
     if (m_uiloRef) {
+        const Color bg = m_uiloRef->getPalette().resolve(
+            m_options.getColorRole(), m_options.getColor());
         const Material& mat = m_modifier.getMaterial();
         if (mat.kind != Material::Kind::None) {
             // The material owns the background: fs_glass draws its own
             // rounded rect (radius from mat.cornerRadius), tint and per-kind
             // effect, so don't double-fill.
-            m_uiloRef->getRenderer().drawGlass(m_bounds, mat,
-                                              m_options.getColor());
+            m_uiloRef->getRenderer().drawGlass(m_bounds, mat, bg);
         } else {
-            Color c = m_options.getColor();
-            if (c.a > 0) {
+            if (bg.a > 0) {
                 float r = m_options.getRounding() * scale;
                 if (r <= 0.f)
-                    m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, c});
+                    m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, bg});
                 else
-                    m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, c});
+                    m_uiloRef->getRenderer().draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, bg});
             }
         }
     }

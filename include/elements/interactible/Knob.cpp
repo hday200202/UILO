@@ -106,11 +106,17 @@ void Knob::render() {
     };
 
     // ---- Body fill + optional outline -----------------------------------
-    if (m_options.getOutlineThickness() > 0.f && m_options.getOutlineColor().a > 0) {
+    const Color bodyColor      = resolveColor(m_options.getBodyColorRole(),      m_options.getBodyColor());
+    const Color outlineColor   = resolveColor(m_options.getOutlineColorRole(),   m_options.getOutlineColor());
+    const Color trackColor     = resolveColor(m_options.getTrackColorRole(),     m_options.getTrackColor());
+    const Color arcColor       = resolveColor(m_options.getArcColorRole(),       m_options.getArcColor());
+    const Color indicatorColor = resolveColor(m_options.getIndicatorColorRole(), m_options.getIndicatorColor());
+
+    if (m_options.getOutlineThickness() > 0.f && outlineColor.a > 0) {
         const float ot = m_options.getOutlineThickness() * scale;
-        renderer.draw(Circle{{cx, cy}, bodyR + ot, circleSegs(bodyR + ot), m_options.getOutlineColor()});
+        renderer.draw(Circle{{cx, cy}, bodyR + ot, circleSegs(bodyR + ot), outlineColor});
     }
-    renderer.draw(Circle{{cx, cy}, bodyR, circleSegs(bodyR), m_options.getBodyColor()});
+    renderer.draw(Circle{{cx, cy}, bodyR, circleSegs(bodyR), bodyColor});
 
     // ---- Arc track + filled portion -------------------------------------
     if (arcThick > 0.f) {
@@ -131,7 +137,7 @@ void Knob::render() {
         const float end    = start + sweep;
 
         renderer.drawArc({cx, cy}, innerR, outerR, start, end,
-                         m_options.getTrackColor(), trackSegs);
+                         trackColor, trackSegs);
 
         const float curAngle  = angleForValue(m_value);
         const float fillSweep = curAngle - start;
@@ -141,12 +147,12 @@ void Knob::render() {
                 : 0;
             if (fillSegs < 2) fillSegs = 2;
             renderer.drawArc({cx, cy}, innerR, outerR, start, curAngle,
-                             m_options.getArcColor(), fillSegs);
+                             arcColor, fillSegs);
         }
     }
 
     // ---- Indicator (pointer from body interior out toward rim) ----------
-    if (m_options.getIndicatorThickness() > 0.f && m_options.getIndicatorColor().a > 0) {
+    if (m_options.getIndicatorThickness() > 0.f && indicatorColor.a > 0) {
         const float a = angleForValue(m_value) * kDeg2Rad;
         const float inset = std::clamp(m_options.getIndicatorInset(),  0.f, 1.f);
         const float len   = std::clamp(m_options.getIndicatorLength(), 0.f, 1.f);
@@ -156,7 +162,7 @@ void Knob::render() {
         ln.start     = { cx + r0 * std::cos(a), cy + r0 * std::sin(a) };
         ln.end       = { cx + r1 * std::cos(a), cy + r1 * std::sin(a) };
         ln.thickness = m_options.getIndicatorThickness() * scale;
-        ln.color     = m_options.getIndicatorColor();
+        ln.color     = indicatorColor;
         renderer.draw(ln);
     }
 

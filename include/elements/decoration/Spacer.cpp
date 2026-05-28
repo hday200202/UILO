@@ -18,7 +18,7 @@ void Spacer::update(Rectf& parentBounds, float dt) { resize(parentBounds); (void
 void Spacer::render() {
     // TODO: BGFX rendering for spacer background
     if (!m_uiloRef) { m_dirty = false; return; }
-    const Color c = m_options.getColor();
+    const Color c = resolveColor(m_options.getColorRole(), m_options.getColor());
     if (c.a == 0) { m_dirty = false; return; }
     const float scale = m_uiloRef->getScale();
     const float r = m_options.getRounding() * scale;
