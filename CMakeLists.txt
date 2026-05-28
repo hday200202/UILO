@@ -138,6 +138,31 @@ endif()
 add_library(uilo ${_UILO_LIB_TYPE} ${UILO_SRCS})
 add_dependencies(uilo uilo_shaders)
 
+set_target_properties(uilo PROPERTIES
+    # On Windows, export every symbol from the DLL so consumers don't need
+    # __declspec(dllexport) annotations. No-op on other platforms.
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    # macOS: make the dylib relocatable via @rpath so consumers can point at
+    # it with their own RPATH instead of an absolute install name.
+    MACOSX_RPATH ON
+    INSTALL_NAME_DIR "@rpath"
+    # Always drop the built library into <UILO>/lib regardless of generator,
+    # config, or platform. ARCHIVE = .a/.lib (static or DLL import lib),
+    # LIBRARY = .so/.dylib, RUNTIME = .dll on Windows.
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+)
+# Multi-config generators (MSVC, Xcode) append a per-config subdir unless we
+# override each config explicitly.
+foreach(_cfg IN ITEMS DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(uilo PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${_cfg} "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+        LIBRARY_OUTPUT_DIRECTORY_${_cfg} "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+        RUNTIME_OUTPUT_DIRECTORY_${_cfg} "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+    )
+endforeach()
+
 target_include_directories(uilo PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/elements"
