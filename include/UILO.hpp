@@ -34,11 +34,11 @@ public:
     void unregisterOverlay(Element* e);
 
     // Floating elements live outside the page layout flow. They are owned
-    // by UILO, updated + rendered every frame at fixed window-space
-    // bounds, and do not participate in hover/click hit-testing. Useful
-    // for HUD overlays (FPS counters, debug readouts, toasts).
-    Element* addFloating(Element* e, Rectf bounds, bool draggable = false);
-    Element* addFloating(FreeElement f) { return addFloating(f.element, f.bounds, f.draggable); }
+    // by UILO, updated + rendered every frame at a position resolved from
+    // the FreeElement (which supplies position) and the element's
+    // Modifier (which supplies width/height). They do not participate in
+    // page hit-testing; if marked draggable they consume their own clicks.
+    Element* addFloating(FreeElement f);
     void     removeFloating(Element* e);
 
     void setCurrInteractible(Interactible* i);
@@ -81,11 +81,12 @@ private:
     std::vector<Element*>     m_resizers;
 
     struct FloatingEntry {
-        Element* element;
-        Rectf    bounds;
-        bool     draggable = false;
-        bool     dragging  = false;
-        Vec2f    dragOffset{};
+        Element*  element   = nullptr;
+        Dimension xPos      = 0_px;
+        Dimension yPos      = 0_px;
+        bool      draggable = false;
+        bool      dragging  = false;
+        Vec2f     dragOffset{};
     };
     std::vector<FloatingEntry> m_floating;
 

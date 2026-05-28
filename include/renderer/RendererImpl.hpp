@@ -86,12 +86,13 @@ struct Renderer::Impl {
 
     // ---- Offscreen scene + blur ladder (for Material::Glass) ----
     // Layout per frame (bgfx executes views in ascending viewId order):
-    //   View 0: app draws the scene into sceneFB.
+    //   View 0: app draws the non-glass scene into sceneFB.
     //   View 1: horizontal blur, sceneFB -> blurFB_A (half-res).
     //   View 2: vertical   blur, blurFB_A -> blurFB_B (half-res, final blur).
-    //   View 3: composite, sceneFB -> backbuffer.
-    // Glass elements sample blurFB_B which therefore lags the scene by one
-    // frame — perceptually invisible for typical UI.
+    //   View 3: replay deferred glass draws into sceneFB, sampling blurFB_B.
+    //   View 4: composite sceneFB -> backbuffer.
+    // Glass elements thus sample a blur built from the SAME frame's scene
+    // minus the glass elements themselves — no one-frame lag, no self-blur.
     bgfx::FrameBufferHandle         sceneFB       = BGFX_INVALID_HANDLE;
     bgfx::FrameBufferHandle         blurFB_A      = BGFX_INVALID_HANDLE;
     bgfx::FrameBufferHandle         blurFB_B      = BGFX_INVALID_HANDLE;
@@ -100,10 +101,40 @@ struct Renderer::Impl {
     bgfx::TextureHandle             blurColorB    = BGFX_INVALID_HANDLE;
     uint32_t                        fbWidth       = 0;
     uint32_t                        fbHeight      = 0;
-    static constexpr uint16_t       kSceneViewId     = 0;
-    static constexpr uint16_t       kBlurHViewId     = 1;
-    static constexpr uint16_t       kBlurVViewId     = 2;
-    static constexpr uint16_t       kCompositeViewId = 3;
+    static constexpr uint16_t       kSceneViewId        = 0;
+    static constexpr uint16_t       kBlurHViewId        = 1;
+    static constexpr uint16_t       kBlurVViewId        = 2;
+    static constexpr uint16_t       kGlassBgViewId      = 3;
+    static constexpr uint16_t       kGlassChildViewId   = 4;
+    static constexpr uint16_t       kCompositeViewId    = 5;
+
+    // ---- Deferred Material::Kind::* ("glass") draws ---------------------
+    // drawGlass() captures here during the main render pass instead of
+    // submitting immediately, so the blur ladder can run over a sceneFB
+    // that excludes glass elements. endFrame() then replays the queue
+    // (in submission order) into kGlassBgViewId.
+    struct DeferredGlass {
+        Rectf       dst;
+        Material    mat;
+        Color       baseColor;
+        bool        hasScissor = false;
+        uint16_t    sx = 0, sy = 0, sw = 0, sh = 0;
+    };
+    std::vector<DeferredGlass> deferredGlass;
+    bool                       replayingGlass = false;
+
+    // ---- Glass-pipeline bypass --------------------------------------------
+    // The full glass pipeline (render scene to sceneFB → blur ladder →
+    // composite back to backbuffer) costs an extra render-target switch,
+    // a fullscreen blit, and a clear per frame even when no glass element
+    // is on screen. We avoid all of that by predicting on each frame: if
+    // the previous frame had no glass draws, we bind view 0 directly to
+    // the backbuffer and skip the entire endFrame pipeline. Any glass
+    // call during a bypassed frame falls back to a flat tint and flips
+    // `hadGlassThisFrame` so the next frame uses the FB path again.
+    bool hadGlassLastFrame = false;
+    bool hadGlassThisFrame = false;
+    bool bypassSceneFb     = false;
 
     // ---- Scissor stack ----
     struct ScissorEntry { uint16_t x, y, w, h; };
@@ -116,6 +147,22 @@ struct Renderer::Impl {
     static constexpr int            kMaxRoundClip = 16;
     RoundClipEntry                  roundClipStack[kMaxRoundClip]{};
     int                             roundClipTop = 0;
+
+    // Last clip uniform values actually pushed to bgfx. Used to dedup
+    // setUniform calls when consecutive draws share the same clip state.
+    float lastClipRect[4]   = { 1e30f, 0.f, 0.f, 0.f };
+    float lastClipParams[4] = { 1e30f, 0.f, 0.f, 0.f };
+    bool  lastClipValid     = false;
+
+    // ---- Solid-rect batch ------------------------------------------------
+    // All `draw(Rect&)` calls sharing the same view + scissor + round-clip
+    // + rotation snapshot get coalesced into a single transient vertex
+    // buffer + submit. The batch must be flushed whenever any of those
+    // pipeline inputs change, so flush points are wired into every
+    // push/pop helper and every non-Rect submit path.
+    std::vector<PosColorVertex> solidBatchVerts;
+    std::vector<uint16_t>       solidBatchIdx;
+    uint16_t                    solidBatchView = UINT16_MAX;
 
     // ---- Affine rotation (applied CPU-side to draw vertices) -------------
     // Convention: degrees, +x at 0, +y at 90 (matches a (cos t, sin t)
@@ -178,6 +225,11 @@ struct Renderer::Impl {
     // ---- Helpers ----
     FontFace* getFace(uint32_t fontId, float pixelHeight);
     const Glyph* getGlyph(FontFace& face, uint32_t codepoint);
+
+    // Flushes any queued solid-rect batch as a single transient-buffer
+    // submit. Must be called before any pipeline-state change (view,
+    // scissor, round-clip, FB, rotation, non-Rect shader/program).
+    void flushSolidBatch();
 };
 
 // ---- Vertex packing helpers ----

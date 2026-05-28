@@ -229,6 +229,10 @@ void Row::render() {
         }
     }
 
+    const bool glassSubtree = m_uiloRef
+        && m_modifier.getMaterial().kind != Material::Kind::None;
+    if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
+
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
         if (m_uiloRef) {
@@ -238,6 +242,8 @@ void Row::render() {
         child->render();
         if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
     }
+
+    if (glassSubtree) m_uiloRef->getRenderer().endGlassSubtree();
 
     m_dirty = false;
 }

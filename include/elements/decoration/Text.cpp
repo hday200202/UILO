@@ -62,14 +62,17 @@ void Text::rebuildText() {
     } else {
         m_wrappedContent = m_content;
     }
+    m_cachedMetricsValid = false;
 }
 
 bool Text::isLoaded() const { return m_loaded; }
 
 void Text::setString(const std::string& content) {
+    if (content == m_content) return;
     m_content = content;
     m_wrappedContent = content;
     m_dirty = true;
+    m_cachedMetricsValid = false;
     if (m_loaded) rebuildText();
 }
 
@@ -112,7 +115,11 @@ void Text::render() {
     const float scale = m_uiloRef->getScale();
     const float pxH   = (float)m_charSize * scale;
 
-    TextMetrics m = renderer.measureText(m_wrappedContent, f, pxH);
+    if (!m_cachedMetricsValid) {
+        m_cachedMetrics      = renderer.measureText(m_wrappedContent, f, pxH);
+        m_cachedMetricsValid = true;
+    }
+    const TextMetrics& m = m_cachedMetrics;
 
     Vec2f pos = m_bounds.position;
     switch (m_options.getTextAlignX()) {

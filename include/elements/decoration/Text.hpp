@@ -4,6 +4,7 @@
 #include <string>
 
 #include "../Element.hpp"
+#include "../../renderer/Renderer.hpp"
 
 namespace uilo {
 
@@ -83,6 +84,12 @@ private:
     float                   m_lastWrapWidth = 0.f;
     float                   m_lastScale     = 1.f;
     bool                    m_loaded        = false;
+
+    // Cached layout metrics for the current m_wrappedContent at the
+    // current charSize/scale. Invalidated whenever any of those change
+    // so render() can skip a full UTF-8 + glyph-table walk per frame.
+    TextMetrics             m_cachedMetrics      = {};
+    bool                    m_cachedMetricsValid = false;
 };
 
 }

@@ -67,7 +67,31 @@ private:
 
     Color resolveImpl(std::string_view role, int depth) const;
 
-    std::unordered_map<std::string, Entry> m_entries;
+    // Transparent hash/eq so lookups by string_view don't have to
+    // construct a std::string (and heap-allocate) on every call. The
+    // palette is on the per-frame hot path — one allocation per element
+    // per frame adds up fast.
+    struct StringHash {
+        using is_transparent = void;
+        size_t operator()(std::string_view s) const noexcept {
+            return std::hash<std::string_view>{}(s);
+        }
+        size_t operator()(const std::string& s) const noexcept {
+            return std::hash<std::string_view>{}(s);
+        }
+        size_t operator()(const char* s) const noexcept {
+            return std::hash<std::string_view>{}(s);
+        }
+    };
+    struct StringEq {
+        using is_transparent = void;
+        bool operator()(std::string_view a, std::string_view b) const noexcept { return a == b; }
+        bool operator()(std::string_view a, const std::string& b) const noexcept { return a == b; }
+        bool operator()(const std::string& a, std::string_view b) const noexcept { return a == b; }
+        bool operator()(const std::string& a, const std::string& b) const noexcept { return a == b; }
+    };
+
+    std::unordered_map<std::string, Entry, StringHash, StringEq> m_entries;
     Color m_fallback { 255, 0, 255, 255 }; // unmistakable magenta
 };
 
