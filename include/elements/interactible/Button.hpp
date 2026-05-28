@@ -10,15 +10,18 @@ public:
     ButtonOptions() = default;
 
     ButtonOptions& setColor(const Color& c) { m_color    = c; return *this; }
+    ButtonOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     ButtonOptions& setRounding(float r)          { m_rounding = r; return *this; }
     ButtonOptions& setLabel(Text* t)             { m_label    = t; return *this; }
 
     Color getColor()    const { return m_color; }
+    const std::string& getColorRole() const { return m_colorRole; }
     float     getRounding() const { return m_rounding; }
     Text*     getLabel()    const { return m_label; }
 
 private:
     Color m_color    = Color{0,0,0,0};
+    std::string m_colorRole;
     float     m_rounding = 0.f;
     Text*     m_label    = nullptr;
 };

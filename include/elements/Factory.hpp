@@ -19,6 +19,34 @@ inline Row* row(
     const std::string& name = ""
 ) { return new Row(modifier, options, children, name); }
 
+// freeColumn / freeRow build a normal Column/Row but pre-bind window-space
+// bounds, so the result can be passed to UILO::addFloating(). The element
+// will live outside the page layout and render every frame at the given
+// position+size — handy for HUD overlays.
+struct FreeElement {
+    Element* element;
+    Rectf    bounds;
+    bool     draggable = false;
+
+    FreeElement& setDraggable(bool d) { draggable = d; return *this; }
+};
+
+inline FreeElement freeColumn(
+    Rectf bounds,
+    Modifier modifier = {},
+    ColumnOptions options = {},
+    contains children = {},
+    const std::string& name = ""
+) { return { new Column(modifier, options, children, name), bounds }; }
+
+inline FreeElement freeRow(
+    Rectf bounds,
+    Modifier modifier = {},
+    RowOptions options = {},
+    contains children = {},
+    const std::string& name = ""
+) { return { new Row(modifier, options, children, name), bounds }; }
+
 inline Spacer* spacer(
     Modifier modifier = {}, 
     SpacerOptions options = {}, 

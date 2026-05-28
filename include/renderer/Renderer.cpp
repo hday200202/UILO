@@ -550,6 +550,7 @@ void Renderer::setCursor(CursorType type) {
             case CursorType::SizeHorizontal: sdlType = SDL_SYSTEM_CURSOR_EW_RESIZE; break;
             case CursorType::SizeVertical:   sdlType = SDL_SYSTEM_CURSOR_NS_RESIZE; break;
             case CursorType::Text:           sdlType = SDL_SYSTEM_CURSOR_TEXT;      break;
+            case CursorType::Crosshair:      sdlType = SDL_SYSTEM_CURSOR_CROSSHAIR; break;
         }
         cur = SDL_CreateSystemCursor(sdlType);
         if (cur) impl.cursors.emplace(key, cur);

@@ -13,6 +13,7 @@ public:
 
     ImageOptions& setPath(const std::string& path) { m_path = path;  return *this; }
     ImageOptions& setColor(const Color& c)          { m_color = c;    return *this; }
+    ImageOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     ImageOptions& setLockAspectWidth(bool v)        { m_lockAspectWidth  = v;   return *this; }
     ImageOptions& setLockAspectHeight(bool v)       { m_lockAspectHeight = v;   return *this; }
     ImageOptions& setRecolor(bool v)                { m_recolor          = v;   return *this; }
@@ -22,6 +23,7 @@ public:
 
     const std::string& getPath()             const { return m_path; }
     Color              getColor()            const { return m_color; }
+    const std::string& getColorRole()        const { return m_colorRole; }
     bool                            getLockAspectWidth()  const { return m_lockAspectWidth; }
     bool                            getLockAspectHeight() const { return m_lockAspectHeight; }
     bool                            getRecolor()          const { return m_recolor; }
@@ -32,6 +34,7 @@ public:
 private:
     std::string m_path;
     Color       m_color           = Color::White;
+    std::string m_colorRole;
     bool m_lockAspectWidth  = false;
     bool m_lockAspectHeight = false;
     bool m_recolor          = false;

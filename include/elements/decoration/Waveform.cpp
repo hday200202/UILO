@@ -175,12 +175,12 @@ void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
     const float thick  = std::max(0.5f, m_options.getLineThickness());
     // Per-channel color override (alpha==0 sentinel falls back to base).
     // Only honored for Stacked / Overlay layouts; SumMono uses base color.
-    Color color = m_options.getColor();
+    Color color = resolveColor(m_options.getColorRole(), m_options.getColor());
     if (m_options.getLayout() != WaveformLayout::SumMono) {
         if (ch == 0 && m_options.getLeftChannelColor().a  != 0)
-            color = m_options.getLeftChannelColor();
+            color = resolveColor(m_options.getLeftChannelColorRole(), m_options.getLeftChannelColor());
         else if (ch == 1 && m_options.getRightChannelColor().a != 0)
-            color = m_options.getRightChannelColor();
+            color = resolveColor(m_options.getRightChannelColorRole(), m_options.getRightChannelColor());
     }
     const auto  style  = m_options.getStyle();
 
@@ -253,7 +253,7 @@ void Waveform::render() {
     const float scale = m_uiloRef->getScale();
 
     // Background
-    const Color bg = m_options.getBackgroundColor();
+    const Color bg = resolveColor(m_options.getBackgroundColorRole(), m_options.getBackgroundColor());
     if (bg.a > 0) {
         const float r = m_options.getRounding() * scale;
         if (r <= 0.f)

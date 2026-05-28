@@ -126,7 +126,10 @@ void Text::render() {
         default: break;
     }
 
-    renderer.drawText(m_wrappedContent, pos, f, pxH, m_options.getColor());
+    const Color textColor = m_uiloRef
+        ? m_uiloRef->getPalette().resolve(m_options.getColorRole(), m_options.getColor())
+        : m_options.getColor();
+    renderer.drawText(m_wrappedContent, pos, f, pxH, textColor);
 }
 
 } // namespace uilo

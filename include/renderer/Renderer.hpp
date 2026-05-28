@@ -25,6 +25,7 @@ enum class CursorType {
     SizeHorizontal,
     SizeVertical,
     Text,
+    Crosshair,
 };
 
 // ---- Opaque GPU resource handles -----------------------------------------

@@ -42,6 +42,9 @@ void Slider::render() {
     const float scale = m_uiloRef->getScale();
     const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
     const float trackRounding = m_options.getTrackRounding() * scale;
+    const Color trackColor = resolveColor(m_options.getTrackColorRole(), m_options.getTrackColor());
+    const Color fillColor  = resolveColor(m_options.getFillColorRole(),  m_options.getFillColor());
+    const Color thumbColor = resolveColor(m_options.getThumbColorRole(), m_options.getThumbColor());
 
     float t = (m_options.getMax() > m_options.getMin())
         ? (m_value - m_options.getMin()) / (m_options.getMax() - m_options.getMin())
@@ -56,24 +59,24 @@ void Slider::render() {
 
         // Background track
         renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
-                                  trackRounding, 8, m_options.getTrackColor()});
+                                  trackRounding, 8, trackColor});
 
         // Fill from left to thumb
         const float fillW = hw + t * (trackW - 2.f * hw);
         if (fillW > 0.f)
             renderer.draw(RoundedRect{{trackX, trackY}, {fillW, trackH},
-                                      trackRounding, 8, m_options.getFillColor()});
+                                      trackRounding, 8, fillColor});
 
         // Thumb
         const float thumbCX = trackX + hw + t * (trackW - 2.f * hw);
         const float thumbHH = resolveThumbHalfHeight();
         const float thumbCY = m_bounds.position.y + m_bounds.size.y * 0.5f;
         if (m_options.getThumbShape() == ThumbShape::Circle) {
-            renderer.draw(Circle{{thumbCX, thumbCY}, hw, 24, m_options.getThumbColor()});
+            renderer.draw(Circle{{thumbCX, thumbCY}, hw, 24, thumbColor});
         } else {
             renderer.draw(RoundedRect{
                 {thumbCX - hw, thumbCY - thumbHH}, {hw * 2.f, thumbHH * 2.f},
-                m_options.getThumbRounding() * scale, 8, m_options.getThumbColor()});
+                m_options.getThumbRounding() * scale, 8, thumbColor});
         }
     } else {
         const float trackW = m_bounds.size.x * m_options.getTrackThickness();
@@ -84,24 +87,24 @@ void Slider::render() {
 
         // Background track
         renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
-                                  trackRounding, 8, m_options.getTrackColor()});
+                                  trackRounding, 8, trackColor});
 
         // Fill from top to thumb
         const float fillH = hh + t * (trackH - 2.f * hh);
         if (fillH > 0.f)
             renderer.draw(RoundedRect{{trackX, trackY}, {trackW, fillH},
-                                      trackRounding, 8, m_options.getFillColor()});
+                                      trackRounding, 8, fillColor});
 
         // Thumb
         const float thumbHW = resolveThumbHalfWidth();
         const float thumbCX = m_bounds.position.x + m_bounds.size.x * 0.5f;
         const float thumbCY = trackY + hh + t * (trackH - 2.f * hh);
         if (m_options.getThumbShape() == ThumbShape::Circle) {
-            renderer.draw(Circle{{thumbCX, thumbCY}, hh, 24, m_options.getThumbColor()});
+            renderer.draw(Circle{{thumbCX, thumbCY}, hh, 24, thumbColor});
         } else {
             renderer.draw(RoundedRect{
                 {thumbCX - thumbHW, thumbCY - hh}, {thumbHW * 2.f, hh * 2.f},
-                m_options.getThumbRounding() * scale, 8, m_options.getThumbColor()});
+                m_options.getThumbRounding() * scale, 8, thumbColor});
         }
     }
 

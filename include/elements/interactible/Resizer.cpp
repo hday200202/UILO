@@ -70,7 +70,7 @@ void Resizer::update(Rectf& parentBounds, float dt) {
 void Resizer::render() {
     if (!m_modifier.getVisible()) return;
     // TODO: BGFX rendering for resizer visual strip
-    Color c = m_options.getColor();
+    Color c = resolveColor(m_options.getColorRole(), m_options.getColor());
     if (c.a == 0) { m_dirty = false; return; }
     if (m_uiloRef) {
         const float scale       = m_uiloRef->getScale();

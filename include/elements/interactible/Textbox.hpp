@@ -19,6 +19,7 @@ public:
     // Text appearance
     TextboxOptions& setCharSize(unsigned int n)      { m_charSize = n;         return *this; }
     TextboxOptions& setTextColor(Color c)        { m_textColor = c;        return *this; }
+    TextboxOptions& setTextColorRole(const std::string& r) { m_textColorRole = r; return *this; }
     TextboxOptions& setBold(bool v)                  { m_bold = v;             return *this; }
     TextboxOptions& setItalic(bool v)                { m_italic = v;           return *this; }
     TextboxOptions& setTextAlignX(Align a)           { m_textAlignX = a;       return *this; }
@@ -26,6 +27,7 @@ public:
 
     // Box appearance
     TextboxOptions& setBackgroundColor(Color c)  { m_bgColor = c;          return *this; }
+    TextboxOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole = r; return *this; }
     TextboxOptions& setRounding(float r)             { m_rounding = r;         return *this; }
     // Uniform padding (sets all four sides)
     TextboxOptions& setPadding(float p)              { m_paddingLeft = m_paddingRight = m_paddingTop = m_paddingBottom = p; return *this; }
@@ -36,19 +38,23 @@ public:
 
     // Focus outline (drawn when textbox is active)
     TextboxOptions& setOutlineColor(Color c)     { m_outlineColor = c;     return *this; }
+    TextboxOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
     TextboxOptions& setOutlineThickness(float t)     { m_outlineThickness = t; return *this; }
 
     // Placeholder
     TextboxOptions& setPlaceholder(const std::string& s) { m_placeholder = s;  return *this; }
     TextboxOptions& setPlaceholderColor(Color c) { m_placeholderColor = c; return *this; }
+    TextboxOptions& setPlaceholderColorRole(const std::string& r) { m_placeholderColorRole = r; return *this; }
 
     // Cursor
     TextboxOptions& setCursorColor(Color c)      { m_cursorColor = c;      return *this; }
+    TextboxOptions& setCursorColorRole(const std::string& r) { m_cursorColorRole = r; return *this; }
     TextboxOptions& setCursorWidth(float w)          { m_cursorWidth = w;      return *this; }
     TextboxOptions& setCursorBlinkRate(float s)      { m_blinkRate = s;        return *this; }
 
     // Selection
     TextboxOptions& setSelectionColor(Color c)   { m_selectionColor = c;   return *this; }
+    TextboxOptions& setSelectionColorRole(const std::string& r) { m_selectionColorRole = r; return *this; }
 
     // Behaviour
     TextboxOptions& setMultiline(bool v)             { m_multiline = v;        return *this; }
@@ -69,24 +75,30 @@ public:
     unsigned int       getCharSize()         const { return m_charSize.value_or(18); }
     bool               hasCharSize()         const { return m_charSize.has_value(); }
     Color              getTextColor()        const { return m_textColor; }
+    const std::string& getTextColorRole()    const { return m_textColorRole; }
     bool               getBold()             const { return m_bold; }
     bool               getItalic()           const { return m_italic; }
     Align              getTextAlignX()       const { return m_textAlignX; }
     Align              getTextAlignY()       const { return m_textAlignY; }
     Color              getBackgroundColor()  const { return m_bgColor; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
     float              getRounding()         const { return m_rounding; }
     float              getPaddingLeft()      const { return m_paddingLeft; }
     float              getPaddingRight()     const { return m_paddingRight; }
     float              getPaddingTop()       const { return m_paddingTop; }
     float              getPaddingBottom()    const { return m_paddingBottom; }
     Color              getOutlineColor()     const { return m_outlineColor; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
     float              getOutlineThickness() const { return m_outlineThickness; }
     const std::string& getPlaceholder()      const { return m_placeholder; }
     Color              getPlaceholderColor() const { return m_placeholderColor; }
+    const std::string& getPlaceholderColorRole() const { return m_placeholderColorRole; }
     Color              getCursorColor()      const { return m_cursorColor; }
+    const std::string& getCursorColorRole()  const { return m_cursorColorRole; }
     float              getCursorWidth()      const { return m_cursorWidth; }
     float              getBlinkRate()        const { return m_blinkRate; }
     Color              getSelectionColor()   const { return m_selectionColor; }
+    const std::string& getSelectionColorRole() const { return m_selectionColorRole; }
     bool               getMultiline()        const { return m_multiline; }
     bool               getWrap()             const { return m_wrap; }
     int                getMaxResizeLines()   const { return m_maxResizeLines; }
@@ -99,24 +111,30 @@ private:
     std::string        m_fontPath;
     std::optional<unsigned int> m_charSize;
     Color              m_textColor        = Color::White;
+    std::string        m_textColorRole;
     bool               m_bold             = false;
     bool               m_italic           = false;
     Align              m_textAlignX       = Align::Left;
     Align              m_textAlignY       = Align::CenterY;
     Color              m_bgColor          = Color{50, 50, 50};
+    std::string        m_bgColorRole;
     float              m_rounding         = 0.f;
     float              m_paddingLeft      = 6.f;
     float              m_paddingRight     = 6.f;
     float              m_paddingTop       = 6.f;
     float              m_paddingBottom    = 6.f;
     Color              m_outlineColor     = Color::White;
+    std::string        m_outlineColorRole;
     float              m_outlineThickness = 0.f;
     std::string        m_placeholder;
     Color              m_placeholderColor  = Color{128, 128, 128};
+    std::string        m_placeholderColorRole;
     Color              m_cursorColor       = Color::White;
+    std::string        m_cursorColorRole;
     float              m_cursorWidth       = 2.f;
     float              m_blinkRate         = 1.0f;   // full blink cycle in seconds
     Color              m_selectionColor    = Color{70, 130, 200, 160};
+    std::string        m_selectionColorRole;
     bool               m_multiline         = false;
     bool               m_wrap              = true;    // wrap text when multiline
     int                m_maxResizeLines    = 0;       // 0 = unlimited; >0 = clamp height, scroll beyond

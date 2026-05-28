@@ -18,17 +18,23 @@ public:
     DropdownOptions() = default;
 
     DropdownOptions& setHeaderColor(Color c)      { m_headerColor = c;    return *this; }
+    DropdownOptions& setHeaderColorRole(const std::string& r) { m_headerColorRole = r; return *this; }
     DropdownOptions& setHeaderRounding(float r)       { m_headerRounding = r; return *this; }
     DropdownOptions& setPopupColor(Color c)       { m_popupColor = c;     return *this; }
+    DropdownOptions& setPopupColorRole(const std::string& r) { m_popupColorRole = r; return *this; }
     DropdownOptions& setItemColor(Color c)        { m_itemColor = c;      return *this; }
+    DropdownOptions& setItemColorRole(const std::string& r) { m_itemColorRole = r; return *this; }
     DropdownOptions& setItemHoverColor(Color c)   { m_itemHoverColor = c; return *this; }
+    DropdownOptions& setItemHoverColorRole(const std::string& r) { m_itemHoverColorRole = r; return *this; }
     DropdownOptions& setItemHeight(float h)           { m_itemHeight = h;     return *this; }
     DropdownOptions& setMaxItems(int n)             { m_maxItems = n;       return *this; }
     DropdownOptions& setItemRounding(float r)         { m_itemRounding = r;   return *this; }
     DropdownOptions& setPopupRounding(float r)        { m_popupRounding = r;  return *this; }
     DropdownOptions& setCharSize(unsigned int n)      { m_charSize = n;       return *this; }
     DropdownOptions& setTextColor(Color c)        { m_textColor = c;      return *this; }
+    DropdownOptions& setTextColorRole(const std::string& r) { m_textColorRole = r; return *this; }
     DropdownOptions& setHeaderTextColor(Color c)  { m_headerTextColor = c; return *this; }
+    DropdownOptions& setHeaderTextColorRole(const std::string& r) { m_headerTextColorRole = r; return *this; }
     DropdownOptions& setPlaceholder(const std::string& s) { m_placeholder = s; return *this; }
 
     DropdownOptions& setFont(const std::string& path) { m_fontPath = path; return *this; }
@@ -36,6 +42,7 @@ public:
     DropdownOptions& setSpacer(float s)                { m_spacer = s;           return *this; }
     DropdownOptions& setDividerThickness(float t)        { m_dividerThickness = t; return *this; }
     DropdownOptions& setDividerColor(Color c)        { m_dividerColor = c;     return *this; }
+    DropdownOptions& setDividerColorRole(const std::string& r) { m_dividerColorRole = r; return *this; }
     DropdownOptions& setHeaderTextAlignment(Align x, Align y = Align::CenterY) {
         m_headerTextAlignX = x; m_headerTextAlignY = y; return *this;
     }
@@ -48,10 +55,14 @@ public:
     }
 
     Color        getHeaderColor()     const { return m_headerColor; }
+    const std::string& getHeaderColorRole() const { return m_headerColorRole; }
     float        getHeaderRounding()  const { return m_headerRounding; }
     Color        getPopupColor()      const { return m_popupColor; }
+    const std::string& getPopupColorRole() const { return m_popupColorRole; }
     Color        getItemColor()       const { return m_itemColor; }
+    const std::string& getItemColorRole() const { return m_itemColorRole; }
     Color        getItemHoverColor()  const { return m_itemHoverColor; }
+    const std::string& getItemHoverColorRole() const { return m_itemHoverColorRole; }
     float        getItemHeight()      const { return m_itemHeight; }
     int          getMaxItems()       const { return m_maxItems; }
     float        getItemRounding()    const { return m_itemRounding; }
@@ -59,12 +70,15 @@ public:
     unsigned int getCharSize()        const { return m_charSize.value_or(14); }
     bool         hasCharSize()        const { return m_charSize.has_value(); }
     Color        getTextColor()       const { return m_textColor; }
+    const std::string& getTextColorRole() const { return m_textColorRole; }
     Color        getHeaderTextColor() const { return m_headerTextColor; }
+    const std::string& getHeaderTextColorRole() const { return m_headerTextColorRole; }
     const std::string& getPlaceholder() const { return m_placeholder; }
     const std::string& getFontPath()  const { return m_fontPath; }
     float        getSpacer()            const { return m_spacer; }
     float        getDividerThickness()  const { return m_dividerThickness; }
     Color        getDividerColor()      const { return m_dividerColor; }
+    const std::string& getDividerColorRole() const { return m_dividerColorRole; }
     Align        getHeaderTextAlignX()  const { return m_headerTextAlignX; }
     Align        getHeaderTextAlignY()  const { return m_headerTextAlignY; }
     Align        getPopupTextAlignX()   const { return m_popupTextAlignX; }
@@ -73,22 +87,29 @@ public:
 
 private:
     Color        m_headerColor     = Color{60, 60, 60, 255};
+    std::string  m_headerColorRole;
     float        m_headerRounding  = 0.f;
     Color        m_popupColor      = Color{50, 50, 50, 255};
+    std::string  m_popupColorRole;
     Color        m_itemColor       = Color{0, 0, 0, 0};
+    std::string  m_itemColorRole;
     Color        m_itemHoverColor  = Color{80, 80, 80, 255};
+    std::string  m_itemHoverColorRole;
     float        m_itemHeight      = 30.f;
     int          m_maxItems        = 6;
     float        m_itemRounding    = 0.f;
     float        m_popupRounding   = 0.f;
     std::optional<unsigned int> m_charSize;
     Color        m_textColor       = Color::White;
+    std::string  m_textColorRole;
     Color        m_headerTextColor = Color::White;
+    std::string  m_headerTextColorRole;
     std::string  m_placeholder;
     std::string  m_fontPath;
     float        m_spacer             = 0.f;
     float        m_dividerThickness   = 0.f;
     Color        m_dividerColor       = Color{80, 80, 80, 255};
+    std::string  m_dividerColorRole;
     Align        m_headerTextAlignX   = Align::CenterX;
     Align        m_headerTextAlignY   = Align::CenterY;
     Align        m_popupTextAlignX    = Align::Left;

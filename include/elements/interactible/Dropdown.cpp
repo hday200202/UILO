@@ -22,6 +22,7 @@ Dropdown::Dropdown(
     if (m_options.hasCharSize()) headerTextOpts.setCharSize(m_options.getCharSize());
     headerTextOpts
         .setColor(m_options.getHeaderTextColor())
+        .setColorRole(m_options.getHeaderTextColorRole())
         .setTextAlignX(m_options.getHeaderTextAlignX())
         .setTextAlignY(m_options.getHeaderTextAlignY());
 
@@ -34,6 +35,7 @@ Dropdown::Dropdown(
         Modifier().setWidth({100.f, true}).setHeight({100.f, true}),
         ButtonOptions()
             .setColor(m_options.getHeaderColor())
+            .setColorRole(m_options.getHeaderColorRole())
             .setRounding(m_options.getHeaderRounding())
             .setLabel(m_headerLabel),
         "");
@@ -44,6 +46,7 @@ Dropdown::Dropdown(
         ColumnOptions()
             .setScrollable(true)
             .setColor(m_options.getPopupColor())
+            .setColorRole(m_options.getPopupColorRole())
             .setRounding(m_options.getPopupRounding()),
         contains{}, "");
 
@@ -56,6 +59,7 @@ Dropdown::Dropdown(
         if (m_options.hasCharSize()) itemTextOpts.setCharSize(m_options.getCharSize());
         itemTextOpts
             .setColor(m_options.getTextColor())
+            .setColorRole(m_options.getTextColorRole())
             .setTextAlignX(m_options.getPopupTextAlignX())
             .setTextAlignY(m_options.getPopupTextAlignY());
 
@@ -74,6 +78,7 @@ Dropdown::Dropdown(
                 }),
             ButtonOptions()
                 .setColor(m_options.getItemColor())
+                .setColorRole(m_options.getItemColorRole())
                 .setRounding(m_options.getItemRounding())
                 .setLabel(txt),
             "");
@@ -86,7 +91,7 @@ Dropdown::Dropdown(
         if (m_options.getDividerThickness() > 0.f && i + 1 < m_items.size()) {
             Spacer* div = new Spacer(
                 Modifier().setWidth({100.f, true}).setHeight({m_options.getDividerThickness(), false}),
-                SpacerOptions().setColor(m_options.getDividerColor()));
+                SpacerOptions().setColor(m_options.getDividerColor()).setColorRole(m_options.getDividerColorRole()));
             m_popup->addElement(div);
             m_dividers.push_back(div);
         }
@@ -204,6 +209,7 @@ void Dropdown::update(Rectf& parentBounds, float dt) {
                 m_itemButtons[static_cast<size_t>(m_hoveredItem)]->setOptions(
                     ButtonOptions()
                         .setColor(m_options.getItemColor())
+                        .setColorRole(m_options.getItemColorRole())
                         .setRounding(m_options.getItemRounding())
                         .setLabel(m_itemTexts[static_cast<size_t>(m_hoveredItem)]));
                 }
@@ -211,6 +217,7 @@ void Dropdown::update(Rectf& parentBounds, float dt) {
                 m_itemButtons[static_cast<size_t>(newHovered)]->setOptions(
                     ButtonOptions()
                         .setColor(m_options.getItemHoverColor())
+                        .setColorRole(m_options.getItemHoverColorRole())
                         .setRounding(m_options.getItemRounding())
                         .setLabel(m_itemTexts[static_cast<size_t>(newHovered)]));
             }

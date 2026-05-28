@@ -4,7 +4,7 @@
 namespace uilo {
 
 Button::Button(Modifier modifier, ButtonOptions options, const std::string& name)
-    : Row(modifier, RowOptions().setColor(options.getColor()).setRounding(options.getRounding()), {}, name),
+    : Row(modifier, RowOptions().setColor(options.getColor()).setColorRole(options.getColorRole()).setRounding(options.getRounding()), {}, name),
       m_buttonOptions(options)
 {
     m_type = ElementType::Button;
@@ -13,7 +13,7 @@ Button::Button(Modifier modifier, ButtonOptions options, const std::string& name
 
 void Button::setOptions(const ButtonOptions& opts) {
     m_buttonOptions = opts;
-    Row::setOptions(RowOptions().setColor(opts.getColor()).setRounding(opts.getRounding()));
+    Row::setOptions(RowOptions().setColor(opts.getColor()).setColorRole(opts.getColorRole()).setRounding(opts.getRounding()));
     m_children.clear();
     if (opts.getLabel()) m_children.push_back(opts.getLabel());
 }
@@ -43,10 +43,12 @@ void Button::render() {
     // effect immediately on the next draw.
     const RowOptions& cur = Row::getOptions();
     if (cur.getColor()    != m_buttonOptions.getColor() ||
+        cur.getColorRole() != m_buttonOptions.getColorRole() ||
         cur.getRounding() != m_buttonOptions.getRounding())
     {
         Row::setOptions(RowOptions()
             .setColor(m_buttonOptions.getColor())
+            .setColorRole(m_buttonOptions.getColorRole())
             .setRounding(m_buttonOptions.getRounding())
             .setScrollable(cur.getScrollable())
             .setScrollSpeed(cur.getScrollSpeed()));
