@@ -8,7 +8,7 @@
 namespace uilo {
 
 namespace {
-inline void applyRoundClipInner(const Renderer::Impl& impl) {
+inline void applyRoundClipInner(Renderer::Impl& impl) {
     float rect[4]   = {0.f, 0.f, 0.f, 0.f};
     float params[4] = {0.f, 0.f, 0.f, 0.f};
     if (impl.roundClipTop > 0) {
@@ -19,17 +19,27 @@ inline void applyRoundClipInner(const Renderer::Impl& impl) {
             params[0] = c.radius; params[1] = 1.f;
         }
     }
+    const bool same = impl.lastClipValid
+        && rect[0]   == impl.lastClipRect[0]   && rect[1]   == impl.lastClipRect[1]
+        && rect[2]   == impl.lastClipRect[2]   && rect[3]   == impl.lastClipRect[3]
+        && params[0] == impl.lastClipParams[0] && params[1] == impl.lastClipParams[1];
+    if (same) return;
     if (bgfx::isValid(impl.u_clipRect))   bgfx::setUniform(impl.u_clipRect,   rect);
     if (bgfx::isValid(impl.u_clipParams)) bgfx::setUniform(impl.u_clipParams, params);
+    impl.lastClipRect[0]   = rect[0];   impl.lastClipRect[1]   = rect[1];
+    impl.lastClipRect[2]   = rect[2];   impl.lastClipRect[3]   = rect[3];
+    impl.lastClipParams[0] = params[0]; impl.lastClipParams[1] = params[1];
+    impl.lastClipParams[2] = params[2]; impl.lastClipParams[3] = params[3];
+    impl.lastClipValid = true;
 }
-inline void applyScissor(const Renderer::Impl& impl) {
+inline void applyScissor(Renderer::Impl& impl) {
     if (impl.scissorTop > 0) {
         auto& sc = impl.scissorStack[impl.scissorTop - 1];
         bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
     }
     applyRoundClipInner(impl);
 }
-inline void applyRoundClip(const Renderer::Impl& impl) {
+inline void applyRoundClip(Renderer::Impl& impl) {
     applyRoundClipInner(impl);
 }
 inline bool scissorEmpty(const Renderer::Impl& impl) {
@@ -87,6 +97,7 @@ void Renderer::drawImage(const Rectf& dst, const Texture& tex,
                           bool clipEllipse) {
     if (!tex.valid()) return;
     auto& impl = *m_impl;
+    impl.flushSolidBatch();
     if (!bgfx::isValid(impl.texProgram) || scissorEmpty(impl)) return;
 
     float x = dst.position.x, y = dst.position.y;
@@ -143,10 +154,44 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
                          Color baseColor) {
     if (mat.kind == Material::Kind::None) return;
     auto& impl = *m_impl;
+    impl.flushSolidBatch();
     if (!bgfx::isValid(impl.glassProgram)) return;
-    if (!bgfx::isValid(impl.blurFB_B))     return;
     if (scissorEmpty(impl))                return;
     if (dst.size.x <= 0.f || dst.size.y <= 0.f) return;
+
+    // Mark glass-presence so the next frame switches back to the FB
+    // pipeline. When this frame is in bypass mode (the predictor said
+    // no glass), there's no sceneFB to defer into and no blur ladder
+    // to feed — draw a flat tint as a one-frame visual fallback while
+    // the FB path comes back online next frame.
+    impl.hadGlassThisFrame = true;
+    if (impl.bypassSceneFb) {
+        Rect r;
+        r.position  = dst.position;
+        r.size      = dst.size;
+        r.fillColor = baseColor;
+        draw(r);
+        return;
+    }
+
+    // Defer until endFrame so the blur ladder runs over a sceneFB that
+    // doesn't contain any glass elements. During the replay pass we set
+    // replayingGlass=true and re-enter here to actually submit.
+    if (!impl.replayingGlass) {
+        Impl::DeferredGlass d;
+        d.dst        = dst;
+        d.mat        = mat;
+        d.baseColor  = baseColor;
+        if (impl.scissorTop > 0) {
+            const auto& s = impl.scissorStack[impl.scissorTop - 1];
+            d.hasScissor = true;
+            d.sx = s.x; d.sy = s.y; d.sw = s.w; d.sh = s.h;
+        }
+        impl.deferredGlass.push_back(d);
+        return;
+    }
+
+    if (!bgfx::isValid(impl.blurFB_B))     return;
 
     // Backdrop UV: map the element's screen-space rect into the half-res
     // blur target's UV space. blurColorB shares aspect ratio with the

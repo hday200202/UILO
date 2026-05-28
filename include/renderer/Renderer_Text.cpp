@@ -10,7 +10,7 @@
 namespace uilo {
 
 namespace {
-inline void applyRoundClipInner(const Renderer::Impl& impl) {
+inline void applyRoundClipInner(Renderer::Impl& impl) {
     float rect[4]   = {0.f, 0.f, 0.f, 0.f};
     float params[4] = {0.f, 0.f, 0.f, 0.f};
     if (impl.roundClipTop > 0) {
@@ -21,17 +21,27 @@ inline void applyRoundClipInner(const Renderer::Impl& impl) {
             params[0] = c.radius; params[1] = 1.f;
         }
     }
+    const bool same = impl.lastClipValid
+        && rect[0]   == impl.lastClipRect[0]   && rect[1]   == impl.lastClipRect[1]
+        && rect[2]   == impl.lastClipRect[2]   && rect[3]   == impl.lastClipRect[3]
+        && params[0] == impl.lastClipParams[0] && params[1] == impl.lastClipParams[1];
+    if (same) return;
     if (bgfx::isValid(impl.u_clipRect))   bgfx::setUniform(impl.u_clipRect,   rect);
     if (bgfx::isValid(impl.u_clipParams)) bgfx::setUniform(impl.u_clipParams, params);
+    impl.lastClipRect[0]   = rect[0];   impl.lastClipRect[1]   = rect[1];
+    impl.lastClipRect[2]   = rect[2];   impl.lastClipRect[3]   = rect[3];
+    impl.lastClipParams[0] = params[0]; impl.lastClipParams[1] = params[1];
+    impl.lastClipParams[2] = params[2]; impl.lastClipParams[3] = params[3];
+    impl.lastClipValid = true;
 }
-inline void applyScissor(const Renderer::Impl& impl) {
+inline void applyScissor(Renderer::Impl& impl) {
     if (impl.scissorTop > 0) {
         auto& sc = impl.scissorStack[impl.scissorTop - 1];
         bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
     }
     applyRoundClipInner(impl);
 }
-inline void applyRoundClip(const Renderer::Impl& impl) {
+inline void applyRoundClip(Renderer::Impl& impl) {
     applyRoundClipInner(impl);
 }
 inline bool scissorEmpty(const Renderer::Impl& impl) {
@@ -266,6 +276,7 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
                          const Font& font, float sizePx, Color color) {
     if (!font.valid() || utf8.empty()) return;
     auto& impl = *m_impl;
+    impl.flushSolidBatch();
     if (!bgfx::isValid(impl.textProgram) || scissorEmpty(impl)) return;
 
     FontFace* face = impl.getFace(font.id, sizePx);

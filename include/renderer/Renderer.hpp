@@ -51,6 +51,15 @@ struct TextMetrics {
     float lineHeight() const { return ascent + descent + lineGap; }
 };
 
+// Snapshot of bgfx renderer counters for the previous frame. Useful for
+// HUD overlays and perf instrumentation.
+struct RendererStats {
+    uint32_t numDraw     = 0;
+    uint32_t numVertices = 0;
+    double   cpuTimeMs   = 0.0;
+    double   gpuTimeMs   = 0.0;
+};
+
 // ---- Framebuffer handle (opaque wrapper around bgfx framebuffer) ---------
 struct FrameBuffer {
     uint16_t handle  = UINT16_MAX;
@@ -87,6 +96,10 @@ public:
     void   setFramerateLimit(float fps);
     float  getFramerateLimit() const;
     SDL_Window* sdlWindow() const { return m_window; }
+
+    // Returns counters from bgfx::getStats() for the most recently
+    // submitted frame. Cheap; safe to call once per frame.
+    RendererStats getStats() const;
 
     // ---- Cursor -----------------------------------------------------------
     void setCursor(CursorType type);
@@ -193,6 +206,17 @@ public:
     void pushRoundClip(Rectf bounds, float radius);
     void popRoundClip();
 
+    // ---- Glass subtree routing -------------------------------------------
+    // Elements rendered with Material::Kind != None call drawGlass which
+    // defers the draw until after the blur ladder, so the blur backdrop
+    // never contains the glass element itself. To prevent the glass
+    // element's CHILDREN from being included in the blur either, wrap
+    // their render() calls in begin/endGlassSubtree(): submissions inside
+    // the pair are routed to the glass view, which executes after blur
+    // and replays of glass backgrounds.
+    void beginGlassSubtree();
+    void endGlassSubtree();
+
     // ---- Rotation ---------------------------------------------------------
     // Degrees, standard cartesian convention: 0 = +x, 90 = +y,
     // 180 = -x, 270 = -y, 360 wraps to 0. Pivot is in screen-pixel coords.
@@ -223,7 +247,7 @@ private:
 
     // Views 0..3 are reserved for the scene FB + blur ladder + composite
     // (see RendererImpl.hpp::Impl). User framebuffers start at 4.
-    uint16_t m_nextViewId = 4;
+    uint16_t m_nextViewId = 6;
 
     struct ViewEntry { uint16_t viewId; };
     static constexpr int kMaxViewStack = 16;

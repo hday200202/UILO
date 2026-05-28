@@ -20,10 +20,7 @@ void Palette::setAlias(const std::string& role, const std::string& target) {
 }
 
 bool Palette::has(std::string_view role) const {
-    // unordered_map::find with string_view requires C++20 transparent
-    // hashing; we don't enable that, so a temporary string lookup is fine
-    // — `has` is not on the per-frame hot path.
-    return m_entries.find(std::string(role)) != m_entries.end();
+    return m_entries.find(role) != m_entries.end();
 }
 
 Color Palette::get(std::string_view role) const {
@@ -32,14 +29,15 @@ Color Palette::get(std::string_view role) const {
 
 Color Palette::resolve(std::string_view role, Color literal) const {
     if (role.empty() || role == "none") return literal;
-    auto it = m_entries.find(std::string(role));
+    auto it = m_entries.find(role);
     if (it == m_entries.end()) return literal;
-    return resolveImpl(role, 0);
+    if (!it->second.isAlias) return it->second.color;
+    return resolveImpl(it->second.aliasOf, 1);
 }
 
 Color Palette::resolveImpl(std::string_view role, int depth) const {
     if (depth >= kMaxAliasDepth) return m_fallback;
-    auto it = m_entries.find(std::string(role));
+    auto it = m_entries.find(role);
     if (it == m_entries.end()) return m_fallback;
     if (it->second.isAlias) return resolveImpl(it->second.aliasOf, depth + 1);
     return it->second.color;

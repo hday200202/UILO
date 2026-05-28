@@ -59,15 +59,16 @@ void UILO::unregisterOverlay(Element* e) {
     );
 }
 
-Element* UILO::addFloating(Element* e, Rectf bounds, bool draggable) {
-    if (!e) return nullptr;
-    e->setUILO(*this);  // registers in m_elementPool + m_elements (recursively for containers)
+Element* UILO::addFloating(FreeElement f) {
+    if (!f.element) return nullptr;
+    f.element->setUILO(*this);  // registers in m_elementPool + m_elements (recursively for containers)
     FloatingEntry entry;
-    entry.element   = e;
-    entry.bounds    = bounds;
-    entry.draggable = draggable;
+    entry.element   = f.element;
+    entry.xPos      = f.xPos;
+    entry.yPos      = f.yPos;
+    entry.draggable = f.draggable;
     m_floating.push_back(entry);
-    return e;
+    return f.element;
 }
 
 void UILO::removeFloating(Element* e) {
@@ -105,9 +106,21 @@ void UILO::update() {
 
     m_activePage->update(logicalBounds, m_deltaTime);
 
+    const float winW  = static_cast<float>(windowSize.x);
+    const float winH  = static_cast<float>(windowSize.y);
+    const float scale = m_scale;
     for (auto& f : m_floating) {
-        Rectf b = f.bounds;
-        f.element->tick(b, m_deltaTime);
+        // Scale only applies to fixed-pixel positions — percent positions
+        // resolve against the full window so they stay anchored.
+        const float x = f.xPos.percent ? (f.xPos.value / 100.f * winW)
+                                       : (f.xPos.value * scale);
+        const float y = f.yPos.percent ? (f.yPos.value / 100.f * winH)
+                                       : (f.yPos.value * scale);
+        // Slot size = full window so percent widths/heights on the
+        // element resolve against window size. The element will compute
+        // its own real bounds inside tick() via its Modifier.
+        Rectf slot = { {x, y}, {winW, winH} };
+        f.element->tick(slot, m_deltaTime);
     }
 
     m_resizers.clear();
@@ -149,47 +162,63 @@ void UILO::update() {
 
     auto* root = m_activePage->m_rootContainer;
 
+    // Topmost floating element under the cursor (if any). Floating
+    // elements are opaque to input: they fully consume hover, cursor
+    // requests, and clicks for the region they cover — the page beneath
+    // never sees the event. Iterate back-to-front because later entries
+    // render on top.
+    FloatingEntry* hoveredFloating = nullptr;
+    for (auto it = m_floating.rbegin(); it != m_floating.rend(); ++it) {
+        if (!it->element->getModifier().getVisible()) continue;
+        if (it->element->getBounds().contains(mouse)) {
+            hoveredFloating = &(*it);
+            break;
+        }
+    }
+
     // Floating draggable HUDs: start drag on press-in-bounds, follow the
-    // mouse while held, and swallow the click so the page underneath
-    // doesn't also receive it.
+    // mouse while held. Any click on a floating element is consumed.
     bool floatingConsumedClick = false;
     if (leftDown) {
         if (!m_prevLeftMouse) {
-            for (auto it = m_floating.rbegin(); it != m_floating.rend(); ++it) {
-                if (!it->draggable) continue;
-                if (!it->element->getModifier().getVisible()) continue;
-                if (it->bounds.contains(mouse)) {
-                    it->dragging   = true;
-                    it->dragOffset = { mouse.x - it->bounds.position.x,
-                                       mouse.y - it->bounds.position.y };
-                    floatingConsumedClick = true;
-                    break;
+            if (hoveredFloating) {
+                floatingConsumedClick = true;
+                if (hoveredFloating->draggable) {
+                    const Rectf& vb = hoveredFloating->element->getBounds();
+                    hoveredFloating->dragging   = true;
+                    hoveredFloating->dragOffset = { mouse.x - vb.position.x,
+                                                    mouse.y - vb.position.y };
                 }
             }
         }
         for (auto& f : m_floating) {
             if (f.dragging) {
-                f.bounds.position = { mouse.x - f.dragOffset.x,
-                                      mouse.y - f.dragOffset.y };
+                // While dragging, snap position to absolute (unscaled)
+                // pixels so the cursor tracks 1:1 regardless of UI scale.
+                const float sc = m_scale > 0.f ? m_scale : 1.f;
+                f.xPos = { (mouse.x - f.dragOffset.x) / sc, false };
+                f.yPos = { (mouse.y - f.dragOffset.y) / sc, false };
                 requestCursor(CursorType::Crosshair, 10);
             }
         }
     } else {
         for (auto& f : m_floating) f.dragging = false;
-        for (auto& f : m_floating) {
-            if (f.draggable && f.element->getModifier().getVisible()
-                && f.bounds.contains(mouse))
-                requestCursor(CursorType::Crosshair, 5);
-        }
+        if (hoveredFloating && hoveredFloating->draggable)
+            requestCursor(CursorType::Crosshair, 5);
     }
 
-    // Hover: Resizers first (they render on top), then overlays
+    // Hover: Resizers first (they render on top), then overlays, then
+    // either the topmost floating (if hovered) or the page root. The
+    // floating branch is exclusive — the page does NOT also receive
+    // hover, so cursor/state requests from elements behind the floating
+    // panel can't leak through.
     for (auto* r : m_resizers) r->checkHover(mouse);
     Element* hoveredOverlay = nullptr;
     for (auto& ov : m_overlays)
         if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
-    if (hoveredOverlay) hoveredOverlay->checkHover(mouse);
-    else                root->checkHover(mouse);
+    if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
+    else if (hoveredFloating) hoveredFloating->element->checkHover(mouse);
+    else                     root->checkHover(mouse);
 
     // Apply pending cursor
     if (m_pendingCursor != m_activeCursor) {
@@ -223,6 +252,11 @@ void UILO::update() {
                 if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
             }
         }
+    } else if (leftDown && !m_prevLeftMouse && hoveredFloating) {
+        // Dispatch the click to the floating element so interactives
+        // inside it still respond. The page beneath remains shielded.
+        m_interactibleActivatedThisFrame = false;
+        hoveredFloating->element->checkLeftClick(mouse);
     }
     if (rightDown && !m_prevRightMouse) {
         m_interactibleActivatedThisFrame = false;
@@ -231,7 +265,8 @@ void UILO::update() {
             m_overlays.clear();
             for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
         }
-        root->checkRightClick(mouse);
+        if (hoveredFloating) hoveredFloating->element->checkRightClick(mouse);
+        else                 root->checkRightClick(mouse);
         if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
     }
 

@@ -94,28 +94,69 @@ int main() {
     // Floating FPS readout. Lives outside the page layout flow — UILO
     // updates+renders it every frame at the given window-space bounds.
     ui.addFloating(freeColumn(
-        Rectf{ {12.f, 12.f}, {256.f, 64.f} },
-        Modifier(),
+        Modifier()
+            .setWidth(180_px)
+            // .setMaterial(
+            //     Material::Blur()
+            //         .setRadius(2.f)
+            // )
+            .setHeight(96_px),
         ColumnOptions()
-            .setColorRole("panel")
+            .setColorRole("panelAlt")
             .setRounding(ROUNDING),
         contains{
             text(
-                Modifier().setAlign(Align::CenterX | Align::CenterY),
+                Modifier().setAlign(Align::Left | Align::CenterY),
                 TextOptions()
                     .setFont("assets/fonts/Montserrat.ttf")
-                    .setContent("-- FPS")
+                    .setContent(" FPS:")
                     .setColorRole("text")
-                    .setCharSize(36)
-                    .setTextAlignX(Align::CenterX)
+                    .setCharSize(18)
+                    .setTextAlignX(Align::Left)
                     .setTextAlignY(Align::CenterY),
                 "fps_text"
+            ),
+            text(
+                Modifier().setAlign(Align::Left | Align::CenterY),
+                TextOptions()
+                    .setFont("assets/fonts/Montserrat.ttf")
+                    .setContent(" draws:")
+                    .setColorRole("textDim")
+                    .setCharSize(14)
+                    .setTextAlignX(Align::Left)
+                    .setTextAlignY(Align::CenterY),
+                "fps_draws"
+            ),
+            text(
+                Modifier().setAlign(Align::Left | Align::CenterY),
+                TextOptions()
+                    .setFont("assets/fonts/Montserrat.ttf")
+                    .setContent(" cpu:")
+                    .setColorRole("textDim")
+                    .setCharSize(14)
+                    .setTextAlignX(Align::Left)
+                    .setTextAlignY(Align::CenterY),
+                "fps_cpu"
+            ),
+            text(
+                Modifier().setAlign(Align::Left | Align::CenterY),
+                TextOptions()
+                    .setFont("assets/fonts/Montserrat.ttf")
+                    .setContent(" gpu:")
+                    .setColorRole("textDim")
+                    .setCharSize(14)
+                    .setTextAlignX(Align::Left)
+                    .setTextAlignY(Align::CenterY),
+                "fps_gpu"
             )
         },
         "fps_hud"
-    ).setDraggable(true));
-    Text*   fpsText = ui.getElement<Text>("fps_text");
-    Column* fpsHud  = ui.getElement<Column>("fps_hud");
+    ).setPosition(12_px, 12_px).setDraggable(true));
+    Text*   fpsText  = ui.getElement<Text>("fps_text");
+    Text*   fpsDraws = ui.getElement<Text>("fps_draws");
+    Text*   fpsCpu   = ui.getElement<Text>("fps_cpu");
+    Text*   fpsGpu   = ui.getElement<Text>("fps_gpu");
+    Column* fpsHud   = ui.getElement<Column>("fps_hud");
 
     // ----- Synthesize a stereo "track" so the Waveform widget has data ----
     constexpr float    kSampleRate = 48000.f;
@@ -174,11 +215,12 @@ int main() {
             fpsValue = (float)fpsLoops / fpsTimer;
             fpsLoops = 0;
             fpsTimer = 0.f;
-            if (fpsText) {
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "%.0f FPS", fpsValue);
-                fpsText->setString(buf);
-            }
+            const RendererStats st = renderer.getStats();
+            char buf[64];
+            if (fpsText)  { std::snprintf(buf, sizeof(buf), " FPS: %.0f",     fpsValue);     fpsText ->setString(buf); }
+            if (fpsDraws) { std::snprintf(buf, sizeof(buf), " draws: %u",     st.numDraw);   fpsDraws->setString(buf); }
+            if (fpsCpu)   { std::snprintf(buf, sizeof(buf), " cpu: %.2f ms",  st.cpuTimeMs); fpsCpu  ->setString(buf); }
+            if (fpsGpu)   { std::snprintf(buf, sizeof(buf), " gpu: %.2f ms",  st.gpuTimeMs); fpsGpu  ->setString(buf); }
         }
         if (fpsHud) fpsHud->getModifier().setVisible(showFps);
 
