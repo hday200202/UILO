@@ -13,6 +13,7 @@ endif()
 
 option(UILO_AUTO_FETCH    "Auto-download missing dependencies via FetchContent" ON)
 option(UILO_BUILD_EXAMPLES "Build example programs" ON)
+option(UILO_SHARED        "Build UILO as a shared library" OFF)
 
 include(FetchContent)
 
@@ -129,7 +130,12 @@ file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cpp"
 )
 
-add_library(uilo STATIC ${UILO_SRCS})
+if(UILO_SHARED)
+    set(_UILO_LIB_TYPE SHARED)
+else()
+    set(_UILO_LIB_TYPE STATIC)
+endif()
+add_library(uilo ${_UILO_LIB_TYPE} ${UILO_SRCS})
 add_dependencies(uilo uilo_shaders)
 
 target_include_directories(uilo PUBLIC
