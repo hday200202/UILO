@@ -85,7 +85,7 @@ namespace uilo {
         return true;
     }
 
-    bool Element::checkScroll(const Vec2f& mousePosition, float delta) {
+    bool Element::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnScroll()) {
             m_modifier.getOnScroll()(this, delta);

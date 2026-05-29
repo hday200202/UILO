@@ -20,6 +20,7 @@ enum class ElementType {
     ScrollableColumn,
     ScrollableRow,
     Grid,
+    Canvas,
 
     Spacer,
     Text,
@@ -68,7 +69,19 @@ public:
     virtual bool checkLeftClick(const Vec2f& mousePosition);
     virtual bool checkRightClick(const Vec2f& mousePosition);
     virtual bool checkHover(const Vec2f& mousePosition);
-    virtual bool checkScroll(const Vec2f& mousePosition, float delta);
+    virtual bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false);
+    // 2-axis scroll. Default forwards to the 1D overload using delta.y so
+    // every existing widget stays Y-only without modification; containers
+    // and widgets that consume both axes (Canvas, etc.) override this.
+    virtual bool checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise = false, bool momentum = false) {
+        return checkScroll(mousePosition, delta.y, precise, momentum);
+    }
+    // Pinch / programmatic zoom dispatch. `magnification` is a per-event
+    // additive ratio (e.g. 0.05 = grow 5%). Default returns false; Canvas
+    // and containers override to consume / forward.
+    virtual bool checkZoom(const Vec2f& mousePosition, float magnification) {
+        (void)mousePosition; (void)magnification; return false;
+    }
     void resize(const Rectf& parent);
 
     // Recursively collect all Resizer-type descendant elements
@@ -92,6 +105,7 @@ protected:
 
     friend class UILO;
     friend class Container;
+    friend class Canvas;
 };
 
 }

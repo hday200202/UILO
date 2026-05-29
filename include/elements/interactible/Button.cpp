@@ -32,8 +32,8 @@ bool Button::checkHover(const Vec2f& mousePosition) {
     return Element::checkHover(mousePosition);
 }
 
-bool Button::checkScroll(const Vec2f& mousePosition, float delta) {
-    return Element::checkScroll(mousePosition, delta);
+bool Button::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
+    return Element::checkScroll(mousePosition, delta, precise, momentum);
 }
 
 void Button::render() {

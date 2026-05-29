@@ -23,6 +23,18 @@ public:
     void update();
     void render();
     void handleEvent(const SDL_Event& event);
+    // Routes a scroll delta to the topmost overlay under `pos`, or to the
+    // active page's root container. Exposed because the macOS native scroll
+    // monitor calls this from outside the SDL event loop.
+    void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
+    // Routes a pinch/zoom magnification delta (per-event ratio) to the
+    // topmost element under `pos`. Called by the macOS pinch monitor;
+    // also reusable for keyboard-zoom shortcuts.
+    void dispatchZoom(const Vec2f& pos, float magnification);
+    // True if the topmost element under `pos` is an Interactible (Slider,
+    // Knob, Textbox, Button, etc.) — i.e. something that should receive
+    // raw wheel events via SDL, not the macOS momentum-scroll path.
+    bool isSDLScrollTarget(const Vec2f& pos) const;
 
     void setRenderer(Renderer& renderer) { m_renderer = &renderer; }
 
@@ -48,6 +60,10 @@ public:
     float getDeltaTime()  const { return m_deltaTime; }
     Vec2u  getWindowSize() const { return m_renderer ? m_renderer->getSize() : Vec2u{}; }
     Vec2f  getMousePosition() const { return m_mousePos; }
+    // True only while a callback is being invoked from a synthesized
+    // momentum-coast scroll tick (macOS trackpad). Use this to keep
+    // gesture-anchored state (e.g. zoom pivots) stable across coast.
+    bool   isMomentumScrolling() const { return m_inMomentumScroll; }
     Renderer& getRenderer() { return *m_renderer; }
 
 
@@ -60,6 +76,14 @@ public:
     Palette&       getPalette()       { return m_palette; }
     const Palette& getPalette() const { return m_palette; }
     void requestCursor(CursorType type, int priority = 0);
+
+    // Register a callback invoked synchronously by SDL during the macOS
+    // live-resize loop (and on normal resize events). The host should do
+    // a full beginFrame/clear/ui.render()/endFrame inside it so the
+    // window paints during the gesture instead of leaving Cocoa to
+    // stretch the last drawable. Pair with native layer setup that
+    // UILO::update() applies on the first frame on macOS.
+    void setOnLiveResize(std::function<void()> cb);
 
     template <typename T>
     T* getElement(const std::string& name) {
@@ -100,6 +124,9 @@ private:
     Renderer* m_renderer = nullptr;
     Vec2u     m_prevWindowSize = {0u, 0u};
     Vec2f     m_mousePos       = {};
+    bool      m_inMomentumScroll = false;
+
+    std::function<void()> m_onLiveResize;
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;

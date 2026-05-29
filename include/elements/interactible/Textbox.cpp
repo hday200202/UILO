@@ -721,7 +721,7 @@ void Textbox::onDeactivate() {
     m_dirty = true;
 }
 
-bool Textbox::checkScroll(const Vec2f& mousePos, float delta) {
+bool Textbox::checkScroll(const Vec2f& mousePos, float delta, bool /*precise*/, bool /*momentum*/) {
     if (!m_bounds.contains(mousePos)) return false;
     if (!m_options.getMultiline()) return false;
     const int ml = m_options.getMaxResizeLines();
@@ -731,9 +731,14 @@ bool Textbox::checkScroll(const Vec2f& mousePos, float delta) {
     if (lineCount <= ml) return false;
     const float lh        = lineHeight();
     const float maxScroll = static_cast<float>(lineCount - ml) * lh;
-    const float currentLine = std::round(m_scrollOffsetY / lh);
-    m_scrollOffsetY = std::max(0.f, std::min((currentLine - delta) * lh, maxScroll));
-    m_dirty = true;
+    m_scrollAccum -= delta * lh;
+    const float target = std::max(0.f, std::min(m_scrollOffsetY + m_scrollAccum, maxScroll));
+    const float snapped = std::round(target / lh) * lh;
+    if (snapped != m_scrollOffsetY) {
+        m_scrollAccum -= (snapped - m_scrollOffsetY);
+        m_scrollOffsetY = snapped;
+        m_dirty = true;
+    }
     return true;
 }
 

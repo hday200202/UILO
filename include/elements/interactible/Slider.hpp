@@ -82,7 +82,7 @@ public:
 
     bool checkHover(const Vec2f& mousePosition) override;
     bool checkLeftClick(const Vec2f& mousePosition) override;
-    bool checkScroll(const Vec2f& mousePosition, float delta) override;
+    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
 
     void onDeactivate() override;
 
@@ -102,6 +102,7 @@ private:
 
     SliderOptions m_options;
     float m_value    = 0.f;
+    float m_scrollAccum = 0.f;
     bool  m_dragging = false;
     uint64_t m_lastClickMs = 0;
 };

@@ -1,7 +1,10 @@
 #include "UILO.hpp"
 #include "elements/interactible/Interactible.hpp"
+#include "platform/MacScroll.hpp"
+#include "platform/MacWindow.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
 
 namespace uilo {
 
@@ -86,8 +89,75 @@ void UILO::requestCursor(CursorType type, int priority) {
     }
 }
 
+void UILO::setOnLiveResize(std::function<void()> cb) {
+    m_onLiveResize = std::move(cb);
+}
+
 void UILO::update() {
+    // macOS: install the native scroll monitor + live-resize layer config
+    // on the first frame, once a window (and therefore NSApp) is up.
+    // Works for both constructor paths.
+    static bool s_macInstalled = false;
+    if (!s_macInstalled) {
+        s_macInstalled = true;
+        if (m_renderer) {
+            if (SDL_Window* w = m_renderer->sdlWindow()) {
+                void* ns = SDL_GetPointerProperty(
+                    SDL_GetWindowProperties(w),
+                    SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+                configureMacWindowForLiveResize(ns);
+            }
+        }
+        // SDL fires this watcher synchronously from the AppKit live-resize
+        // runloop on macOS, so the host's render callback runs at every
+        // intermediate size during the drag instead of waiting for our
+        // main loop to unblock.
+        SDL_AddEventWatch(+[](void* userdata, SDL_Event* ev) -> bool {
+            auto* self = static_cast<UILO*>(userdata);
+            if (!self->m_onLiveResize) return true;
+            if (ev->type == SDL_EVENT_WINDOW_RESIZED ||
+                ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+                self->m_onLiveResize();
+            }
+            return true;
+        }, this);
+        installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
+            float mx = m_mousePos.x, my = m_mousePos.y;
+            SDL_GetMouseState(&mx, &my);
+            // SDL_GetMouseState returns logical points; layout uses backing pixels.
+            if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
+                int lw = 1, lh = 1, pw = 1, ph = 1;
+                SDL_GetWindowSize(w, &lw, &lh);
+                SDL_GetWindowSizeInPixels(w, &pw, &ph);
+                if (lw > 0) mx *= (float)pw / (float)lw;
+                if (lh > 0) my *= (float)ph / (float)lh;
+            }
+            const Vec2f pos { mx, my };
+            // Always dispatch the live delta — sliders/knobs/textboxes
+            // get scrolled through the normal checkScroll path. Return
+            // value tells the Mac monitor whether momentum is allowed:
+            // true only when the cursor is over a scrollable container
+            // (not over an interactible like a slider/knob/textbox).
+            dispatchScroll(pos, Vec2f{dxLines, dyLines}, true, momentum);
+            return !isSDLScrollTarget(pos);
+        });
+        installMacZoomMonitor([this](float mag) -> bool {
+            float mx = m_mousePos.x, my = m_mousePos.y;
+            SDL_GetMouseState(&mx, &my);
+            if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
+                int lw = 1, lh = 1, pw = 1, ph = 1;
+                SDL_GetWindowSize(w, &lw, &lh);
+                SDL_GetWindowSizeInPixels(w, &pw, &ph);
+                if (lw > 0) mx *= (float)pw / (float)lw;
+                if (lh > 0) my *= (float)ph / (float)lh;
+            }
+            dispatchZoom(Vec2f{mx, my}, mag);
+            return true;
+        });
+    }
+
     m_deltaTime = m_timer.restart();
+    tickMacScrollMomentum(m_deltaTime);
     m_pendingCursor         = CursorType::Arrow;
     m_pendingCursorPriority = 0;
 
@@ -286,17 +356,73 @@ void UILO::render() {
         r->render();
 }
 
+void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum) {
+    if (!m_activePage || (delta.x == 0.f && delta.y == 0.f)) return;
+    // Refresh cached cursor so callbacks that consult ui.getMousePosition()
+    // (e.g. zoom-at-mouse on the waveform) see the position that triggered
+    // this scroll, not the one captured during the last UILO::update().
+    m_mousePos = pos;
+    m_inMomentumScroll = momentum;
+    Element* scrollOverlay = nullptr;
+    for (auto& ov : m_overlays)
+        if (ov.element->getBounds().contains(pos)) { scrollOverlay = ov.element; break; }
+    if (scrollOverlay) scrollOverlay->checkScroll(pos, delta, precise, momentum);
+    else               m_activePage->m_rootContainer->checkScroll(pos, delta, precise, momentum);
+    m_inMomentumScroll = false;
+}
+
+void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
+    if (!m_activePage || magnification == 0.f) return;
+    m_mousePos = pos;
+    Element* overlay = nullptr;
+    for (auto& ov : m_overlays)
+        if (ov.element->getBounds().contains(pos)) { overlay = ov.element; break; }
+    if (overlay) overlay->checkZoom(pos, magnification);
+    else         m_activePage->m_rootContainer->checkZoom(pos, magnification);
+}
+
+bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
+    // Walks the visible element tree from the topmost overlay (or root)
+    // downward, following children whose bounds contain `pos`, and returns
+    // true if the deepest hit is an Interactible (slider/knob/textbox/
+    // button/etc.) \u2014 those should receive raw wheel events via the
+    // cross-platform SDL path, not the macOS momentum-scroll hack.
+    auto hit = [&](Element* root) -> Element* {
+        Element* cur = root;
+        while (cur) {
+            Container* c = dynamic_cast<Container*>(cur);
+            if (!c) return cur;
+            Element* next = nullptr;
+            for (auto* child : c->getChildren())
+                if (child->getBounds().contains(pos)) next = child; // last wins (drawn on top)
+            if (!next) return cur;
+            cur = next;
+        }
+        return nullptr;
+    };
+
+    Element* root = nullptr;
+    for (auto& ov : m_overlays)
+        if (ov.element->getBounds().contains(pos)) { root = ov.element; break; }
+    if (!root && m_activePage) root = m_activePage->m_rootContainer;
+    if (!root) return false;
+
+    Element* deepest = hit(root);
+    return dynamic_cast<Interactible*>(deepest) != nullptr;
+}
+
 void UILO::handleEvent(const SDL_Event& event) {
     if (!m_activePage) return;
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        const Vec2f mouse = m_mousePos;
-        float delta = event.wheel.y;  // positive = scroll up
-        Element* scrollOverlay = nullptr;
-        for (auto& ov : m_overlays)
-            if (ov.element->getBounds().contains(mouse)) { scrollOverlay = ov.element; break; }
-        if (scrollOverlay) scrollOverlay->checkScroll(mouse, delta);
-        else               m_activePage->m_rootContainer->checkScroll(mouse, delta);
+        const float dy = event.wheel.y;  // positive = scroll up
+        const float dx = event.wheel.x;
+        // On macOS the native NSEvent monitor consumes trackpad events,
+        // so anything reaching here is a real mouse wheel: deltas are
+        // ±N integers. Other platforms still get the heuristic.
+        const bool precise = std::fabs(dy - std::round(dy)) > 1e-4f
+                          || (dy != 0.f && std::fabs(dy) < 1.f);
+        dispatchScroll(m_mousePos, Vec2f{dx, dy}, precise);
     }
 
     if (event.type == SDL_EVENT_KEY_UP) {

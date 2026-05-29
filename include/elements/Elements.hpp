@@ -3,6 +3,7 @@
 // All elements
 #include "containers/Column.hpp"
 #include "containers/Row.hpp"
+#include "containers/Canvas.hpp"
 
 #include "decoration/Spacer.hpp"
 #include "decoration/Image.hpp"

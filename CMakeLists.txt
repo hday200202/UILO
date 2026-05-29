@@ -130,6 +130,16 @@ file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cpp"
 )
 
+# macOS: native scroll shim (Objective-C++) — gives us precise trackpad
+# deltas + OS momentum that SDL3's Cocoa backend drops.
+if(APPLE)
+    enable_language(OBJCXX)
+    list(APPEND UILO_SRCS
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacScroll.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacWindow.mm"
+    )
+endif()
+
 if(UILO_SHARED)
     set(_UILO_LIB_TYPE SHARED)
 else()
@@ -193,6 +203,11 @@ if(UNIX AND NOT APPLE)
         target_link_libraries(uilo PUBLIC ${X11_LIBRARIES})
         target_include_directories(uilo PRIVATE ${X11_INCLUDE_DIR})
     endif()
+endif()
+
+# macOS: link AppKit for the native scroll-wheel monitor.
+if(APPLE)
+    target_link_libraries(uilo PUBLIC "-framework AppKit")
 endif()
 
 if(UILO_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")

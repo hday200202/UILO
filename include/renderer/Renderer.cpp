@@ -141,6 +141,8 @@ bool Renderer::Impl::initShaders() {
     u_glassMouse = bgfx::createUniform("u_glassMouse", bgfx::UniformType::Vec4);
     u_clipRect   = bgfx::createUniform("u_clipRect",   bgfx::UniformType::Vec4);
     u_clipParams = bgfx::createUniform("u_clipParams", bgfx::UniformType::Vec4);
+    u_clipRect2  = bgfx::createUniform("u_clipRect2",  bgfx::UniformType::Vec4);
+    u_clipParams2= bgfx::createUniform("u_clipParams2",bgfx::UniformType::Vec4);
     if (!bgfx::isValid(solidProgram) ||
         !bgfx::isValid(texProgram)   ||
         !bgfx::isValid(textProgram)  ||
@@ -185,6 +187,8 @@ void Renderer::Impl::shutdownResources() {
     if (bgfx::isValid(u_glassMouse)) bgfx::destroy(u_glassMouse);
     if (bgfx::isValid(u_clipRect))   bgfx::destroy(u_clipRect);
     if (bgfx::isValid(u_clipParams)) bgfx::destroy(u_clipParams);
+    if (bgfx::isValid(u_clipRect2))  bgfx::destroy(u_clipRect2);
+    if (bgfx::isValid(u_clipParams2))bgfx::destroy(u_clipParams2);
     if (bgfx::isValid(solidProgram)) bgfx::destroy(solidProgram);
     if (bgfx::isValid(texProgram))   bgfx::destroy(texProgram);
     if (bgfx::isValid(textProgram))  bgfx::destroy(textProgram);
@@ -402,8 +406,10 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     // The full-screen blit must not inherit a stale rounded-clip from the
     // last in-scene draw call. Reset clip uniforms to "disabled".
     const float clipZero[4] = { 0.f, 0.f, 0.f, 0.f };
-    if (bgfx::isValid(u_clipRect))   bgfx::setUniform(u_clipRect,   clipZero);
-    if (bgfx::isValid(u_clipParams)) bgfx::setUniform(u_clipParams, clipZero);
+    if (bgfx::isValid(u_clipRect))    bgfx::setUniform(u_clipRect,    clipZero);
+    if (bgfx::isValid(u_clipParams))  bgfx::setUniform(u_clipParams,  clipZero);
+    if (bgfx::isValid(u_clipRect2))   bgfx::setUniform(u_clipRect2,   clipZero);
+    if (bgfx::isValid(u_clipParams2)) bgfx::setUniform(u_clipParams2, clipZero);
 
     bgfx::setTexture(0, s_texColor, sceneColorTex);
     submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV);
@@ -475,7 +481,7 @@ bool Renderer::init(uint32_t width, uint32_t height,
     if (pd.type == bgfx::NativeWindowHandleType::Wayland)
         init.type = bgfx::RendererType::Vulkan;
 
-    uint32_t resetFlags = BGFX_RESET_VSYNC;
+    uint32_t resetFlags = BGFX_RESET_VSYNC | BGFX_RESET_FLUSH_AFTER_RENDER;
     if      (msaa >= 16) resetFlags |= BGFX_RESET_MSAA_X16;
     else if (msaa >=  8) resetFlags |= BGFX_RESET_MSAA_X8;
     else if (msaa >=  4) resetFlags |= BGFX_RESET_MSAA_X4;
@@ -902,25 +908,14 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
     float halfH = b.size.y * 0.5f;
     float cx    = b.position.x + halfW;
     float cy    = b.position.y + halfH;
-    // Intersect with the parent rounded clip (if any) by shrinking the
-    // smaller of the two rects. A perfect intersection of two rounded rects
-    // is hairy; in practice nested rounded containers are concentric or
-    // the child stays well inside the parent so the inner clip dominates.
-    if (impl.roundClipTop > 0) {
-        const auto& p = impl.roundClipStack[impl.roundClipTop - 1];
-        if (p.radius >= 0.f) {
-            float pCx = p.cx, pCy = p.cy, pHw = p.halfW, pHh = p.halfH;
-            float nx1 = std::max(cx - halfW, pCx - pHw);
-            float ny1 = std::max(cy - halfH, pCy - pHh);
-            float nx2 = std::min(cx + halfW, pCx + pHw);
-            float ny2 = std::min(cy + halfH, pCy + pHh);
-            halfW = std::max(0.f, (nx2 - nx1) * 0.5f);
-            halfH = std::max(0.f, (ny2 - ny1) * 0.5f);
-            cx    = (nx1 + nx2) * 0.5f;
-            cy    = (ny1 + ny2) * 0.5f;
-            r     = std::min(r, std::min(halfW, halfH));
-        }
-    }
+    // Do NOT intersect the child's rounded-rect SDF with the parent's
+    // rect. The SDF defines the *shape* of this element (circle, pill,
+    // rounded button, etc.); shrinking halfW/halfH to the visible
+    // intersection would force the radius to clamp against min(halfW,
+    // halfH) and visually squash the corners as the element overflows
+    // the parent. Rectangular cropping is already handled by the
+    // scissor pushed above; soft cropping by the parent's rounded edge
+    // is an acceptable trade-off we skip here.
     r = std::min(r, std::min(halfW, halfH));
     impl.roundClipStack[impl.roundClipTop++] = {cx, cy, halfW, halfH, r};
 }
@@ -993,31 +988,56 @@ static constexpr float kDeg2Rad = 3.14159265f / 180.f;
 
 namespace {
 inline void applyRoundClipInner(Renderer::Impl& impl) {
-    float rect[4]   = {0.f, 0.f, 0.f, 0.f};
-    float params[4] = {0.f, 0.f, 0.f, 0.f};
-    if (impl.roundClipTop > 0) {
-        const auto& c = impl.roundClipStack[impl.roundClipTop - 1];
-        if (c.radius > 0.f) {
+    // Walk the clip stack from the top down and collect the two
+    // top-most rounded entries (radius > 0). The first becomes the
+    // "inner" SDF (the shape being drawn, e.g. a button's own rounded
+    // body); the second becomes the "outer" SDF (the enclosing rounded
+    // ancestor, e.g. the parent panel). Both are applied in the
+    // fragment shader, so a child element stays its own shape AND
+    // gets cropped by the parent's rounded corners.
+    float rect[4]    = {0.f, 0.f, 0.f, 0.f};
+    float params[4]  = {0.f, 0.f, 0.f, 0.f};
+    float rect2[4]   = {0.f, 0.f, 0.f, 0.f};
+    float params2[4] = {0.f, 0.f, 0.f, 0.f};
+    int picked = 0;
+    for (int i = impl.roundClipTop - 1; i >= 0 && picked < 2; --i) {
+        const auto& c = impl.roundClipStack[i];
+        if (c.radius <= 0.f) continue;
+        if (picked == 0) {
             rect[0] = c.cx; rect[1] = c.cy;
             rect[2] = c.halfW; rect[3] = c.halfH;
             params[0] = c.radius; params[1] = 1.f;
+        } else {
+            rect2[0] = c.cx; rect2[1] = c.cy;
+            rect2[2] = c.halfW; rect2[3] = c.halfH;
+            params2[0] = c.radius; params2[1] = 1.f;
         }
+        ++picked;
     }
     // Dedup: bgfx setUniform on a Vec4 is cheap but not free, and the
     // overwhelming majority of consecutive draws share the same clip
     // (sibling children inside the same container). Skip the push when
     // nothing changed.
     const bool same = impl.lastClipValid
-        && rect[0]   == impl.lastClipRect[0]   && rect[1]   == impl.lastClipRect[1]
-        && rect[2]   == impl.lastClipRect[2]   && rect[3]   == impl.lastClipRect[3]
-        && params[0] == impl.lastClipParams[0] && params[1] == impl.lastClipParams[1];
+        && rect[0]    == impl.lastClipRect[0]    && rect[1]    == impl.lastClipRect[1]
+        && rect[2]    == impl.lastClipRect[2]    && rect[3]    == impl.lastClipRect[3]
+        && params[0]  == impl.lastClipParams[0]  && params[1]  == impl.lastClipParams[1]
+        && rect2[0]   == impl.lastClipRect2[0]   && rect2[1]   == impl.lastClipRect2[1]
+        && rect2[2]   == impl.lastClipRect2[2]   && rect2[3]   == impl.lastClipRect2[3]
+        && params2[0] == impl.lastClipParams2[0] && params2[1] == impl.lastClipParams2[1];
     if (same) return;
-    if (bgfx::isValid(impl.u_clipRect))   bgfx::setUniform(impl.u_clipRect,   rect);
-    if (bgfx::isValid(impl.u_clipParams)) bgfx::setUniform(impl.u_clipParams, params);
-    impl.lastClipRect[0]   = rect[0];   impl.lastClipRect[1]   = rect[1];
-    impl.lastClipRect[2]   = rect[2];   impl.lastClipRect[3]   = rect[3];
-    impl.lastClipParams[0] = params[0]; impl.lastClipParams[1] = params[1];
-    impl.lastClipParams[2] = params[2]; impl.lastClipParams[3] = params[3];
+    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
+    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
+    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
+    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
+    impl.lastClipRect[0]    = rect[0];    impl.lastClipRect[1]    = rect[1];
+    impl.lastClipRect[2]    = rect[2];    impl.lastClipRect[3]    = rect[3];
+    impl.lastClipParams[0]  = params[0];  impl.lastClipParams[1]  = params[1];
+    impl.lastClipParams[2]  = params[2];  impl.lastClipParams[3]  = params[3];
+    impl.lastClipRect2[0]   = rect2[0];   impl.lastClipRect2[1]   = rect2[1];
+    impl.lastClipRect2[2]   = rect2[2];   impl.lastClipRect2[3]   = rect2[3];
+    impl.lastClipParams2[0] = params2[0]; impl.lastClipParams2[1] = params2[1];
+    impl.lastClipParams2[2] = params2[2]; impl.lastClipParams2[3] = params2[3];
     impl.lastClipValid = true;
 }
 inline void applyScissor(Renderer::Impl& impl) {

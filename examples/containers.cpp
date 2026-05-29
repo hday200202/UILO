@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cmath>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 using namespace uilo;
 
@@ -13,11 +15,6 @@ float ROUNDING = 8.f;
 
 Container* buildRootContainer(UILO& ui);
 
-// ---------------------------------------------------------------------------
-// Theming
-// ---------------------------------------------------------------------------
-// Every styled widget in this example reads its color through a role on the
-// active Palette, so switching themes is a single setPalette() call.
 static Palette makeDarkPalette() {
     Palette p;
     p.set("app.bg",          {33,  35,  47,  255});
@@ -74,32 +71,25 @@ static void applyTheme(UILO& ui, bool dark) {
     ui.setPalette(dark ? makeDarkPalette() : makeLightPalette());
 }
 
-int main() {
-    Renderer renderer;
-    if (!renderer.init(1280, 720, "Containers", 0)) {
-        std::fprintf(stderr, "Failed to initialize renderer\n");
-        return 1;
-    }
+// ---------------------------------------------------------------------------
+// Floating FPS HUD
+// ---------------------------------------------------------------------------
+struct FpsHud {
+    Text*   fps   = nullptr;
+    Text*   draws = nullptr;
+    Text*   cpu   = nullptr;
+    Text*   gpu   = nullptr;
+    Column* root  = nullptr;
+};
 
-    // renderer.setFramerateLimit(60);
-    // renderer.setVsync(false);
-
-    UILO ui;
-    ui.setRenderer(renderer);
-    ui.addPage(page(buildRootContainer(ui), "main_page"));
-    ui.setPage("main_page");
-    ui.setScale(1.5f);
-    applyTheme(ui, /*dark=*/true);
-
-    // Floating FPS readout. Lives outside the page layout flow — UILO
-    // updates+renders it every frame at the given window-space bounds.
+static FpsHud installFpsHud(UILO& ui) {
     ui.addFloating(freeColumn(
         Modifier()
             .setWidth(180_px)
-            // .setMaterial(
-            //     Material::Blur()
-            //         .setRadius(2.f)
-            // )
+            .setMaterial(
+                Material::Blur()
+                    .setRadius(2.f)
+            )
             .setHeight(96_px),
         ColumnOptions()
             .setColorRole("panelAlt")
@@ -152,13 +142,31 @@ int main() {
         },
         "fps_hud"
     ).setPosition(12_px, 12_px).setDraggable(true));
-    Text*   fpsText  = ui.getElement<Text>("fps_text");
-    Text*   fpsDraws = ui.getElement<Text>("fps_draws");
-    Text*   fpsCpu   = ui.getElement<Text>("fps_cpu");
-    Text*   fpsGpu   = ui.getElement<Text>("fps_gpu");
-    Column* fpsHud   = ui.getElement<Column>("fps_hud");
+    return FpsHud{
+        ui.getElement<Text>  ("fps_text"),
+        ui.getElement<Text>  ("fps_draws"),
+        ui.getElement<Text>  ("fps_cpu"),
+        ui.getElement<Text>  ("fps_gpu"),
+        ui.getElement<Column>("fps_hud"),
+    };
+}
 
-    // ----- Synthesize a stereo "track" so the Waveform widget has data ----
+static void updateFpsHud(const FpsHud& hud, const Renderer& renderer, float fpsValue) {
+    const RendererStats st = renderer.getStats();
+    char buf[64];
+    if (hud.fps)   { std::snprintf(buf, sizeof(buf), " FPS: %.0f",    fpsValue);     hud.fps  ->setString(buf); }
+    if (hud.draws) { std::snprintf(buf, sizeof(buf), " draws: %u",    st.numDraw);   hud.draws->setString(buf); }
+    if (hud.cpu)   { std::snprintf(buf, sizeof(buf), " cpu: %.2f ms", st.cpuTimeMs); hud.cpu  ->setString(buf); }
+    if (hud.gpu)   { std::snprintf(buf, sizeof(buf), " gpu: %.2f ms", st.gpuTimeMs); hud.gpu  ->setString(buf); }
+}
+
+// ---------------------------------------------------------------------------
+// Waveform demo data + zoom binding
+// ---------------------------------------------------------------------------
+static void installWaveformDemo(UILO& ui) {
+    auto* wf = ui.getElement<Waveform>("main_waveform");
+    if (!wf) return;
+
     constexpr float    kSampleRate = 48000.f;
     constexpr float    kDuration   = 4.0f; // seconds
     const std::size_t  kFrames     = (std::size_t)(kSampleRate * kDuration);
@@ -177,35 +185,123 @@ int main() {
         bufL[i] = 0.55f * fade * env * wL;
         bufR[i] = 0.55f * fade * env * wR;
     }
-    if (auto* wf = ui.getElement<Waveform>("main_waveform")) {
-        const float* channels[2] = { bufL.data(), bufR.data() };
-        wf->setSamples(channels, 2, kFrames);
+    const float* channels[2] = { bufL.data(), bufR.data() };
+    wf->setSamples(channels, 2, kFrames);
 
-        // Ctrl + scroll wheel zooms the waveform around the mouse x.
-        wf->getModifier().setOnScroll([&ui, wf](Element* self, float delta) {
-            const SDL_Keymod mods = SDL_GetModState();
-            if (!(mods & SDL_KMOD_CTRL)) return;
-            const Rectf b = self->getBounds();
-            if (b.size.x <= 0.f) return;
+    // Ctrl + scroll wheel zooms the waveform around the mouse x.
+    wf->getModifier().setOnScroll([&ui, wf, anchor = 0.f](Element* self, float delta) mutable {
+        const SDL_Keymod mods = SDL_GetModState();
+        if (!(mods & SDL_KMOD_CTRL)) return;
+        const Rectf b = self->getBounds();
+        if (b.size.x <= 0.f) return;
+        // Lock the zoom pivot to where the cursor was when the gesture
+        // started; reusing the live cursor during momentum coast would
+        // jitter the pivot by sub-pixel noise each tick.
+        if (!ui.isMomentumScrolling()) {
             const float mx = ui.getMousePosition().x;
-            const float anchor = std::max(0.f, std::min(1.f, (mx - b.position.x) / b.size.x));
-            const float factor = std::pow(1.2f, delta);
-            wf->zoomAt(anchor, factor);
-        });
+            anchor = std::max(0.f, std::min(1.f, (mx - b.position.x) / b.size.x));
+        }
+        const float factor = std::pow(1.2f, delta);
+        wf->zoomAt(anchor, factor);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Input + main loop
+// ---------------------------------------------------------------------------
+struct InputLatch {
+    bool plus  = false;
+    bool minus = false;
+    bool f10   = false;
+    bool v     = false;
+};
+
+static void handleEvent(
+    SDL_Event&      event,
+    InputLatch&     latch,
+    bool&           showFps,
+    bool&           running,
+    UILO&           ui,
+    Renderer&       renderer
+) {
+    if (event.type == SDL_EVENT_QUIT) running = false;
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        SDL_Keycode k = event.key.key;
+        if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) {
+            if (!latch.plus) ui.setScale(ui.getScale() + 0.1f);
+            latch.plus = true;
+        } else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) {
+            if (!latch.minus) ui.setScale(ui.getScale() - 0.1f);
+            latch.minus = true;
+        } else if (k == SDLK_F10) {
+            if (!latch.f10) showFps = !showFps;
+            latch.f10 = true;
+        } else if (k == SDLK_V) {
+            if (!latch.v) renderer.setVsync(!renderer.getVsync());
+            latch.v = true;
+        }
+    } else if (event.type == SDL_EVENT_KEY_UP) {
+        SDL_Keycode k = event.key.key;
+        if (k == SDLK_EQUALS || k == SDLK_KP_PLUS)  latch.plus  = false;
+        if (k == SDLK_MINUS  || k == SDLK_KP_MINUS) latch.minus = false;
+        if (k == SDLK_F10)                          latch.f10   = false;
+        if (k == SDLK_V)                            latch.v     = false;
     }
+    ui.handleEvent(event);
+}
 
-    std::fprintf(stderr, "[UILO] bgfx renderer: %s\n", bgfx::getRendererName(bgfx::getCaps()->rendererType));
+static float queryRefreshHz(Renderer& renderer) {
+    if (SDL_Window* w = renderer.sdlWindow()) {
+        if (SDL_DisplayID d = SDL_GetDisplayForWindow(w)) {
+            if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(d))
+                if (m->refresh_rate > 0.f) return m->refresh_rate;
+        }
+    }
+    return 60.f;
+}
 
-    bool prevPlus  = false;
-    bool prevMinus = false;
-    bool prevF10   = false;
-    bool showFps   = false;
-    bool running   = true;
-    bool prevV     = false;
+static void runMainLoop(UILO& ui, Renderer& renderer, const FpsHud& hud) {
+    // Sub-frame update loop: poll + ui.update() at high rate, then submit a
+    // single render close to the next vsync deadline. The render path still
+    // blocks briefly inside bgfx::frame(), but the wait that was previously
+    // spent idle is now spent integrating input/scroll/momentum, so the
+    // presented frame uses state from well under 2 ms ago instead of one
+    // full vsync interval ago.
+    using clock = std::chrono::steady_clock;
+    const auto frameInterval = std::chrono::nanoseconds(
+        (int64_t)(1.0e9 / (double)queryRefreshHz(renderer)));
+    const auto submitMargin  = std::chrono::microseconds(1500);
+    auto lastPresent = clock::now();
 
-    float fpsTimer = 0.f;
-    int   fpsLoops = 0;
-    float fpsValue = 0.f;
+    InputLatch latch;
+    bool  showFps   = false;
+    bool  running   = true;
+    float fpsTimer  = 0.f;
+    int   fpsLoops  = 0;
+    float fpsValue  = 0.f;
+
+    auto poll = [&]() {
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+            handleEvent(event, latch, showFps, running, ui, renderer);
+    };
+
+    auto renderOnce = [&]() {
+        renderer.beginFrame();
+        renderer.clear(ui.getPalette().get("app.bg"));
+        ui.render();
+        renderer.endFrame();
+        lastPresent = clock::now();
+    };
+
+    // Paint synchronously during the macOS live-resize drag. SDL fires
+    // this watcher inline from the AppKit resize runloop, so the window
+    // gets a fresh frame at every intermediate size instead of Cocoa
+    // stretching the last drawable until our main loop unblocks.
+    ui.setOnLiveResize([&]() {
+        ui.update();
+        renderOnce();
+    });
 
     while (running) {
         const float dt = ui.getDeltaTime();
@@ -215,55 +311,54 @@ int main() {
             fpsValue = (float)fpsLoops / fpsTimer;
             fpsLoops = 0;
             fpsTimer = 0.f;
-            const RendererStats st = renderer.getStats();
-            char buf[64];
-            if (fpsText)  { std::snprintf(buf, sizeof(buf), " FPS: %.0f",     fpsValue);     fpsText ->setString(buf); }
-            if (fpsDraws) { std::snprintf(buf, sizeof(buf), " draws: %u",     st.numDraw);   fpsDraws->setString(buf); }
-            if (fpsCpu)   { std::snprintf(buf, sizeof(buf), " cpu: %.2f ms",  st.cpuTimeMs); fpsCpu  ->setString(buf); }
-            if (fpsGpu)   { std::snprintf(buf, sizeof(buf), " gpu: %.2f ms",  st.gpuTimeMs); fpsGpu  ->setString(buf); }
+            updateFpsHud(hud, renderer, fpsValue);
         }
-        if (fpsHud) fpsHud->getModifier().setVisible(showFps);
+        if (hud.root) hud.root->getModifier().setVisible(showFps);
 
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT)
-                running = false;
-            if (event.type == SDL_EVENT_KEY_DOWN) {
-                SDL_Keycode k = event.key.key;
-                if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) {
-                    bool prevP = prevPlus;
-                    prevPlus = true;
-                    if (!prevP) ui.setScale(ui.getScale() + 0.1f);
-                } else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) {
-                    bool prevM = prevMinus;
-                    prevMinus = true;
-                    if (!prevM) ui.setScale(ui.getScale() - 0.1f);
-                } else if (k == SDLK_F10) {
-                    if (!prevF10) showFps = !showFps;
-                    prevF10 = true;
-                } else if (k == SDLK_V) {
-                    if (!prevV) renderer.setVsync(!renderer.getVsync());
-                    prevV = true;
-                }
+        if (renderer.getVsync()) {
+            const auto deadline = lastPresent + frameInterval - submitMargin;
+            while (running) {
+                poll();
+                ui.update();
+                if (clock::now() >= deadline) break;
+                std::this_thread::sleep_for(std::chrono::microseconds(500));
             }
-            if (event.type == SDL_EVENT_KEY_UP) {
-                SDL_Keycode k = event.key.key;
-                if (k == SDLK_EQUALS || k == SDLK_KP_PLUS)  prevPlus  = false;
-                if (k == SDLK_MINUS  || k == SDLK_KP_MINUS) prevMinus = false;
-                if (k == SDLK_F10)                          prevF10   = false;
-                if (k == SDLK_V)                            prevV     = false;
-            }
-            ui.handleEvent(event);
+        } else {
+            poll();
+            ui.update();
         }
 
-        ui.update();
-
-        renderer.beginFrame();
-        renderer.clear(ui.getPalette().get("app.bg"));
-        ui.render();
-
-        renderer.endFrame();
+        renderOnce();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+int main() {
+    Renderer renderer;
+    if (!renderer.init(1280, 720, "Containers", 16)) {
+        std::fprintf(stderr, "Failed to initialize renderer\n");
+        return 1;
+    }
+
+    UILO ui;
+    ui.setRenderer(renderer);
+    ui.addPage(page(buildRootContainer(ui), "main_page"));
+    ui.setPage("main_page");
+    ui.setScale(1.5f);
+    applyTheme(ui, true);
+
+    FpsHud hud = installFpsHud(ui);
+    installWaveformDemo(ui);
+
+    std::fprintf(
+        stderr, "[UILO] bgfx renderer: %s\n",
+        bgfx::getRendererName(bgfx::getCaps()->rendererType)
+    );
+
+    runMainLoop(ui, renderer, hud);
+    return 0;
 }
 
 Container* buildRootContainer(UILO& ui) {
@@ -292,8 +387,7 @@ Container* buildRootContainer(UILO& ui) {
                             .setThumbColorRole("text")
                             .setTrackColorRole("panelAlt")
                             .setThumbRounding(ROUNDING)
-                            .setStep(0.01f)
-                            .setDefaultValue(0.f),
+                            .setDefaultValue(0.5f),
                         "main_slider"
                     )
                 }
@@ -312,7 +406,7 @@ Container* buildRootContainer(UILO& ui) {
                             .setColorRole("panel")
                             .setRounding(ROUNDING)
                             .setScrollable(true)
-                            .setScrollSpeed(40.f),
+                            .setScrollSpeed(60.f),
                         contains {
                             row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  include/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
                             row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
@@ -373,17 +467,17 @@ Container* buildRootContainer(UILO& ui) {
                     resizer(
                         Modifier()
                             .setWidth(48_px)
-                            .setOnUpdateEnd([](Resizer* r){
+                            .setOnUpdateEnd([alphaF = 0.f](Resizer* r) mutable {
                                 constexpr Color target = {255, 255, 255, 100};
                                 constexpr float fadeSec = 0.18f;
                                 const bool active = r->isHovered() || r->isDragging();
-                                Color c = r->getOptions().getColor();
                                 const float step = (r->getDeltaTime() / fadeSec) * (float)target.a;
-                                float a = (float)c.a + (active ? +step : -step);
-                                if (a < 0.f) a = 0.f;
-                                if (a > (float)target.a) a = (float)target.a;
+                                alphaF += active ? +step : -step;
+                                if (alphaF < 0.f) alphaF = 0.f;
+                                if (alphaF > (float)target.a) alphaF = (float)target.a;
+                                Color c = r->getOptions().getColor();
                                 c.r = target.r; c.g = target.g; c.b = target.b;
-                                c.a = (uint8_t)a;
+                                c.a = (uint8_t)(alphaF + 0.5f);
                                 r->getOptions().setColor(c);
                             }),
                         ResizerOptions()
@@ -392,6 +486,7 @@ Container* buildRootContainer(UILO& ui) {
                             .setResizeWidthMax(50_pct)
                     ),
 
+#if 1
                     column(
                         Modifier()
                             .setOuterPadding(8.f),
@@ -542,23 +637,152 @@ Container* buildRootContainer(UILO& ui) {
                             )
                         }, "2"
                     )
+#else
+                    [&]() -> Element* {
+                        auto* c = canvas(
+                            Modifier()
+                                .setOuterPadding(8.f),
+                            CanvasOptions()
+                                .setColorRole("panel")
+                                .setRounding(ROUNDING)
+                                .setGridSize(32.f, 32.f)
+                                .setGridLineStyle(GridLineStyle::Dots)
+                                .setGridLineColorRole("textDim")
+                                .setGridLineThickness(1.5f)
+                                .setGridLineSpacing(1)
+                                .setScrollSpeed(80.f)
+                                .setMinX(0.f)
+                                .setMinY(0.f)
+                                .setZoomAxes(true, true),
+                            contains{}, "canvas_panel"
+                        );
+
+                        c->addChild(
+                            button(
+                                Modifier()
+                                    .setWidth(192_px)
+                                    .setHeight(64_px)
+                                    .setOnLeftClick([&](Button* b){ std::cout << "Test button clicked!!!" << std::endl; })
+                                    .setOnHoverEnter([](Button* b){ b->getOptions().setColorRole("accentHover"); })
+                                    .setOnHoverExit([](Button* b){ b->getOptions().setColorRole("accent"); }),
+                                ButtonOptions()
+                                    .setColorRole("accent")
+                                    .setRounding(ROUNDING)
+                                    .setLabel(
+                                        text(
+                                            Modifier().setAlign(Align::CenterX | Align::CenterY),
+                                            TextOptions()
+                                                .setFont("assets/fonts/Montserrat.ttf")
+                                                .setContent("TEST")
+                                                .setColorRole("onAccent")
+                                                .setTextAlignX(Align::CenterX)
+                                                .setTextAlignY(Align::CenterY)
+                                        )
+                                    ),
+                                "test_button"
+                            ),
+                            32, 32
+                        );
+
+                        c->addChild(
+                            knob(
+                                Modifier().setWidth(96_px).setHeight(96_px),
+                                KnobOptions()
+                                    .setBodyColorRole("knob.body")
+                                    .setOutlineColorRole("outline")
+                                    .setOutlineThickness(1.f)
+                                    .setTrackColorRole("knob.track")
+                                    .setArcColorRole("accent")
+                                    .setIndicatorColorRole("knob.indicator")
+                                    .setArcThickness(8.f)
+                                    .setArcGap(4.f)
+                                    .setIndicatorThickness(4.f)
+                                    .setIndicatorInset(0.35f)
+                                    .setIndicatorLength(0.85f)
+                                    .setRange(0.f, 1.f)
+                                    .setDefaultValue(0.5f)
+                                    .setOnValueChanged([](float v){ std::cout << "Knob: " << v << std::endl; }),
+                                "knob_a"
+                            ),
+                            32, 128
+                        );
+
+                        c->addChild(
+                            knob(
+                                Modifier().setWidth(96_px).setHeight(96_px),
+                                KnobOptions()
+                                    .setBodyColorRole("knob.body")
+                                    .setOutlineColorRole("outline")
+                                    .setOutlineThickness(1.f)
+                                    .setTrackColorRole("knob.track")
+                                    .setArcColorRole("accent.green")
+                                    .setIndicatorColorRole("knob.indicator")
+                                    .setStartAngle(180.f)
+                                    .setEndAngle(0.f)
+                                    .setArcDirection(KnobArcDir::CounterClockwise)
+                                    .setRange(-1.f, 1.f)
+                                    .setDefaultValue(0.f),
+                                "knob_pan"
+                            ),
+                            160, 128
+                        );
+
+                        c->addChild(
+                            textbox(
+                                Modifier().setWidth(512_px).setHeight(48_px),
+                                TextboxOptions()
+                                    .setCharSize(32)
+                                    .setFont("assets/fonts/Montserrat.ttf")
+                                    .setRounding(ROUNDING)
+                                    .setPlaceholder("Type Something...")
+                                    .setBackgroundColorRole("textbox.bg")
+                                    .setTextColorRole("textbox.text")
+                                    .setPlaceholderColorRole("textbox.placeholder")
+                                    .setCursorColorRole("textbox.cursor")
+                                    .setSelectionColorRole("textbox.selection")
+                                    .setMultiline(true)
+                                    .setPaddingLeft(16.f)
+                                    .setPaddingRight(16.f)
+                                    .setOutlineColorRole("accent")
+                                    .setOutlineThickness(2.f)
+                                    .setMaxResizeLines(6)
+                                    .setOnEnterPressed([&](const std::string& s){ std::cout << "TextBox: " << s << std::endl;}),
+                                "main_textbox"
+                            ),
+                            32, 256
+                        );
+
+                        c->addChild(
+                            image(
+                                Modifier().setWidth(256_px).setHeight(256_px),
+                                ImageOptions()
+                                    .setClipEllipse(true)
+                                    .setPath("assets/images/stones.jpg")
+                                    .setLockAspectWidth(true)
+                            ),
+                            32, 352
+                        );
+
+                        return c;
+                    }()
+#endif
                 }
             ),
 
             resizer(
                 Modifier()
                     .setHeight(48_px)
-                    .setOnUpdateEnd([](Resizer* r){
+                    .setOnUpdateEnd([alphaF = 0.f](Resizer* r) mutable {
                         constexpr Color target = {255, 255, 255, 100};
                         constexpr float fadeSec = 0.18f;
                         const bool active = r->isHovered() || r->isDragging();
-                        Color c = r->getOptions().getColor();
                         const float step = (r->getDeltaTime() / fadeSec) * (float)target.a;
-                        float a = (float)c.a + (active ? +step : -step);
-                        if (a < 0.f) a = 0.f;
-                        if (a > (float)target.a) a = (float)target.a;
+                        alphaF += active ? +step : -step;
+                        if (alphaF < 0.f) alphaF = 0.f;
+                        if (alphaF > (float)target.a) alphaF = (float)target.a;
+                        Color c = r->getOptions().getColor();
                         c.r = target.r; c.g = target.g; c.b = target.b;
-                        c.a = (uint8_t)a;
+                        c.a = (uint8_t)(alphaF + 0.5f);
                         r->getOptions().setColor(c);
                     }),
                 ResizerOptions()

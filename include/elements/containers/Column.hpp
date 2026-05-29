@@ -41,7 +41,8 @@ public:
 
     void update(Rectf& parentBounds, float dt) override;
     void render() override;
-    bool checkScroll(const Vec2f& mousePosition, float delta) override;
+    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
+    bool checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise = false, bool momentum = false) override;
 
 private:
     ColumnOptions m_options;

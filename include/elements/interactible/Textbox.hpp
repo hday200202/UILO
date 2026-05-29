@@ -154,7 +154,7 @@ public:
     void render()                                          override;
     bool checkLeftClick(const Vec2f& mousePos)             override;
     bool checkHover(const Vec2f& mousePos)                 override;
-    bool checkScroll(const Vec2f& mousePos, float delta)   override;
+    bool checkScroll(const Vec2f& mousePos, float delta, bool precise = false, bool momentum = false)   override;
     void onDeactivate()                                    override;
 
     // Called by UILO event routing when this is the active interactible
@@ -201,6 +201,7 @@ private:
     bool                    m_cursorVisible = true;
     float                   m_scrollOffsetX = 0.f;
     float                   m_scrollOffsetY = 0.f;
+    float                   m_scrollAccum   = 0.f;
     float                   m_preferredX    = 0.f;  // preserved column x for up/down nav
 
     // Soft-wrap state (multiline+wrap mode)

@@ -57,6 +57,8 @@ void Waveform::setRange(std::size_t firstFrame, std::size_t frameCount) {
             ? 0
             : std::min(frameCount, m_numFrames - m_rangeStart);
     }
+    m_rangeStartD = (double)m_rangeStart;
+    m_rangeCountD = (double)m_rangeCount;
     m_peaksDirty = true;
     m_dirty      = true;
 }
@@ -66,8 +68,8 @@ void Waveform::zoomAt(float anchorNorm, float factor) {
     anchorNorm = std::clamp(anchorNorm, 0.f, 1.f);
 
     const double total   = (double)m_numFrames;
-    const double curCnt  = (double)(m_rangeCount ? m_rangeCount : m_numFrames);
-    const double anchorF = (double)m_rangeStart + (double)anchorNorm * curCnt;
+    const double curCnt  = (m_rangeCountD > 0.0) ? m_rangeCountD : total;
+    const double anchorF = m_rangeStartD + (double)anchorNorm * curCnt;
 
     // factor > 1 -> zoom in -> visible window shrinks.
     double newCnt = curCnt / (double)factor;
@@ -78,14 +80,18 @@ void Waveform::zoomAt(float anchorNorm, float factor) {
     if (newStart < 0.0)                    newStart = 0.0;
     if (newStart + newCnt > total)         newStart = total - newCnt;
 
-    // Round to nearest instead of truncating; std::size_t cast on a positive
-    // double otherwise floors, biasing newStart down by up to one frame each
-    // call. Over many zoom events that accumulates as a steady leftward drift
-    // of the anchor point under the cursor.
+    // Keep precise state; only snap when populating the size_t fields that
+    // the peak sampler reads. Without the doubles, sub-frame momentum ticks
+    // each round to an int and the visible window wobbles.
+    m_rangeStartD = newStart;
+    m_rangeCountD = (newCnt >= total) ? 0.0 : newCnt;
     const std::size_t start = (std::size_t)std::llround(newStart);
     const std::size_t cnt   = (std::size_t)std::llround(newCnt);
     const std::size_t count = (cnt >= m_numFrames) ? 0 : cnt;
-    setRange(start, count);
+    m_rangeStart = std::min(start, m_numFrames - 1);
+    m_rangeCount = (count == 0) ? 0 : std::min(count, m_numFrames - m_rangeStart);
+    m_peaksDirty = true;
+    m_dirty      = true;
 }
 
 void Waveform::update(Rectf& parentBounds, float dt) {

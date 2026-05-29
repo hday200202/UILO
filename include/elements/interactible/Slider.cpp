@@ -143,13 +143,16 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
-bool Slider::checkScroll(const Vec2f& mousePosition, float delta) {
+bool Slider::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {
     if (!m_bounds.contains(mousePosition)) return false;
     const float range = m_options.getMax() - m_options.getMin();
     const float step  = m_options.getStep() > 0.f
         ? m_options.getStep()
         : range * 0.05f;
-    applyValue(m_value + delta * step);
+    m_scrollAccum -= delta * step;
+    const float before = m_value;
+    applyValue(m_value + m_scrollAccum);
+    m_scrollAccum -= (m_value - before);
     if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(this, delta);
     return true;
 }
