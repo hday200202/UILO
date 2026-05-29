@@ -209,7 +209,7 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
-bool Knob::checkScroll(const Vec2f& mousePosition, float delta) {
+bool Knob::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
     const float r  = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
@@ -221,7 +221,10 @@ bool Knob::checkScroll(const Vec2f& mousePosition, float delta) {
     const float step  = m_options.getStep() > 0.f
         ? m_options.getStep()
         : range * 0.05f;
-    applyValue(m_value + delta * step);
+    m_scrollAccum -= delta * step;
+    const float before = m_value;
+    applyValue(m_value + m_scrollAccum);
+    m_scrollAccum -= (m_value - before);
     if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(this, delta);
     return true;
 }

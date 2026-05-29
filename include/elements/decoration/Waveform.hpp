@@ -137,6 +137,12 @@ private:
 
     std::size_t m_rangeStart  = 0;
     std::size_t m_rangeCount  = 0; // 0 == full buffer
+    // High-precision shadow of the visible range. zoomAt() integrates many
+    // tiny per-tick factors (trackpad momentum) and snapping to int frame
+    // counts each call jitters the visible window. The doubles carry the
+    // real state; the size_t fields are derived (rounded) for sampling.
+    double      m_rangeStartD = 0.0;
+    double      m_rangeCountD = 0.0; // 0 == full buffer
 
     // Cached peaks: m_peaks[ch * numColumns * 2 + col * 2 + {0,1}] = {min,max}.
     std::vector<float> m_peaks;

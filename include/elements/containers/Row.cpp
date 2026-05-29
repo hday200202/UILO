@@ -3,6 +3,7 @@
 #include "../../utils/RenderUtils.hpp"
 #include "../interactible/Resizer.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace uilo {
 
@@ -36,6 +37,7 @@ void Row::update(Rectf& parentBounds, float dt) {
         }
         const float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
         if (m_scrollOffset > maxScroll) { m_scrollOffset = maxScroll; m_dirty = true; }
+        if (m_scrollOffset < 0.f)        { m_scrollOffset = 0.f;        m_dirty = true; }
         return;
     }
 
@@ -248,23 +250,50 @@ void Row::render() {
     m_dirty = false;
 }
 
-bool Row::checkScroll(const Vec2f& mousePosition, float delta) {
+bool Row::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
     if (!m_bounds.contains(mousePosition)) return false;
 
     if (m_options.getScrollable()) {
-        // Let nested scrollables consume first
         for (auto* child : m_children)
             if (child->getBounds().contains(mousePosition))
-                if (child->checkScroll(mousePosition, delta)) return true;
+                if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
 
-        float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
-        m_scrollOffset = std::clamp(m_scrollOffset - delta * m_options.getScrollSpeed(),
-                                    0.f, maxScroll);
+        const float speed     = m_options.getScrollSpeed();
+        const float step      = precise ? 30.f * (speed / 40.f) : speed;
+        const float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
+        m_scrollOffset = std::clamp(m_scrollOffset - delta * step, 0.f, maxScroll);
         m_dirty = true;
         return true;
     }
 
-    return Container::checkScroll(mousePosition, delta);
+    return Container::checkScroll(mousePosition, delta, precise, momentum);
+}
+
+bool Row::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
+    if (!m_bounds.contains(mousePosition)) return false;
+
+    for (auto* child : m_children)
+        if (child->getBounds().contains(mousePosition))
+            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+
+    if (m_options.getScrollable()) {
+        const float speed     = m_options.getScrollSpeed();
+        const float step      = precise ? 30.f * (speed / 40.f) : speed;
+        const float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
+        // Row is horizontal; prefer delta.x but fall back to delta.y so a
+        // plain vertical mouse wheel still works as the user expects.
+        const float d = (delta.x != 0.f) ? delta.x : delta.y;
+        m_scrollOffset = std::clamp(m_scrollOffset - d * step, 0.f, maxScroll);
+        m_dirty = true;
+        return true;
+    }
+
+    if (m_modifier.getOnScroll()) {
+        m_modifier.getOnScroll()(this, delta.y);
+        return true;
+    }
+
+    return false;
 }
 
 }

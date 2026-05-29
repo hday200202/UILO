@@ -20,7 +20,8 @@ DO_CLEAN=0
 EXTRA_TARGETS=()
 
 for arg in "$@"; do
-    case "${arg,,}" in
+    lc_arg=$(printf '%s' "$arg" | tr '[:upper:]' '[:lower:]')
+    case "$lc_arg" in
         clean)            DO_CLEAN=1 ;;
         debug)            MODE="Debug" ;;
         release)          MODE="Release" ;;

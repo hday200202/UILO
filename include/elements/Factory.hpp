@@ -19,6 +19,13 @@ inline Row* row(
     const std::string& name = ""
 ) { return new Row(modifier, options, children, name); }
 
+inline Canvas* canvas(
+    Modifier modifier = {},
+    CanvasOptions options = {},
+    contains children = {},
+    const std::string& name = ""
+) { return new Canvas(modifier, options, children, name); }
+
 // freeColumn / freeRow build a normal Column/Row but mark the result as
 // floating: it lives outside the page layout flow and is positioned in
 // window space by UILO::addFloating(). Width and height come from the

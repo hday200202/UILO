@@ -78,6 +78,8 @@ struct Renderer::Impl {
     bgfx::UniformHandle             u_glassMouse = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle             u_clipRect   = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle             u_clipParams = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_clipRect2  = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle             u_clipParams2= BGFX_INVALID_HANDLE;
     bool                            layoutsInit  = false;
 
     // Wall-clock elapsed seconds since renderer init, fed into animated
@@ -150,9 +152,11 @@ struct Renderer::Impl {
 
     // Last clip uniform values actually pushed to bgfx. Used to dedup
     // setUniform calls when consecutive draws share the same clip state.
-    float lastClipRect[4]   = { 1e30f, 0.f, 0.f, 0.f };
-    float lastClipParams[4] = { 1e30f, 0.f, 0.f, 0.f };
-    bool  lastClipValid     = false;
+    float lastClipRect[4]    = { 1e30f, 0.f, 0.f, 0.f };
+    float lastClipParams[4]  = { 1e30f, 0.f, 0.f, 0.f };
+    float lastClipRect2[4]   = { 1e30f, 0.f, 0.f, 0.f };
+    float lastClipParams2[4] = { 1e30f, 0.f, 0.f, 0.f };
+    bool  lastClipValid      = false;
 
     // ---- Solid-rect batch ------------------------------------------------
     // All `draw(Rect&)` calls sharing the same view + scissor + round-clip

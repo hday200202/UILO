@@ -8,12 +8,14 @@ SAMPLER2D(s_texColor, 0);
 uniform vec4 u_imgFlags;
 uniform vec4 u_clipRect;
 uniform vec4 u_clipParams;
+uniform vec4 u_clipRect2;
+uniform vec4 u_clipParams2;
 
-float uiloClipAlpha(vec2 p) {
-    if (u_clipParams.y < 0.5) return 1.0;
-    vec2  c  = u_clipRect.xy;
-    vec2  b  = u_clipRect.zw;
-    float r  = u_clipParams.x;
+float uiloRoundedAlpha(vec2 p, vec4 rect, vec4 params) {
+    if (params.y < 0.5) return 1.0;
+    vec2  c  = rect.xy;
+    vec2  b  = rect.zw;
+    float r  = params.x;
     vec2  q  = abs(p - c) - b + vec2_splat(r);
     float d  = length(max(q, vec2_splat(0.0))) +
                min(max(q.x, q.y), 0.0) - r;
@@ -31,7 +33,8 @@ void main() {
         c.a *= 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r2);
     }
 
-    c.a *= uiloClipAlpha(v_worldpos);
+    c.a *= uiloRoundedAlpha(v_worldpos, u_clipRect,  u_clipParams);
+    c.a *= uiloRoundedAlpha(v_worldpos, u_clipRect2, u_clipParams2);
     if (c.a <= 0.0) discard;
     gl_FragColor = c;
 }

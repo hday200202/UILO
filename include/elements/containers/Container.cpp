@@ -84,10 +84,10 @@ bool Container::checkHover(const Vec2f& mousePosition) {
     return inside;
 }
 
-bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
+bool Container::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
     for (auto& child : m_children)
         if (child->getBounds().contains(mousePosition))
-            if (child->checkScroll(mousePosition, delta)) return true;
+            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta);
@@ -95,6 +95,30 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta) {
     }
 
     return false;
+}
+
+bool Container::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
+    for (auto& child : m_children)
+        if (child->getBounds().contains(mousePosition))
+            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+
+    if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
+        m_modifier.getOnScroll()(this, delta.y);
+        return true;
+    }
+
+    return false;
+}
+
+bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
+    // Last-wins: a Canvas drawn on top of siblings still wins. We iterate
+    // forward but keep going through every child whose bounds contain the
+    // cursor so deeper / later-drawn containers can claim the event.
+    bool consumed = false;
+    for (auto& child : m_children)
+        if (child->getBounds().contains(mousePosition))
+            if (child->checkZoom(mousePosition, magnification)) consumed = true;
+    return consumed;
 }
 
 void Container::addElement(Element* element) {m_children.push_back(element); }

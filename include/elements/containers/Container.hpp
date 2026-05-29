@@ -19,12 +19,16 @@ public:
     bool checkRightClick(const Vec2f& mousePosition) override;
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkHover(const Vec2f& mousePosition) override;
-    bool checkScroll(const Vec2f& mousePosition, float delta) override;
+    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
+    bool checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise = false, bool momentum = false) override;
+    bool checkZoom(const Vec2f& mousePosition, float magnification) override;
 
     void addElement(Element* element);
     void setUILO(UILO& uiloRef) override;
     void collectResizers(std::vector<Element*>& out) override;
     bool isDirty() const override;
+
+    const std::vector<Element*>& getChildren() const { return m_children; }
 
 protected:
     std::vector<Element*> m_children;

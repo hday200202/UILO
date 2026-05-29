@@ -37,7 +37,7 @@ public:
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkRightClick(const Vec2f& mousePosition) override;
     bool checkHover(const Vec2f& mousePosition) override;
-    bool checkScroll(const Vec2f& mousePosition, float delta) override;
+    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
 
     // Sync ButtonOptions → underlying RowOptions every frame so that
     // handlers mutating `getOptions()` (e.g. `setColor`) are reflected
