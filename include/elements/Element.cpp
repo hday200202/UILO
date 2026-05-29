@@ -16,6 +16,16 @@ namespace uilo {
         return m_uiloRef->getPalette().resolve(role, literal);
     }
 
+    void Element::tick(Rectf& parentBounds, float dt) {
+        if (m_uiloRef && m_uiloRef->isForcingTreeUpdate()) {
+            m_dirty = true;
+        }
+
+        if (m_modifier.getOnUpdateStart()) m_modifier.getOnUpdateStart()(this);
+        update(parentBounds, dt);
+        if (m_modifier.getOnUpdateEnd())   m_modifier.getOnUpdateEnd()(this);
+    }
+
     void Element::resize(const Rectf& parent) {
         float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
         float op = m_modifier.getOuterPadding() * scale;

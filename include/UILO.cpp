@@ -166,7 +166,10 @@ void UILO::update() {
     const Vec2u windowSize = m_renderer->getSize();
     if (windowSize != m_prevWindowSize) {
         for (auto& e : m_elementPool) e->m_dirty = true;
+        m_forceTreeUpdate = true;
         m_prevWindowSize = windowSize;
+    } else {
+        m_forceTreeUpdate = false;
     }
 
     Rectf logicalBounds = {
@@ -342,6 +345,9 @@ void UILO::update() {
 
     m_prevLeftMouse  = leftDown;
     m_prevRightMouse = rightDown;
+
+    // Force mode is only valid for this single update tick.
+    m_forceTreeUpdate = false;
 }
 
 void UILO::render() {
