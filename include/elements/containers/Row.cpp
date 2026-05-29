@@ -14,6 +14,7 @@ Row::Row(Modifier modifier, RowOptions options, contains children, const std::st
 void Row::update(Rectf& parentBounds, float dt) {
     pruneChildren();
     resize(parentBounds);
+    const bool forceTreeUpdate = m_uiloRef && m_uiloRef->isForcingTreeUpdate();
 
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     if (scale != m_lastScale && m_lastScale > 0.f) {
@@ -38,6 +39,19 @@ void Row::update(Rectf& parentBounds, float dt) {
         const float maxScroll = std::max(0.f, m_contentWidth - m_bounds.size.x);
         if (m_scrollOffset > maxScroll) { m_scrollOffset = maxScroll; m_dirty = true; }
         if (m_scrollOffset < 0.f)        { m_scrollOffset = 0.f;        m_dirty = true; }
+
+        if (forceTreeUpdate) {
+            for (auto* child : m_children) {
+                if (child->getType() == ElementType::Resizer) continue;
+                if (child->getModifier().getVisible()) continue;
+                Rectf slot = child->getBounds();
+                if (slot.size.x <= 0.f || slot.size.y <= 0.f) {
+                    slot.position = m_bounds.position;
+                    slot.size = {0.f, 0.f};
+                }
+                child->tick(slot, dt);
+            }
+        }
         return;
     }
 
@@ -200,6 +214,19 @@ void Row::update(Rectf& parentBounds, float dt) {
         r->setTarget(resizerTarget);
         r->setContainerBounds(m_bounds);
         child->tick(rBounds, dt);
+    }
+
+    if (forceTreeUpdate) {
+        for (auto* child : m_children) {
+            if (child->getType() == ElementType::Resizer) continue;
+            if (child->getModifier().getVisible()) continue;
+            Rectf slot = child->getBounds();
+            if (slot.size.x <= 0.f || slot.size.y <= 0.f) {
+                slot.position = m_bounds.position;
+                slot.size = {0.f, 0.f};
+            }
+            child->tick(slot, dt);
+        }
     }
 }
 

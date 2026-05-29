@@ -64,6 +64,10 @@ public:
     // momentum-coast scroll tick (macOS trackpad). Use this to keep
     // gesture-anchored state (e.g. zoom pivots) stable across coast.
     bool   isMomentumScrolling() const { return m_inMomentumScroll; }
+    // True only during the frame where UILO detected a window resize.
+    // Containers/elements can use this to run a one-shot full update pass
+    // even for nodes that would normally be skipped by optimizations.
+    bool   isForcingTreeUpdate() const { return m_forceTreeUpdate; }
     Renderer& getRenderer() { return *m_renderer; }
 
 
@@ -125,6 +129,7 @@ private:
     Vec2u     m_prevWindowSize = {0u, 0u};
     Vec2f     m_mousePos       = {};
     bool      m_inMomentumScroll = false;
+    bool      m_forceTreeUpdate = false;
 
     std::function<void()> m_onLiveResize;
 

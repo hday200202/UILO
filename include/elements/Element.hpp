@@ -60,11 +60,7 @@ public:
     // virtual update(). Callers in the tree (containers, page, dropdown
     // popup, etc.) should invoke tick() rather than update() directly so
     // the lifecycle hooks always fire.
-    void tick(Rectf& parentBounds, float dt) {
-        if (m_modifier.getOnUpdateStart()) m_modifier.getOnUpdateStart()(this);
-        update(parentBounds, dt);
-        if (m_modifier.getOnUpdateEnd())   m_modifier.getOnUpdateEnd()(this);
-    }
+    void tick(Rectf& parentBounds, float dt);
     virtual void render() = 0;
     virtual bool checkLeftClick(const Vec2f& mousePosition);
     virtual bool checkRightClick(const Vec2f& mousePosition);
