@@ -4,5 +4,5 @@ TODO:
     [X] Rewrite UILO.hpp/cpp, then test
     [X] Add decor elements (Spacer, Text, Image)
     [X] Add scrollable containers (Column, Row)
-    [ ] Add interactible elements (slider, knob, textbox)
+    [X] Add interactible elements (slider, knob, textbox)
     [ ] Documentation

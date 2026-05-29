@@ -9,3 +9,6 @@ obj
 *.o
 *.a
 build
+*.so
+*.dylib
+*.dll
