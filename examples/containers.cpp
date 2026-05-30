@@ -6,8 +6,6 @@
 #include <cstdio>
 #include <cmath>
 #include <vector>
-#include <chrono>
-#include <thread>
 
 using namespace uilo;
 
@@ -250,88 +248,6 @@ static void handleEvent(
     ui.handleEvent(event);
 }
 
-static float queryRefreshHz(Renderer& renderer) {
-    if (SDL_Window* w = renderer.sdlWindow()) {
-        if (SDL_DisplayID d = SDL_GetDisplayForWindow(w)) {
-            if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(d))
-                if (m->refresh_rate > 0.f) return m->refresh_rate;
-        }
-    }
-    return 60.f;
-}
-
-static void runMainLoop(UILO& ui, Renderer& renderer, const FpsHud& hud) {
-    // Sub-frame update loop: poll + ui.update() at high rate, then submit a
-    // single render close to the next vsync deadline. The render path still
-    // blocks briefly inside bgfx::frame(), but the wait that was previously
-    // spent idle is now spent integrating input/scroll/momentum, so the
-    // presented frame uses state from well under 2 ms ago instead of one
-    // full vsync interval ago.
-    using clock = std::chrono::steady_clock;
-    const auto frameInterval = std::chrono::nanoseconds(
-        (int64_t)(1.0e9 / (double)queryRefreshHz(renderer)));
-    const auto submitMargin  = std::chrono::microseconds(1500);
-    auto lastPresent = clock::now();
-
-    InputLatch latch;
-    bool  showFps   = false;
-    bool  running   = true;
-    float fpsTimer  = 0.f;
-    int   fpsLoops  = 0;
-    float fpsValue  = 0.f;
-
-    auto poll = [&]() {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-            handleEvent(event, latch, showFps, running, ui, renderer);
-    };
-
-    auto renderOnce = [&]() {
-        renderer.beginFrame();
-        renderer.clear(ui.getPalette().get("app.bg"));
-        ui.render();
-        renderer.endFrame();
-        lastPresent = clock::now();
-    };
-
-    // Paint synchronously during the macOS live-resize drag. SDL fires
-    // this watcher inline from the AppKit resize runloop, so the window
-    // gets a fresh frame at every intermediate size instead of Cocoa
-    // stretching the last drawable until our main loop unblocks.
-    ui.setOnLiveResize([&]() {
-        ui.update();
-        renderOnce();
-    });
-
-    while (running) {
-        const float dt = ui.getDeltaTime();
-        fpsTimer += dt;
-        fpsLoops++;
-        if (fpsTimer >= 0.25f) {
-            fpsValue = (float)fpsLoops / fpsTimer;
-            fpsLoops = 0;
-            fpsTimer = 0.f;
-            updateFpsHud(hud, renderer, fpsValue);
-        }
-        if (hud.root) hud.root->getModifier().setVisible(showFps);
-
-        if (renderer.getVsync()) {
-            const auto deadline = lastPresent + frameInterval - submitMargin;
-            while (running) {
-                poll();
-                ui.update();
-                if (clock::now() >= deadline) break;
-                std::this_thread::sleep_for(std::chrono::microseconds(500));
-            }
-        } else {
-            poll();
-            ui.update();
-        }
-
-        renderOnce();
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -357,7 +273,43 @@ int main() {
         bgfx::getRendererName(bgfx::getCaps()->rendererType)
     );
 
-    runMainLoop(ui, renderer, hud);
+    InputLatch latch;
+    bool  showFps   = false;
+    bool  running   = true;
+    float fpsTimer  = 0.f;
+    int   fpsLoops  = 0;
+    float fpsValue  = 0.f;
+
+    auto poll = [&]() {
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+            handleEvent(event, latch, showFps, running, ui, renderer);
+    };
+
+    auto renderOnce = [&]() {
+        renderer.beginFrame();
+        renderer.clear(ui.getPalette().get("app.bg"));
+        ui.render();
+        renderer.endFrame();
+    };
+
+    while (running) {
+        const float dt = ui.getDeltaTime();
+        fpsTimer += dt;
+        fpsLoops++;
+        if (fpsTimer >= 0.25f) {
+            fpsValue = (float)fpsLoops / fpsTimer;
+            fpsLoops = 0;
+            fpsTimer = 0.f;
+            updateFpsHud(hud, renderer, fpsValue);
+        }
+        if (hud.root) hud.root->getModifier().setVisible(showFps);
+
+        poll();
+        ui.update();
+
+        renderOnce();
+    }
     return 0;
 }
 
