@@ -2,6 +2,7 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
+#include "../assets/EmbeddedAssets.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -84,6 +85,7 @@ bool readFile(const char* path, std::vector<uint8_t>& out) {
 
 constexpr int kAtlasW = 1024;
 constexpr int kAtlasH = 1024;
+constexpr const char* kEmbeddedFontCacheKey = "__UILO_EMBEDDED_DEFAULT_FONT__";
 
 void initAtlasFace(FontFace& face, stbtt_fontinfo info,
                    std::vector<uint8_t> ttf, float pixelHeight) {
@@ -196,21 +198,55 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
 
 Font Renderer::loadFont(const std::string& path) {
     auto& impl = *m_impl;
+
+    auto loadEmbeddedFallback = [&]() -> Font {
+        auto itEmbedded = impl.fontByPath.find(kEmbeddedFontCacheKey);
+        if (itEmbedded != impl.fontByPath.end()) {
+            Font f; f.id = itEmbedded->second; return f;
+        }
+
+        std::vector<uint8_t> ttf(EMBEDDED_FONT.begin(), EMBEDDED_FONT.end());
+        stbtt_fontinfo probe{};
+        if (!stbtt_InitFont(&probe, ttf.data(),
+                           stbtt_GetFontOffsetForIndex(ttf.data(), 0))) {
+            std::fprintf(stderr, "[UILO] loadFont: embedded fallback font is invalid\n");
+            return Font{};
+        }
+
+        Impl::FontRecord rec;
+        rec.ttfData = std::move(ttf);
+        uint32_t id = (uint32_t)impl.fonts.size();
+        impl.fonts.push_back(std::move(rec));
+        impl.fontByPath.emplace(kEmbeddedFontCacheKey, id);
+
+        Font f; f.id = id; return f;
+    };
+
+    if (path.empty()) {
+        return loadEmbeddedFallback();
+    }
+
     auto it = impl.fontByPath.find(path);
     if (it != impl.fontByPath.end()) {
         Font f; f.id = it->second; return f;
     }
+
     std::vector<uint8_t> ttf;
     if (!readFile(path.c_str(), ttf)) {
-        std::fprintf(stderr, "[UILO] loadFont: failed to read '%s'\n", path.c_str());
-        return Font{};
+        std::fprintf(stderr, "[UILO] loadFont: failed to read '%s', using embedded fallback\n", path.c_str());
+        Font f = loadEmbeddedFallback();
+        if (f.valid()) impl.fontByPath.emplace(path, f.id);
+        return f;
     }
+
     // Validate
     stbtt_fontinfo probe{};
     if (!stbtt_InitFont(&probe, ttf.data(),
                        stbtt_GetFontOffsetForIndex(ttf.data(), 0))) {
-        std::fprintf(stderr, "[UILO] loadFont: invalid TTF '%s'\n", path.c_str());
-        return Font{};
+        std::fprintf(stderr, "[UILO] loadFont: invalid TTF '%s', using embedded fallback\n", path.c_str());
+        Font f = loadEmbeddedFallback();
+        if (f.valid()) impl.fontByPath.emplace(path, f.id);
+        return f;
     }
     Impl::FontRecord rec;
     rec.ttfData = std::move(ttf);

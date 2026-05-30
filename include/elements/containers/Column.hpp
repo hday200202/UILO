@@ -48,6 +48,7 @@ private:
     ColumnOptions m_options;
     float         m_scrollOffset  = 0.f;
     float         m_contentHeight = 0.f;
+    float         m_scrollViewportHeight = 0.f;
     float         m_lastScale     = 1.f;
 };
 

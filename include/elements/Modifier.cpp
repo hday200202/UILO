@@ -18,6 +18,7 @@ Modifier& Modifier::setHeight(Dimension dim) {
 Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *this; }
 Modifier& Modifier::setOuterPadding(float padding) { m_outerPadding = padding; return *this; }
 Modifier& Modifier::setVisible(bool visible) { m_visible = visible; return *this; }
+Modifier& Modifier::ignoreScroll(bool ignore) { m_ignoreScroll = ignore; return *this; }
 Modifier& Modifier::setFreePosition(const Vec2f& freePos) { m_freePosition = freePos; return *this; }
 Modifier& Modifier::setMaterial(const Material& m) { m_material = m; return *this; }
 // setOnLeftClick / setOnRightClick / setOnHover / setOnScroll are templated
@@ -35,6 +36,7 @@ const FuncPtr& Modifier::getOnUpdateEnd() const { return m_onUpdateEnd; }
 const ScrollFuncPtr& Modifier::getOnScroll() const { return m_onScroll; }
 float Modifier::getOuterPadding() const { return m_outerPadding; }
 bool Modifier::getVisible() const { return m_visible; }
+bool Modifier::getIgnoreScroll() const { return m_ignoreScroll; }
 Vec2f Modifier::getFreePosition() const { return m_freePosition; }
 const Material& Modifier::getMaterial() const { return m_material; }
 

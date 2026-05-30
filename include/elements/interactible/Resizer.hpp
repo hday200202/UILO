@@ -14,8 +14,10 @@ public:
     ResizerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     ResizerOptions& setResizeWidthMin(Dimension d)  { m_resizeWidthMin  = d; return *this; }
     ResizerOptions& setResizeWidthMax(Dimension d)  { m_resizeWidthMax  = d; return *this; }
+    ResizerOptions& setResizeWidthStep(Dimension d) { m_resizeWidthStep = d; return *this; }
     ResizerOptions& setResizeHeightMin(Dimension d) { m_resizeHeightMin = d; return *this; }
     ResizerOptions& setResizeHeightMax(Dimension d) { m_resizeHeightMax = d; return *this; }
+    ResizerOptions& setResizeHeightStep(Dimension d){ m_resizeHeightStep = d; return *this; }
 
     ResizerDir getDirection()       const { return m_direction; }
     float      getThickness()       const { return m_thickness; }
@@ -23,8 +25,10 @@ public:
     const std::string& getColorRole() const { return m_colorRole; }
     Dimension  getResizeWidthMin()  const { return m_resizeWidthMin; }
     Dimension  getResizeWidthMax()  const { return m_resizeWidthMax; }
+    Dimension  getResizeWidthStep() const { return m_resizeWidthStep; }
     Dimension  getResizeHeightMin() const { return m_resizeHeightMin; }
     Dimension  getResizeHeightMax() const { return m_resizeHeightMax; }
+    Dimension  getResizeHeightStep()const { return m_resizeHeightStep; }
 
 private:
     ResizerDir m_direction       = ResizerDir::Right;
@@ -33,8 +37,10 @@ private:
     std::string m_colorRole;
     Dimension  m_resizeWidthMin  = {0.f,       false};
     Dimension  m_resizeWidthMax  = {100000.f,  false};
+    Dimension  m_resizeWidthStep = {0.f,       false};
     Dimension  m_resizeHeightMin = {0.f,       false};
     Dimension  m_resizeHeightMax = {100000.f,  false};
+    Dimension  m_resizeHeightStep = {0.f,      false};
 };
 
 /*

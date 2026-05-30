@@ -2,6 +2,7 @@
 #include "../../UILO.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
 
 namespace uilo {
 
@@ -39,29 +40,44 @@ void Resizer::update(Rectf& parentBounds, float dt) {
     const float parentW = m_containerBounds.size.x / scale;
     const float parentH = m_containerBounds.size.y / scale;
 
+    auto snapToStep = [](float value, float minValue, float maxValue, float step) {
+        float v = std::clamp(value, minValue, maxValue);
+        if (step <= 0.f) return v;
+        const float snapped = minValue + std::round((v - minValue) / step) * step;
+        return std::clamp(snapped, minValue, maxValue);
+    };
+
     switch (dir) {
         case ResizerDir::Left: {
             float wMin = std::max(1.f, m_options.getResizeWidthMin().resolve(parentW));
             float wMax = m_options.getResizeWidthMax().resolve(parentW);
-            m_target->getModifier().setWidth({std::clamp(m_dragStartW + dx, wMin, wMax), false});
+            float wStep = m_options.getResizeWidthStep().resolve(parentW);
+            float w = snapToStep(m_dragStartW + dx, wMin, wMax, wStep);
+            m_target->getModifier().setWidth({w, false});
             break;
         }
         case ResizerDir::Right: {
             float wMin = std::max(1.f, m_options.getResizeWidthMin().resolve(parentW));
             float wMax = m_options.getResizeWidthMax().resolve(parentW);
-            m_target->getModifier().setWidth({std::clamp(m_dragStartW - dx, wMin, wMax), false});
+            float wStep = m_options.getResizeWidthStep().resolve(parentW);
+            float w = snapToStep(m_dragStartW - dx, wMin, wMax, wStep);
+            m_target->getModifier().setWidth({w, false});
             break;
         }
         case ResizerDir::Top: {
             float hMin = std::max(1.f, m_options.getResizeHeightMin().resolve(parentH));
             float hMax = m_options.getResizeHeightMax().resolve(parentH);
-            m_target->getModifier().setHeight({std::clamp(m_dragStartH + dy, hMin, hMax), false});
+            float hStep = m_options.getResizeHeightStep().resolve(parentH);
+            float h = snapToStep(m_dragStartH + dy, hMin, hMax, hStep);
+            m_target->getModifier().setHeight({h, false});
             break;
         }
         case ResizerDir::Bottom: {
             float hMin = std::max(1.f, m_options.getResizeHeightMin().resolve(parentH));
             float hMax = m_options.getResizeHeightMax().resolve(parentH);
-            m_target->getModifier().setHeight({std::clamp(m_dragStartH - dy, hMin, hMax), false});
+            float hStep = m_options.getResizeHeightStep().resolve(parentH);
+            float h = snapToStep(m_dragStartH - dy, hMin, hMax, hStep);
+            m_target->getModifier().setHeight({h, false});
             break;
         }
     }
