@@ -121,7 +121,14 @@ bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
     return consumed;
 }
 
-void Container::addElement(Element* element) {m_children.push_back(element); }
+void Container::addElement(Element* element) {
+    if (!element) return;
+    m_children.push_back(element);
+    if (m_uiloRef) {
+        element->setUILO(*m_uiloRef);
+    }
+    m_dirty = true;
+}
 
 void Container::pruneChildren() {
     m_children.erase(

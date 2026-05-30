@@ -28,23 +28,158 @@ void Column::update(Rectf& parentBounds, float dt) {
         m_lastScale = scale;
     }
 
-    // Scrollable path: simple top-to-bottom stack, no alignment bucketing
+    m_scrollViewportHeight = m_bounds.size.y;
+
+    // Scrollable path: supports pinned children (Modifier::ignoreScroll)
+    // and scrolls only the remaining sibling viewport.
     if (m_options.getScrollable()) {
-        float cursorY = m_bounds.position.y - m_scrollOffset;
+        std::vector<Element*> pinnedTop;
+        std::vector<Element*> pinnedMid;
+        std::vector<Element*> pinnedBottom;
+
+        auto resolvedPinnedH = [&](Element* e) -> float {
+            Dimension dim = e->getModifier().getHeight();
+            return dim.percent ? (m_bounds.size.y * dim.value / 100.f) : dim.value * scale;
+        };
+
+        float pinnedTopH = 0.f;
+        float pinnedBottomH = 0.f;
+        float pinnedMidH = 0.f;
+
+        for (auto* child : m_children) {
+            if (!child->getModifier().getVisible()) continue;
+            if (child->getType() == ElementType::Resizer) continue;
+            if (!child->getModifier().getIgnoreScroll()) continue;
+
+            const float rh = resolvedPinnedH(child);
+            Align align = child->getModifier().getAlign();
+            if (hasAlign(align, Align::Bottom)) {
+                pinnedBottom.push_back(child);
+                pinnedBottomH += rh;
+            } else if (hasAlign(align, Align::CenterY)) {
+                pinnedMid.push_back(child);
+                pinnedMidH += rh;
+            } else {
+                pinnedTop.push_back(child);
+                pinnedTopH += rh;
+            }
+        }
+
+        auto layoutPinnedGroup = [&](std::vector<Element*>& group, float startY) {
+            float cursorY = startY;
+            for (auto* child : group) {
+                const float rh = resolvedPinnedH(child);
+                Rectf slot{{m_bounds.position.x, cursorY}, {m_bounds.size.x, rh}};
+                child->tick(slot, dt);
+                cursorY += rh;
+            }
+        };
+
+        layoutPinnedGroup(pinnedTop, m_bounds.position.y);
+        layoutPinnedGroup(pinnedMid, m_bounds.position.y + (m_bounds.size.y - pinnedMidH) * 0.5f);
+        layoutPinnedGroup(pinnedBottom, m_bounds.position.y + m_bounds.size.y - pinnedBottomH);
+
+        Rectf scrollViewport = m_bounds;
+        scrollViewport.position.y += pinnedTopH;
+        scrollViewport.size.y = std::max(0.f, m_bounds.size.y - pinnedTopH - pinnedBottomH);
+        m_scrollViewportHeight = scrollViewport.size.y;
+
+        float cursorY = scrollViewport.position.y - m_scrollOffset;
         m_contentHeight = 0.f;
         for (auto* child : m_children) {
             if (!child->getModifier().getVisible()) continue;
             if (child->getType() == ElementType::Resizer) continue;
+            if (child->getModifier().getIgnoreScroll()) continue;
+
             Dimension dim = child->getModifier().getHeight();
-            float rh = dim.percent ? (m_bounds.size.y * dim.value / 100.f) : dim.value * scale;
-            Rectf slot{ {m_bounds.position.x, cursorY}, {m_bounds.size.x, rh} };
+            float rh = dim.percent ? (scrollViewport.size.y * dim.value / 100.f) : dim.value * scale;
+            Rectf slot{ {scrollViewport.position.x, cursorY}, {scrollViewport.size.x, rh} };
             child->tick(slot, dt);
             cursorY      += rh;
             m_contentHeight += rh;
         }
-        const float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
+        const float maxScroll = std::max(0.f, m_contentHeight - scrollViewport.size.y);
         if (m_scrollOffset > maxScroll) { m_scrollOffset = maxScroll; m_dirty = true; }
         if (m_scrollOffset < 0.f)        { m_scrollOffset = 0.f;        m_dirty = true; }
+
+        // Keep resizers interactive in scrollable columns while still excluding
+        // them from layout flow.
+        for (size_t i = 0; i < m_children.size(); ++i) {
+            auto* child = m_children[i];
+            if (child->getType() != ElementType::Resizer) continue;
+            Resizer* r = static_cast<Resizer*>(child);
+
+            Element* prevEl = nullptr;
+            for (int j = (int)i - 1; j >= 0; --j) {
+                if (m_children[j]->getType() != ElementType::Resizer &&
+                    m_children[j]->getModifier().getVisible()) { prevEl = m_children[j]; break; }
+            }
+            Element* nextEl = nullptr;
+            for (size_t j = i + 1; j < m_children.size(); ++j) {
+                if (m_children[j]->getType() != ElementType::Resizer &&
+                    m_children[j]->getModifier().getVisible()) { nextEl = m_children[j]; break; }
+            }
+
+            float bEdge = prevEl ? (prevEl->getBounds().position.y + prevEl->getBounds().size.y
+                                    + prevEl->getModifier().getOuterPadding() * scale)
+                                 : m_bounds.position.y;
+            float tEdge = nextEl ? (nextEl->getBounds().position.y
+                                    - nextEl->getModifier().getOuterPadding() * scale)
+                                 : (m_bounds.position.y + m_bounds.size.y);
+
+            const bool hasPrev = (prevEl != nullptr);
+            const bool hasNext = (nextEl != nullptr);
+            float boundY = hasPrev && hasNext ? (bEdge + tEdge) * 0.5f
+                                              : (hasPrev ? bEdge : (hasNext ? tEdge : (m_bounds.position.y + m_bounds.size.y * 0.5f)));
+
+            float lftX = 0.f;
+            float rgtX = 0.f;
+            if (hasPrev && hasNext) {
+                lftX = std::max(prevEl->getBounds().position.x, nextEl->getBounds().position.x);
+                rgtX = std::min(prevEl->getBounds().position.x + prevEl->getBounds().size.x,
+                                nextEl->getBounds().position.x + nextEl->getBounds().size.x);
+            } else if (hasPrev) {
+                lftX = prevEl->getBounds().position.x;
+                rgtX = prevEl->getBounds().position.x + prevEl->getBounds().size.x;
+            } else if (hasNext) {
+                lftX = nextEl->getBounds().position.x;
+                rgtX = nextEl->getBounds().position.x + nextEl->getBounds().size.x;
+            } else {
+                lftX = m_bounds.position.x;
+                rgtX = m_bounds.position.x + m_bounds.size.x;
+            }
+
+            Dimension hitDim = r->getModifier().getHeight();
+            float hitH = hitDim.percent ? (m_bounds.size.y * hitDim.value / 100.f)
+                                        : hitDim.value * scale;
+            const float spanW = std::max(0.f, rgtX - lftX);
+            const Dimension widthDim = r->getModifier().getWidth();
+            const float requestedW = widthDim.percent ? (spanW * widthDim.value / 100.f)
+                                                      : widthDim.value * scale;
+            const float hitW = std::clamp(requestedW, 0.f, spanW);
+            const Align hitAlign = r->getModifier().getAlign();
+            float hitX = lftX;
+            if (hasAlign(hitAlign, Align::Right)) {
+                hitX = rgtX - hitW;
+            } else if (hasAlign(hitAlign, Align::CenterX)) {
+                hitX = lftX + (spanW - hitW) * 0.5f;
+            }
+            Rectf rBounds = {
+                { hitX, boundY - hitH * 0.5f },
+                { hitW, hitH }
+            };
+
+            Element* resizerTarget = nullptr;
+            switch (r->getDirection()) {
+                case ResizerDir::Left:
+                case ResizerDir::Top:    resizerTarget = prevEl; break;
+                case ResizerDir::Right:
+                case ResizerDir::Bottom: resizerTarget = nextEl; break;
+            }
+            r->setTarget(resizerTarget);
+            r->setContainerBounds(m_bounds);
+            child->tick(rBounds, dt);
+        }
 
         if (forceTreeUpdate) {
             for (auto* child : m_children) {
@@ -187,27 +322,51 @@ void Column::update(Rectf& parentBounds, float dt) {
         float tEdge = nextEl ? (nextEl->getBounds().position.y
                                 - nextEl->getModifier().getOuterPadding() * scale)
                              : (m_bounds.position.y + m_bounds.size.y);
-        float boundY = (bEdge + tEdge) * 0.5f;
 
-        // Clamp X extent to the intersection of the adjacent panels' bounds
-        // so the resizer doesn't bleed into areas outside the visible panels.
-        float lftX = std::max(
-            prevEl ? prevEl->getBounds().position.x : m_bounds.position.x,
-            nextEl ? nextEl->getBounds().position.x : m_bounds.position.x
-        );
-        float rgtX = std::min(
-            prevEl ? (prevEl->getBounds().position.x + prevEl->getBounds().size.x) : (m_bounds.position.x + m_bounds.size.x),
-            nextEl ? (nextEl->getBounds().position.x + nextEl->getBounds().size.x) : (m_bounds.position.x + m_bounds.size.x)
-        );
+        const bool hasPrev = (prevEl != nullptr);
+        const bool hasNext = (nextEl != nullptr);
+        float boundY = hasPrev && hasNext ? (bEdge + tEdge) * 0.5f
+                                          : (hasPrev ? bEdge : (hasNext ? tEdge : (m_bounds.position.y + m_bounds.size.y * 0.5f)));
+
+        // Clamp X extent to adjacent panels when both exist; otherwise use the
+        // single available panel so end-of-list resizers remain usable.
+        float lftX = 0.f;
+        float rgtX = 0.f;
+        if (hasPrev && hasNext) {
+            lftX = std::max(prevEl->getBounds().position.x, nextEl->getBounds().position.x);
+            rgtX = std::min(prevEl->getBounds().position.x + prevEl->getBounds().size.x,
+                            nextEl->getBounds().position.x + nextEl->getBounds().size.x);
+        } else if (hasPrev) {
+            lftX = prevEl->getBounds().position.x;
+            rgtX = prevEl->getBounds().position.x + prevEl->getBounds().size.x;
+        } else if (hasNext) {
+            lftX = nextEl->getBounds().position.x;
+            rgtX = nextEl->getBounds().position.x + nextEl->getBounds().size.x;
+        } else {
+            lftX = m_bounds.position.x;
+            rgtX = m_bounds.position.x + m_bounds.size.x;
+        }
 
         // Hit area uses the modifier's height (scaled), matching how every other
         // element scales. getThickness() is the visual strip height only.
         Dimension hitDim = r->getModifier().getHeight();
         float hitH = hitDim.percent ? (m_bounds.size.y * hitDim.value / 100.f)
                                     : hitDim.value * scale;
+        const float spanW = std::max(0.f, rgtX - lftX);
+        const Dimension widthDim = r->getModifier().getWidth();
+        const float requestedW = widthDim.percent ? (spanW * widthDim.value / 100.f)
+                                                  : widthDim.value * scale;
+        const float hitW = std::clamp(requestedW, 0.f, spanW);
+        const Align hitAlign = r->getModifier().getAlign();
+        float hitX = lftX;
+        if (hasAlign(hitAlign, Align::Right)) {
+            hitX = rgtX - hitW;
+        } else if (hasAlign(hitAlign, Align::CenterX)) {
+            hitX = lftX + (spanW - hitW) * 0.5f;
+        }
         Rectf rBounds = {
-            { lftX, boundY - hitH * 0.5f },
-            { std::max(0.f, rgtX - lftX), hitH }
+            { hitX, boundY - hitH * 0.5f },
+            { hitW, hitH }
         };
 
         Element* resizerTarget = nullptr;
@@ -266,15 +425,22 @@ void Column::render() {
         && m_modifier.getMaterial().kind != Material::Kind::None;
     if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
 
-    for (auto* child : m_children) {
-        if (child->getType() == ElementType::Resizer) continue;
-        if (m_uiloRef) {
-            const float rr = m_options.getRounding() * (m_uiloRef->getScale());
-            m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+    auto renderPass = [&](bool ignoreScrollChildren) {
+        for (auto* child : m_children) {
+            if (child->getType() == ElementType::Resizer) continue;
+            if (child->getModifier().getIgnoreScroll() != ignoreScrollChildren) continue;
+            if (m_uiloRef) {
+                const float rr = m_options.getRounding() * (m_uiloRef->getScale());
+                m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+            }
+            child->render();
+            if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
         }
-        child->render();
-        if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
-    }
+    };
+
+    // Base scrolling content first, pinned ignoreScroll content last on top.
+    renderPass(false);
+    renderPass(true);
 
     if (glassSubtree) m_uiloRef->getRenderer().endGlassSubtree();
 
@@ -293,7 +459,8 @@ bool Column::checkScroll(const Vec2f& mousePosition, float delta, bool precise, 
         // Wheel: discrete step. ScrollSpeed scales both (40 = default 1:1).
         const float speed     = m_options.getScrollSpeed();
         const float step      = precise ? 30.f * (speed / 40.f) : speed;
-        const float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
+        const float maxScroll = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
+        if (maxScroll <= 0.f) return false;
         m_scrollOffset = std::clamp(m_scrollOffset - delta * step, 0.f, maxScroll);
         m_dirty = true;
         return true;
@@ -315,7 +482,8 @@ bool Column::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, 
     if (m_options.getScrollable()) {
         const float speed     = m_options.getScrollSpeed();
         const float step      = precise ? 30.f * (speed / 40.f) : speed;
-        const float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
+        const float maxScroll = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
+        if (maxScroll <= 0.f) return false;
         m_scrollOffset = std::clamp(m_scrollOffset - delta.y * step, 0.f, maxScroll);
         m_dirty = true;
         return true;

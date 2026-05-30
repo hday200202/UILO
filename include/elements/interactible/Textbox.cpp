@@ -169,7 +169,6 @@ void Textbox::rebuildSfText() {
 
     if (!m_uiloRef) return;
     auto& renderer = m_uiloRef->getRenderer();
-    if (m_options.getFontPath().empty()) return;
     Font font = renderer.loadFont(m_options.getFontPath());
     if (!font.valid()) return;
 
@@ -204,11 +203,6 @@ void Textbox::rebuildWrapped() {
     m_displayU32.clear();
     if (!m_uiloRef) { m_displayU32 = m_text; m_wrappedDisplay = u32ToUtf8(m_displayU32); return; }
     auto& renderer = m_uiloRef->getRenderer();
-    if (m_options.getFontPath().empty()) {
-        m_displayU32 = m_text;
-        m_wrappedDisplay = u32ToUtf8(m_displayU32);
-        return;
-    }
     Font font = renderer.loadFont(m_options.getFontPath());
     if (!font.valid()) {
         m_displayU32 = m_text;
@@ -607,7 +601,6 @@ void Textbox::render() {
         renderer.draw(Rect{m_bounds.position, m_bounds.size, bg, outline, outlineT});
     }
 
-    if (m_options.getFontPath().empty()) return;
     Font font = renderer.loadFont(m_options.getFontPath());
     if (!font.valid()) return;
 

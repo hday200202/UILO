@@ -20,7 +20,7 @@ Text::Text(
 
 void Text::init() {
     if (m_loaded || !m_uiloRef) return;
-    if (m_options.getFontPath().empty()) return;
+
     Font f = m_uiloRef->getRenderer().loadFont(m_options.getFontPath());
     if (f.valid()) {
         m_fontId = f.id;

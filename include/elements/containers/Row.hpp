@@ -47,6 +47,7 @@ private:
     RowOptions m_options;
     float      m_scrollOffset = 0.f;
     float      m_contentWidth = 0.f;
+    float      m_scrollViewportWidth = 0.f;
     float      m_lastScale    = 1.f;
 };
 

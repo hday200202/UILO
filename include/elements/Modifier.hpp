@@ -122,6 +122,7 @@ public:
 
     Modifier& setOuterPadding(float padding);
     Modifier& setVisible(bool visible);
+    Modifier& ignoreScroll(bool ignore);
     Modifier& setFreePosition(const Vec2f& freePos);
     Modifier& setMaterial(const Material& m);
 
@@ -137,6 +138,7 @@ public:
     const ScrollFuncPtr& getOnScroll()  const;
     float getOuterPadding()             const;
     bool getVisible()                   const;
+    bool getIgnoreScroll()              const;
     Vec2f getFreePosition() const;
     const Material& getMaterial()       const;
 
@@ -153,6 +155,7 @@ private:
     ScrollFuncPtr m_onScroll;
     float m_outerPadding                = 0.f;
     bool m_visible                      = true;
+    bool m_ignoreScroll                 = false;
     Vec2f m_freePosition = {0.f, 0.f};
     Material m_material;
 };
