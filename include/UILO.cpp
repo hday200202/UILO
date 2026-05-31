@@ -89,6 +89,32 @@ void UILO::requestCursor(CursorType type, int priority) {
     }
 }
 
+float UILO::getScrollLinkOffset(const std::string& linkId, bool horizontal) const {
+    if (linkId.empty()) return 0.f;
+    const auto& links = horizontal ? m_scrollLinksX : m_scrollLinksY;
+    auto it = links.find(linkId);
+    return it != links.end() ? it->second : 0.f;
+}
+
+void UILO::setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal) {
+    if (linkId.empty()) return;
+    auto& links = horizontal ? m_scrollLinksX : m_scrollLinksY;
+    links[linkId] = offset;
+}
+
+float UILO::getZoomLinkValue(const std::string& linkId, bool horizontal) const {
+    if (linkId.empty()) return 1.f;
+    const auto& links = horizontal ? m_zoomLinksX : m_zoomLinksY;
+    auto it = links.find(linkId);
+    return it != links.end() ? it->second : 1.f;
+}
+
+void UILO::setZoomLinkValue(const std::string& linkId, float zoom, bool horizontal) {
+    if (linkId.empty()) return;
+    auto& links = horizontal ? m_zoomLinksX : m_zoomLinksY;
+    links[linkId] = zoom;
+}
+
 void UILO::setOnLiveResize(std::function<void()> cb) {
     m_onLiveResize = std::move(cb);
 }
@@ -423,6 +449,22 @@ void UILO::handleEvent(const SDL_Event& event) {
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         const float dy = event.wheel.y;  // positive = scroll up
         const float dx = event.wheel.x;
+        const SDL_Keymod mods = SDL_GetModState();
+        const bool shiftHeld = (mods & SDL_KMOD_SHIFT) != 0;
+        const bool zoomShortcut = (mods & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
+        if (zoomShortcut && dy != 0.f) {
+            const float mag = dy * 0.1f;
+            dispatchZoom(m_mousePos, mag);
+            return;
+        }
+        if (shiftHeld && dx == 0.f && dy != 0.f) {
+            // Real mouse wheel + shift -> horizontal scroll. Trackpads keep
+            // using their native horizontal delta instead.
+            const bool precise = std::fabs(dy - std::round(dy)) > 1e-4f
+                              || (dy != 0.f && std::fabs(dy) < 1.f);
+            dispatchScroll(m_mousePos, Vec2f{dy, 0.f}, precise);
+            return;
+        }
         // On macOS the native NSEvent monitor consumes trackpad events,
         // so anything reaching here is a real mouse wheel: deltas are
         // ±N integers. Other platforms still get the heuristic.
@@ -469,23 +511,63 @@ void UILO::handleEvent(const SDL_Event& event) {
             }
         }
 
-    if (event.type == SDL_EVENT_KEY_DOWN)
-        if (m_currInteractible) {
-            // Same stale-repeat filter for key-only events (backspace,
-            // arrows, etc. don't produce TEXT_INPUT).
-            if (event.key.repeat && event.common.timestamp > m_lastKeyUpNs) {
-                int nKeys = 0;
-                const bool* state = SDL_GetKeyboardState(&nKeys);
-                bool anyDown = false;
-                for (int i = 0; i < nKeys; ++i) {
-                    if (state[i]) { anyDown = true; break; }
-                }
-                if (!anyDown) return;
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        const SDL_Keymod mods = SDL_GetModState();
+        const bool zoomShortcut = (mods & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
+        if (zoomShortcut) {
+            if (event.key.key == SDLK_EQUALS || event.key.key == SDLK_KP_PLUS) {
+                dispatchZoom(m_mousePos, 0.1f);
+                return;
             }
-            bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
-            bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
-            m_currInteractible->handleKeyInput(event.key.key, shift, ctrl);
+            if (event.key.key == SDLK_MINUS || event.key.key == SDLK_KP_MINUS) {
+                dispatchZoom(m_mousePos, -0.1f);
+                return;
+            }
         }
+
+        if ((event.key.key == SDLK_UP || event.key.key == SDLK_DOWN ||
+             event.key.key == SDLK_PAGEUP || event.key.key == SDLK_PAGEDOWN ||
+             event.key.key == SDLK_HOME || event.key.key == SDLK_END) &&
+            !m_currInteractible) {
+            const bool shiftHeld = (mods & SDL_KMOD_SHIFT) != 0;
+            float vertical = 0.f;
+            float horizontal = 0.f;
+            if (event.key.key == SDLK_UP) vertical = -1.f;
+            else if (event.key.key == SDLK_DOWN) vertical = 1.f;
+            else if (event.key.key == SDLK_PAGEUP) vertical = -3.f;
+            else if (event.key.key == SDLK_PAGEDOWN) vertical = 3.f;
+            else if (event.key.key == SDLK_HOME) vertical = -1000.f;
+            else if (event.key.key == SDLK_END) vertical = 1000.f;
+
+            if (shiftHeld) {
+                horizontal = vertical;
+                vertical = 0.f;
+            }
+
+            if (horizontal != 0.f || vertical != 0.f) {
+                dispatchScroll(m_mousePos, Vec2f{horizontal, vertical}, false);
+                return;
+            }
+        }
+
+        if (!m_currInteractible) return;
+
+        // Same stale-repeat filter for key-only events (backspace,
+        // arrows, etc. don't produce TEXT_INPUT).
+        if (event.key.repeat && event.common.timestamp > m_lastKeyUpNs) {
+            int nKeys = 0;
+            const bool* state = SDL_GetKeyboardState(&nKeys);
+            bool anyDown = false;
+            for (int i = 0; i < nKeys; ++i) {
+                if (state[i]) { anyDown = true; break; }
+            }
+            if (!anyDown) return;
+        }
+
+        bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+        bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
+        m_currInteractible->handleKeyInput(event.key.key, shift, ctrl);
+    }
 }
 
 }

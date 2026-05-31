@@ -7,13 +7,34 @@
 
 namespace uilo {
 
+namespace {
+void resolveScrollBounds(const ColumnOptions& options, float contentMax, float& minScroll, float& maxScroll) {
+    if (options.hasScrollMin() && options.hasScrollMax()) {
+        minScroll = options.getScrollMin();
+        maxScroll = options.getScrollMax();
+        if (minScroll > maxScroll) std::swap(minScroll, maxScroll);
+        return;
+    }
+
+    minScroll = 0.f;
+    maxScroll = std::max(0.f, contentMax);
+}
+
+bool canUseLooseScrollBounds(const ColumnOptions& options, float contentMax) {
+    return (options.hasScrollMin() && options.hasScrollMax()) || contentMax > 0.f;
+}
+}
+
 Column::Column(Modifier modifier, ColumnOptions options, contains children, const std::string& name)
     : Container(modifier, children, name), m_options(options)
 {}
 
 void Column::setScrollOffset(float offset) {
-    const float maxScroll = std::max(0.f, m_contentHeight - m_bounds.size.y);
-    m_scrollOffset = std::clamp(offset, 0.f, std::max(0.f, maxScroll));
+    const float contentMax = std::max(0.f, m_contentHeight - m_bounds.size.y);
+    float minScroll = 0.f;
+    float maxScroll = 0.f;
+    resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
+    m_scrollOffset = std::clamp(offset, minScroll, maxScroll);
     m_dirty = true;
 }
 
@@ -26,6 +47,18 @@ void Column::update(Rectf& parentBounds, float dt) {
     if (scale != m_lastScale && m_lastScale > 0.f) {
         m_scrollOffset *= scale / m_lastScale;
         m_lastScale = scale;
+    }
+
+    if (m_uiloRef && !m_options.getScrollLink().empty()) {
+        m_scrollOffset = m_uiloRef->getScrollLinkOffset(m_options.getScrollLink(), false);
+    }
+
+    if (m_uiloRef && !m_options.getZoomLink().empty()) {
+        m_zoomY = m_uiloRef->getZoomLinkValue(m_options.getZoomLink(), false);
+    }
+
+    if (m_uiloRef && !m_options.getZoomLink().empty()) {
+        m_zoomY = m_uiloRef->getZoomLinkValue(m_options.getZoomLink(), false);
     }
 
     m_scrollViewportHeight = m_bounds.size.y;
@@ -92,15 +125,24 @@ void Column::update(Rectf& parentBounds, float dt) {
             if (child->getModifier().getIgnoreScroll()) continue;
 
             Dimension dim = child->getModifier().getHeight();
-            float rh = dim.percent ? (scrollViewport.size.y * dim.value / 100.f) : dim.value * scale;
+            const float zf = m_options.getZoomableY() ? m_zoomY : 1.f;
+            float rh = dim.percent ? (scrollViewport.size.y * dim.value / 100.f) : dim.value * scale * zf;
             Rectf slot{ {scrollViewport.position.x, cursorY}, {scrollViewport.size.x, rh} };
             child->tick(slot, dt);
             cursorY      += rh;
             m_contentHeight += rh;
         }
-        const float maxScroll = std::max(0.f, m_contentHeight - scrollViewport.size.y);
-        if (m_scrollOffset > maxScroll) { m_scrollOffset = maxScroll; m_dirty = true; }
-        if (m_scrollOffset < 0.f)        { m_scrollOffset = 0.f;        m_dirty = true; }
+        m_scrollViewportY = scrollViewport.position.y;
+        const float contentMax = std::max(0.f, m_contentHeight - scrollViewport.size.y);
+        float minScroll = 0.f;
+        float maxScroll = 0.f;
+        resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
+        const float clamped    = std::clamp(m_scrollOffset, minScroll, maxScroll);
+        if (clamped != m_scrollOffset) { m_scrollOffset = clamped; m_dirty = true; }
+        if (m_uiloRef && !m_options.getScrollLink().empty())
+            m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
+        if (m_uiloRef && !m_options.getZoomLink().empty())
+            m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
 
         // Keep resizers interactive in scrollable columns while still excluding
         // them from layout flow.
@@ -423,6 +465,48 @@ void Column::render() {
 
     const bool glassSubtree = m_uiloRef
         && m_modifier.getMaterial().kind != Material::Kind::None;
+
+    // Subdivision grid (horizontal lines, drawn after background) ------
+    if (m_options.getSubDivisions() > 0.f && m_options.getScrollable() && m_uiloRef) {
+        auto& renderer   = m_uiloRef->getRenderer();
+        const float zf   = m_options.getZoomableY() ? m_zoomY : 1.f;
+        const float base = m_options.getSubDivisions() * scale * zf;
+        const float minPx = std::max(1.f, m_options.getSubDivisionMinScreenPx());
+        const Color divColor = resolveColor(m_options.getSubDivisionColorRole(),
+                                            m_options.getSubDivisionColor());
+        const unsigned int segmentCount = std::max(1u, m_options.getSubDivisionMajor() + m_options.getSubDivisionMinor());
+        if (base > 0.f && divColor.a > 0 && segmentCount > 0u) {
+            const float viewTop    = m_scrollViewportY;
+            const float viewBottom = viewTop + m_scrollViewportHeight;
+            const float left       = m_bounds.position.x;
+            const float right      = m_bounds.position.x + m_bounds.size.x;
+            auto positiveMod = [](float value, float period) {
+                float mod = std::fmod(value, period);
+                if (mod < 0.f) mod += period;
+                return mod;
+            };
+
+            const float segmentRatio = static_cast<float>(segmentCount);
+            const float resubdivideMinPx = std::max(minPx, m_options.getSubDivisionResubdivideMinScreenPx());
+            float step = base;
+            for (unsigned int depth = 0; step >= minPx; ++depth) {
+                Color lineColor = divColor;
+                const float intensity = std::clamp(1.f / static_cast<float>(depth + 1), 0.16f, 1.f);
+                lineColor.a = static_cast<uint8_t>(static_cast<float>(divColor.a) * intensity);
+
+                const float modOffset  = positiveMod(m_scrollOffset, step);
+                const float firstLineY = viewTop - modOffset;
+                for (float y = firstLineY; y <= viewBottom + 0.5f; y += step)
+                    renderer.draw(Line{{left, y}, {right, y}, 1.f, lineColor});
+
+                const float nextStep = step / segmentRatio;
+                if (nextStep < resubdivideMinPx) break;
+                step = nextStep;
+                if (step <= 0.f) break;
+            }
+        }
+    }
+
     if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
 
     auto renderPass = [&](bool ignoreScrollChildren) {
@@ -447,6 +531,39 @@ void Column::render() {
     m_dirty = false;
 }
 
+bool Column::checkZoom(const Vec2f& mousePosition, float magnification) {
+    if (!m_bounds.contains(mousePosition)) return false;
+
+    if (Container::checkZoom(mousePosition, magnification)) return true;
+
+    if (!m_options.getZoomableY()) return false;
+
+    const float oldZoom = m_zoomY;
+    m_zoomY = std::clamp(m_zoomY * (1.f + magnification),
+                         m_options.getZoomMin(), m_options.getZoomMax());
+    if (m_zoomY == oldZoom) return false;
+
+    const float sc   = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float vt   = m_scrollViewportY;
+    const float mRel = mousePosition.y - vt;
+    const float content = (mRel + m_scrollOffset) / (sc * oldZoom);
+    float minScroll = 0.f;
+    float maxScroll = 0.f;
+    resolveScrollBounds(m_options, std::max(0.f, m_contentHeight - m_scrollViewportHeight), minScroll, maxScroll);
+    m_scrollOffset = std::clamp(content * sc * m_zoomY - mRel, minScroll, maxScroll);
+    if (m_uiloRef && !m_options.getScrollLink().empty())
+        m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
+    if (m_uiloRef && !m_options.getZoomLink().empty())
+        m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
+    m_dirty = true;
+    return true;
+}
+
+void Column::setZoomY(float z) {
+    m_zoomY = std::clamp(z, m_options.getZoomMin(), m_options.getZoomMax());
+    m_dirty = true;
+}
+
 bool Column::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
     if (!m_bounds.contains(mousePosition)) return false;
 
@@ -459,9 +576,16 @@ bool Column::checkScroll(const Vec2f& mousePosition, float delta, bool precise, 
         // Wheel: discrete step. ScrollSpeed scales both (40 = default 1:1).
         const float speed     = m_options.getScrollSpeed();
         const float step      = precise ? 30.f * (speed / 40.f) : speed;
-        const float maxScroll = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
-        if (maxScroll <= 0.f) return false;
-        m_scrollOffset = std::clamp(m_scrollOffset - delta * step, 0.f, maxScroll);
+        const float contentMax = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
+        if (!canUseLooseScrollBounds(m_options, contentMax)) return false;
+        float minScroll = 0.f;
+        float maxScroll = 0.f;
+        resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
+        m_scrollOffset = std::clamp(m_scrollOffset - delta * step, minScroll, maxScroll);
+        if (m_uiloRef && !m_options.getScrollLink().empty())
+            m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
+        if (m_uiloRef && !m_options.getZoomLink().empty())
+            m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
         m_dirty = true;
         return true;
     }
@@ -482,9 +606,15 @@ bool Column::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, 
     if (m_options.getScrollable()) {
         const float speed     = m_options.getScrollSpeed();
         const float step      = precise ? 30.f * (speed / 40.f) : speed;
-        const float maxScroll = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
-        if (maxScroll <= 0.f) return false;
-        m_scrollOffset = std::clamp(m_scrollOffset - delta.y * step, 0.f, maxScroll);
+        const float contentMax = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
+        float minScroll = 0.f;
+        float maxScroll = 0.f;
+        resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
+        m_scrollOffset = std::clamp(m_scrollOffset - delta.y * step, minScroll, maxScroll);
+        if (m_uiloRef && !m_options.getScrollLink().empty())
+            m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
+        if (m_uiloRef && !m_options.getZoomLink().empty())
+            m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
         m_dirty = true;
         return true;
     }

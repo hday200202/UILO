@@ -81,6 +81,11 @@ public:
     const Palette& getPalette() const { return m_palette; }
     void requestCursor(CursorType type, int priority = 0);
 
+    float getScrollLinkOffset(const std::string& linkId, bool horizontal) const;
+    void  setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal);
+    float getZoomLinkValue(const std::string& linkId, bool horizontal) const;
+    void  setZoomLinkValue(const std::string& linkId, float zoom, bool horizontal);
+
     // Register a callback invoked synchronously by SDL during the macOS
     // live-resize loop (and on normal resize events). The host should do
     // a full beginFrame/clear/ui.render()/endFrame inside it so the
@@ -137,6 +142,11 @@ private:
     bool m_prevRightMouse = false;
 
     Palette m_palette;
+
+    std::unordered_map<std::string, float> m_scrollLinksX;
+    std::unordered_map<std::string, float> m_scrollLinksY;
+    std::unordered_map<std::string, float> m_zoomLinksX;
+    std::unordered_map<std::string, float> m_zoomLinksY;
 
     CursorType m_pendingCursor         = CursorType::Arrow;
     int        m_pendingCursorPriority = 0;

@@ -29,6 +29,7 @@ public:
     SliderOptions& setThumbRounding(float r)                { m_thumbRounding = r;      return *this; }
     SliderOptions& setRange(float mn, float mx)             { m_min = mn; m_max = mx;   return *this; }
     SliderOptions& setStep(float s)                         { m_step = s;               return *this; }
+    SliderOptions& setInvertScroll(bool invert)             { m_invertScroll = invert;  return *this; }
     SliderOptions& setDefaultValue(float v)                 { m_defaultValue = v; m_hasDefault = true; return *this; }
     SliderOptions& setOnValueChanged(ValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
     SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
@@ -47,6 +48,7 @@ public:
     float                getMin()             const { return m_min; }
     float                getMax()             const { return m_max; }
     float                getStep()            const { return m_step; }
+    bool                 getInvertScroll()    const { return m_invertScroll; }
     float                getDefaultValue()    const { return m_hasDefault ? m_defaultValue : m_min; }
     bool                 hasDefault()         const { return m_hasDefault; }
     SliderOrientation    getOrientation()     const { return m_orientation; }
@@ -60,13 +62,14 @@ private:
     Color            m_thumbColor      = Color::White;
     std::string          m_thumbColorRole;
     ThumbShape           m_thumbShape      = ThumbShape::Circle;
-    float                m_trackThickness  = 0.25f;                     // fraction of element height
+    float                m_trackThickness  = 0.25f;                     // <=1: fraction of cross-axis size, >1: pixels
     float                m_trackRounding   = 0.f;                       // corner radius of the track bar (px)
     Vec2f            m_thumbSize       = {8.f, 0.f};
     float                m_thumbRounding   = 0.f;                       // corner radius of thumb rect
     float                m_min             = 0.f;
     float                m_max             = 1.f;
     float                m_step            = 0.f;                       // 0 = continuous; >0 = discrete snap increment
+    bool                 m_invertScroll    = false;
     float                m_defaultValue    = 0.f;
     bool                 m_hasDefault      = false;
     SliderOrientation    m_orientation     = SliderOrientation::Horizontal;
