@@ -51,7 +51,10 @@ void Slider::render() {
         : 0.f;
 
     if (isHoriz) {
-        const float trackH = m_bounds.size.y * m_options.getTrackThickness();
+        const float thickness = m_options.getTrackThickness();
+        const float trackH = thickness > 1.f
+            ? std::clamp(thickness * scale, 1.f, m_bounds.size.y)
+            : std::clamp(m_bounds.size.y * thickness, 1.f, m_bounds.size.y);
         const float trackY = m_bounds.position.y + (m_bounds.size.y - trackH) * 0.5f;
         const float trackX = m_bounds.position.x;
         const float trackW = m_bounds.size.x;
@@ -79,7 +82,10 @@ void Slider::render() {
                 m_options.getThumbRounding() * scale, 8, thumbColor});
         }
     } else {
-        const float trackW = m_bounds.size.x * m_options.getTrackThickness();
+        const float thickness = m_options.getTrackThickness();
+        const float trackW = thickness > 1.f
+            ? std::clamp(thickness * scale, 1.f, m_bounds.size.x)
+            : std::clamp(m_bounds.size.x * thickness, 1.f, m_bounds.size.x);
         const float trackX = m_bounds.position.x + (m_bounds.size.x - trackW) * 0.5f;
         const float trackY = m_bounds.position.y;
         const float trackH = m_bounds.size.y;
@@ -89,16 +95,16 @@ void Slider::render() {
         renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
                                   trackRounding, 8, trackColor});
 
-        // Fill from top to thumb
+        // Fill from bottom to thumb (vertical sliders are bottom-up).
         const float fillH = hh + t * (trackH - 2.f * hh);
         if (fillH > 0.f)
-            renderer.draw(RoundedRect{{trackX, trackY}, {trackW, fillH},
+            renderer.draw(RoundedRect{{trackX, trackY + (trackH - fillH)}, {trackW, fillH},
                                       trackRounding, 8, fillColor});
 
         // Thumb
         const float thumbHW = resolveThumbHalfWidth();
         const float thumbCX = m_bounds.position.x + m_bounds.size.x * 0.5f;
-        const float thumbCY = trackY + hh + t * (trackH - 2.f * hh);
+        const float thumbCY = trackY + trackH - hh - t * (trackH - 2.f * hh);
         if (m_options.getThumbShape() == ThumbShape::Circle) {
             renderer.draw(Circle{{thumbCX, thumbCY}, hh, 24, thumbColor});
         } else {
@@ -149,10 +155,27 @@ bool Slider::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise
     const float step  = m_options.getStep() > 0.f
         ? m_options.getStep()
         : range * 0.05f;
-    m_scrollAccum -= delta * step;
+    const float scrollSign = m_options.getInvertScroll() ? 1.f : -1.f;
+    const float rawDelta = scrollSign * delta * step;
+    const float minV = m_options.getMin();
+    const float maxV = m_options.getMax();
+
     const float before = m_value;
-    applyValue(m_value + m_scrollAccum);
-    m_scrollAccum -= (m_value - before);
+    const float target = std::clamp(before + m_scrollAccum + rawDelta, minV, maxV);
+    applyValue(target);
+    const float applied = m_value - before;
+    m_scrollAccum += rawDelta - applied;
+
+    // If we've hit a boundary, discard overscroll in that direction so
+    // users don't need extra opposite scroll to "unwind" hidden accumulation.
+    if ((m_value <= minV && m_scrollAccum < 0.f) ||
+        (m_value >= maxV && m_scrollAccum > 0.f)) {
+        m_scrollAccum = 0.f;
+    }
+
+    if (std::abs(m_scrollAccum) < 1e-6f) {
+        m_scrollAccum = 0.f;
+    }
     if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(this, delta);
     return true;
 }
@@ -211,7 +234,7 @@ float Slider::valueFromMouseY(float mouseY) const {
     const float top    = m_bounds.position.y + hh;
     const float height = m_bounds.size.y - 2.f * hh;
     if (height <= 0.f) return m_options.getMin();
-    float t = (mouseY - top) / height;
+    float t = 1.f - ((mouseY - top) / height);
     t = std::clamp(t, 0.f, 1.f);
     return m_options.getMin() + t * (m_options.getMax() - m_options.getMin());
 }

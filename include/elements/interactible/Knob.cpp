@@ -221,10 +221,26 @@ bool Knob::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/
     const float step  = m_options.getStep() > 0.f
         ? m_options.getStep()
         : range * 0.05f;
-    m_scrollAccum -= delta * step;
+    const float scrollSign = m_options.getInvertScroll() ? 1.f : -1.f;
+    const float rawDelta = scrollSign * delta * step;
+    const float minV = m_options.getMin();
+    const float maxV = m_options.getMax();
+
     const float before = m_value;
-    applyValue(m_value + m_scrollAccum);
-    m_scrollAccum -= (m_value - before);
+    const float target = std::clamp(before + m_scrollAccum + rawDelta, minV, maxV);
+    applyValue(target);
+    const float applied = m_value - before;
+    m_scrollAccum += rawDelta - applied;
+
+    // Clamp away hidden overscroll at boundaries.
+    if ((m_value <= minV && m_scrollAccum < 0.f) ||
+        (m_value >= maxV && m_scrollAccum > 0.f)) {
+        m_scrollAccum = 0.f;
+    }
+
+    if (std::abs(m_scrollAccum) < 1e-6f) {
+        m_scrollAccum = 0.f;
+    }
     if (m_modifier.getOnScroll()) m_modifier.getOnScroll()(this, delta);
     return true;
 }

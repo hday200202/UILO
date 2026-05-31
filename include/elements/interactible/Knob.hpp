@@ -56,6 +56,7 @@ public:
     KnobOptions& setRange(float mn, float mx) { m_min = mn; m_max = mx; return *this; }
     KnobOptions& setDefaultValue(float v)     { m_defaultValue = v; m_hasDefault = true; return *this; }
     KnobOptions& setStep(float s)             { m_step = s;             return *this; }
+    KnobOptions& setInvertScroll(bool invert) { m_invertScroll = invert; return *this; }
     // Pixels of vertical drag (after UI scale) required to traverse the
     // full value range.
     KnobOptions& setDragPixelsPerRange(float p){m_dragPixelsPerRange = p;return *this; }
@@ -86,6 +87,7 @@ public:
     float getDefaultValue()     const { return m_hasDefault ? m_defaultValue : m_min; }
     bool  hasDefault()          const { return m_hasDefault; }
     float getStep()             const { return m_step; }
+    bool  getInvertScroll()     const { return m_invertScroll; }
     float getDragPixelsPerRange()const{ return m_dragPixelsPerRange; }
     const KnobValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
@@ -117,6 +119,7 @@ private:
     float m_defaultValue       = 0.f;
     bool  m_hasDefault         = false;
     float m_step               = 0.f;
+    bool  m_invertScroll       = false;
     float m_dragPixelsPerRange = 150.f;
     KnobValueChangedFuncPtr m_onValueChanged;
 };
