@@ -483,7 +483,7 @@ void Column::render() {
         auto& renderer   = m_uiloRef->getRenderer();
         const float zf   = m_options.getZoomableY() ? m_zoomY : 1.f;
         const float base = m_options.getSubDivisions() * scale * zf;
-        const float minPx = std::max(1.f, m_options.getSubDivisionMinScreenPx());
+        const float minPx = std::max(1.f, m_options.getSubDivisionMinScreenPx()) * scale;
         const Color divColor = resolveColor(m_options.getSubDivisionColorRole(),
                                             m_options.getSubDivisionColor());
         const unsigned int segmentCount = std::max(1u, m_options.getSubDivisionMajor() + m_options.getSubDivisionMinor());
@@ -499,18 +499,14 @@ void Column::render() {
             };
 
             const float segmentRatio = static_cast<float>(segmentCount);
-            const float minDistance = std::max(
-                minPx,
-                m_options.getSubDivisionsMinDistance() > 0.f
-                    ? m_options.getSubDivisionsMinDistance() * scale
-                    : minPx
-            );
-            const float maxDistance = std::max(
-                minDistance,
-                m_options.getSubDivisionsMaxDistance() > 0.f
-                    ? m_options.getSubDivisionsMaxDistance() * scale
-                    : (m_options.getSubDivisions() * scale)
-            );
+            const float minDistanceBase = m_options.getSubDivisionsMinDistance() > 0.f
+                ? m_options.getSubDivisionsMinDistance()
+                : m_options.getSubDivisionMinScreenPx();
+            const float maxDistanceBase = m_options.getSubDivisionsMaxDistance() > 0.f
+                ? m_options.getSubDivisionsMaxDistance()
+                : m_options.getSubDivisions();
+            const float minDistance = std::max(minPx, minDistanceBase * scale);
+            const float maxDistance = std::max(minDistance, maxDistanceBase * scale);
 
             const float majorStep = normalizeGridStep(base,
                                                       segmentRatio,
