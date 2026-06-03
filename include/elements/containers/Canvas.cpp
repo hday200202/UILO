@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "../../UILO.hpp"
 #include "../../renderer/Shapes.hpp"
@@ -269,6 +270,20 @@ void Canvas::render() {
         auto toWinX = [&](float cx) { return m_bounds.position.x + (cx - m_pan.x) * zoomX; };
         auto toWinY = [&](float cy) { return m_bounds.position.y + (cy - m_pan.y) * zoomY; };
 
+        auto countSamples = [](float start, float end, float step) -> uint64_t {
+            if (step <= 0.f || end < start) return 0u;
+            return static_cast<uint64_t>(std::floor((end - start) / step)) + 1u;
+        };
+        const uint64_t approxX = countSamples(startX, x1, stepX);
+        const uint64_t approxY = countSamples(startY, y1, stepY);
+        const uint64_t approxMarkers = approxX * approxY;
+        constexpr uint64_t kMaxDenseMarkers = 12000u;
+        const uint32_t lodStride = (approxMarkers > kMaxDenseMarkers)
+            ? static_cast<uint32_t>(std::ceil(std::sqrt(
+                  static_cast<double>(approxMarkers) /
+                  static_cast<double>(kMaxDenseMarkers))))
+            : 1u;
+
         // Skip rendering when the grid step collapses below a few pixels
         // on screen — would draw millions of markers and hurt fps.
         const float minScreenStep = 4.f;
@@ -276,11 +291,13 @@ void Canvas::render() {
         if (tooDense) {
             // skip grid pass entirely
         } else if (style == GridLineStyle::Lines) {
+            std::vector<Line> lines;
+            lines.reserve(static_cast<size_t>(approxX + approxY));
             // Vertical lines.
             for (float cx = startX; cx <= x1; cx += stepX) {
                 if (cx < boundLoX || cx > boundHiX) continue;
                 const float wx = toWinX(cx);
-                r.draw(Line{
+                lines.push_back(Line{
                     {wx, m_bounds.position.y},
                     {wx, m_bounds.position.y + m_bounds.size.y},
                     thick, gc
@@ -290,33 +307,45 @@ void Canvas::render() {
             for (float cy = startY; cy <= y1; cy += stepY) {
                 if (cy < boundLoY || cy > boundHiY) continue;
                 const float wy = toWinY(cy);
-                r.draw(Line{
+                lines.push_back(Line{
                     {m_bounds.position.x,                  wy},
                     {m_bounds.position.x + m_bounds.size.x, wy},
                     thick, gc
                 });
             }
+            if (!lines.empty()) r.drawLines(lines.data(), lines.size());
         } else if (style == GridLineStyle::Dots) {
             const float radius = std::max(1.f, thick);
-            for (float cy = startY; cy <= y1; cy += stepY) {
+            uint32_t yi = 0u;
+            for (float cy = startY; cy <= y1; cy += stepY, ++yi) {
                 if (cy < boundLoY || cy > boundHiY) continue;
-                for (float cx = startX; cx <= x1; cx += stepX) {
+                if ((yi % lodStride) != 0u) continue;
+                uint32_t xi = 0u;
+                for (float cx = startX; cx <= x1; cx += stepX, ++xi) {
                     if (cx < boundLoX || cx > boundHiX) continue;
+                    if ((xi % lodStride) != 0u) continue;
                     r.draw(Circle{{toWinX(cx), toWinY(cy)}, radius, 12, gc});
                 }
             }
         } else if (style == GridLineStyle::Crosses) {
             const float halfArm = std::max(2.f, cross * 0.5f);
-            for (float cy = startY; cy <= y1; cy += stepY) {
+            std::vector<Line> lines;
+            lines.reserve(static_cast<size_t>((approxMarkers / (lodStride * lodStride)) * 2u + 8u));
+            uint32_t yi = 0u;
+            for (float cy = startY; cy <= y1; cy += stepY, ++yi) {
                 if (cy < boundLoY || cy > boundHiY) continue;
-                for (float cx = startX; cx <= x1; cx += stepX) {
+                if ((yi % lodStride) != 0u) continue;
+                uint32_t xi = 0u;
+                for (float cx = startX; cx <= x1; cx += stepX, ++xi) {
                     if (cx < boundLoX || cx > boundHiX) continue;
+                    if ((xi % lodStride) != 0u) continue;
                     const float wx = toWinX(cx);
                     const float wy = toWinY(cy);
-                    r.draw(Line{{wx - halfArm, wy}, {wx + halfArm, wy}, thick, gc});
-                    r.draw(Line{{wx, wy - halfArm}, {wx, wy + halfArm}, thick, gc});
+                    lines.push_back(Line{{wx - halfArm, wy}, {wx + halfArm, wy}, thick, gc});
+                    lines.push_back(Line{{wx, wy - halfArm}, {wx, wy + halfArm}, thick, gc});
                 }
             }
+            if (!lines.empty()) r.drawLines(lines.data(), lines.size());
         }
     }
 

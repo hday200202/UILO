@@ -481,6 +481,16 @@ bool Renderer::init(uint32_t width, uint32_t height,
     if (pd.type == bgfx::NativeWindowHandleType::Wayland)
         init.type = bgfx::RendererType::Vulkan;
 
+    // Raise transient buffer budgets so dense UI passes (grids, markers,
+    // waveform-like primitives) don't hit allocation cliffs and silently drop
+    // draws mid-frame.
+    constexpr uint32_t kTransientVbBytes = 32u * 1024u * 1024u;
+    constexpr uint32_t kTransientIbBytes =  8u * 1024u * 1024u;
+    init.limits.maxTransientVbSize = std::max(init.limits.maxTransientVbSize,
+                                              kTransientVbBytes);
+    init.limits.maxTransientIbSize = std::max(init.limits.maxTransientIbSize,
+                                              kTransientIbBytes);
+
     uint32_t resetFlags = BGFX_RESET_VSYNC | BGFX_RESET_FLUSH_AFTER_RENDER;
     if      (msaa >= 16) resetFlags |= BGFX_RESET_MSAA_X16;
     else if (msaa >=  8) resetFlags |= BGFX_RESET_MSAA_X8;
@@ -494,6 +504,14 @@ bool Renderer::init(uint32_t width, uint32_t height,
     if (!bgfx::init(init)) {
         std::fprintf(stderr, "[UILO] bgfx::init failed\n");
         return false;
+    }
+
+    if (const bgfx::Caps* caps = bgfx::getCaps()) {
+        std::fprintf(stderr,
+            "[UILO] bgfx caps: maxDrawCalls=%u transientVB=%u KB transientIB=%u KB\n",
+            caps->limits.maxDrawCalls,
+            caps->limits.maxTransientVbSize / 1024u,
+            caps->limits.maxTransientIbSize / 1024u);
     }
 
     bgfx::setDebug(BGFX_DEBUG_NONE);

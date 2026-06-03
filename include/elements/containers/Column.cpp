@@ -4,6 +4,7 @@
 #include "../interactible/Resizer.hpp"
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace uilo {
 
@@ -22,6 +23,21 @@ void resolveScrollBounds(const ColumnOptions& options, float contentMax, float& 
 
 bool canUseLooseScrollBounds(const ColumnOptions& options, float contentMax) {
     return (options.hasScrollMin() && options.hasScrollMax()) || contentMax > 0.f;
+}
+
+float normalizeGridStep(float step,
+                        float ratio,
+                        float minDistance,
+                        float maxDistance) {
+    if (step <= 0.f || minDistance <= 0.f || maxDistance <= 0.f) return step;
+    if (ratio <= 1.f) ratio = 2.f;
+    if (maxDistance < minDistance) maxDistance = minDistance;
+
+    // Keep a stable major-step envelope across zoom by repeatedly coarsening
+    // or refining until step lands inside the configured thresholds.
+    while (step < minDistance) step *= ratio;
+    while (step > maxDistance) step /= ratio;
+    return step;
 }
 }
 
@@ -51,10 +67,6 @@ void Column::update(Rectf& parentBounds, float dt) {
 
     if (m_uiloRef && !m_options.getScrollLink().empty()) {
         m_scrollOffset = m_uiloRef->getScrollLinkOffset(m_options.getScrollLink(), false);
-    }
-
-    if (m_uiloRef && !m_options.getZoomLink().empty()) {
-        m_zoomY = m_uiloRef->getZoomLinkValue(m_options.getZoomLink(), false);
     }
 
     if (m_uiloRef && !m_options.getZoomLink().empty()) {
@@ -487,22 +499,69 @@ void Column::render() {
             };
 
             const float segmentRatio = static_cast<float>(segmentCount);
-            const float resubdivideMinPx = std::max(minPx, m_options.getSubDivisionResubdivideMinScreenPx());
-            float step = base;
-            for (unsigned int depth = 0; step >= minPx; ++depth) {
-                Color lineColor = divColor;
-                const float intensity = std::clamp(1.f / static_cast<float>(depth + 1), 0.16f, 1.f);
-                lineColor.a = static_cast<uint8_t>(static_cast<float>(divColor.a) * intensity);
+            const float minDistance = std::max(
+                minPx,
+                m_options.getSubDivisionsMinDistance() > 0.f
+                    ? m_options.getSubDivisionsMinDistance() * scale
+                    : minPx
+            );
+            const float maxDistance = std::max(
+                minDistance,
+                m_options.getSubDivisionsMaxDistance() > 0.f
+                    ? m_options.getSubDivisionsMaxDistance() * scale
+                    : (m_options.getSubDivisions() * scale)
+            );
 
-                const float modOffset  = positiveMod(m_scrollOffset, step);
-                const float firstLineY = viewTop - modOffset;
-                for (float y = firstLineY; y <= viewBottom + 0.5f; y += step)
-                    renderer.draw(Line{{left, y}, {right, y}, 1.f, lineColor});
+            const float majorStep = normalizeGridStep(base,
+                                                      segmentRatio,
+                                                      minDistance,
+                                                      maxDistance);
+            const float minorStep = segmentCount > 1u ? (majorStep / segmentRatio) : 0.f;
 
-                const float nextStep = step / segmentRatio;
-                if (nextStep < resubdivideMinPx) break;
-                step = nextStep;
-                if (step <= 0.f) break;
+            const unsigned int stripeEvery = std::max(1u, m_options.getSubDivisionStripeEvery());
+            const Color stripeColor = resolveColor(m_options.getSubDivisionStripeColorRole(),
+                                                   m_options.getSubDivisionStripeColor());
+            if (m_options.getSubDivisionStripeEvery() > 0u && stripeColor.a > 0 && majorStep > 0.f) {
+                const float stripeStep = majorStep * static_cast<float>(stripeEvery);
+                if (stripeStep > 0.f) {
+                    const float pairStep = stripeStep * 2.f;
+                    const float pairOffset = positiveMod(m_scrollOffset, pairStep);
+                    const float firstBandY = viewTop - pairOffset;
+                    for (float bandY = firstBandY; bandY <= viewBottom + 0.5f; bandY += pairStep) {
+                        const float drawY0 = std::max(viewTop, bandY);
+                        const float drawY1 = std::min(viewBottom, bandY + stripeStep);
+                        if (drawY1 <= drawY0) continue;
+                        renderer.draw(Rect{{left, drawY0}, {right - left, drawY1 - drawY0}, stripeColor});
+                    }
+                }
+            }
+
+            if (segmentCount > 1u && minorStep > 0.f) {
+                Color minorColor = divColor;
+                minorColor.a = static_cast<uint8_t>(static_cast<float>(divColor.a) * 0.45f);
+                const float minorOffset = positiveMod(m_scrollOffset, minorStep);
+                const float firstMinorY = viewTop - minorOffset;
+                std::vector<Line> minorLines;
+                const size_t minorEstimate = static_cast<size_t>(
+                    std::max(0.f, (viewBottom + 0.5f - firstMinorY) / minorStep) + 1.f);
+                minorLines.reserve(minorEstimate);
+                for (float y = firstMinorY; y <= viewBottom + 0.5f; y += minorStep)
+                    minorLines.push_back(Line{{left, y}, {right, y}, 1.f, minorColor});
+                if (!minorLines.empty())
+                    renderer.drawLines(minorLines.data(), minorLines.size());
+            }
+
+            if (majorStep > 0.f) {
+                const float majorOffset = positiveMod(m_scrollOffset, majorStep);
+                const float firstMajorY = viewTop - majorOffset;
+                std::vector<Line> majorLines;
+                const size_t majorEstimate = static_cast<size_t>(
+                    std::max(0.f, (viewBottom + 0.5f - firstMajorY) / majorStep) + 1.f);
+                majorLines.reserve(majorEstimate);
+                for (float y = firstMajorY; y <= viewBottom + 0.5f; y += majorStep)
+                    majorLines.push_back(Line{{left, y}, {right, y}, 1.f, divColor});
+                if (!majorLines.empty())
+                    renderer.drawLines(majorLines.data(), majorLines.size());
             }
         }
     }
@@ -596,35 +655,39 @@ bool Column::checkScroll(const Vec2f& mousePosition, float delta, bool precise, 
 bool Column::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
     if (!m_bounds.contains(mousePosition)) return false;
 
-    // Try children with the full 2D delta first so a 2-axis consumer like
-    // Canvas can grab both components before we use delta.y for our own
-    // vertical scroll behavior.
+    // Offer the full 2D delta to children first (e.g. canvas, nested rows).
+    // We intentionally do NOT short-circuit on their return value: a child Row
+    // consuming horizontal scroll must not prevent this Column from also
+    // handling vertical scroll on the same event.
+    bool consumed = false;
     for (auto* child : m_children)
         if (child->getBounds().contains(mousePosition))
-            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+            if (child->checkScroll(mousePosition, delta, precise, momentum)) { consumed = true; break; }
 
-    if (m_options.getScrollable()) {
-        const float speed     = m_options.getScrollSpeed();
-        const float step      = precise ? 30.f * (speed / 40.f) : speed;
+    // Column owns delta.y — always apply vertical scroll independently.
+    if (m_options.getScrollable() && delta.y != 0.f) {
+        const float speed      = m_options.getScrollSpeed();
+        const float step       = precise ? 30.f * (speed / 40.f) : speed;
         const float contentMax = std::max(0.f, m_contentHeight - m_scrollViewportHeight);
-        float minScroll = 0.f;
-        float maxScroll = 0.f;
-        resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
-        m_scrollOffset = std::clamp(m_scrollOffset - delta.y * step, minScroll, maxScroll);
-        if (m_uiloRef && !m_options.getScrollLink().empty())
-            m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
-        if (m_uiloRef && !m_options.getZoomLink().empty())
-            m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
-        m_dirty = true;
-        return true;
+        if (canUseLooseScrollBounds(m_options, contentMax)) {
+            float minScroll = 0.f, maxScroll = 0.f;
+            resolveScrollBounds(m_options, contentMax, minScroll, maxScroll);
+            m_scrollOffset = std::clamp(m_scrollOffset - delta.y * step, minScroll, maxScroll);
+            if (m_uiloRef && !m_options.getScrollLink().empty())
+                m_uiloRef->setScrollLinkOffset(m_options.getScrollLink(), m_scrollOffset, false);
+            if (m_uiloRef && !m_options.getZoomLink().empty())
+                m_uiloRef->setZoomLinkValue(m_options.getZoomLink(), m_zoomY, false);
+            m_dirty  = true;
+            consumed = true;
+        }
     }
 
-    if (m_modifier.getOnScroll()) {
+    if (!consumed && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta.y);
         return true;
     }
 
-    return false;
+    return consumed;
 }
 
 }

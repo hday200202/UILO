@@ -25,6 +25,11 @@ public:
     ColumnOptions& setSubDivisionColorRole(const std::string& r) { m_subDivColorRole = r;     return *this; }
     ColumnOptions& setSubDivisionMinScreenPx(float px)           { m_subDivMinPx = px;        return *this; }
     ColumnOptions& setSubDivisionResubdivideMinScreenPx(float px){ m_subDivResubdivideMinPx = px; return *this; }
+    ColumnOptions& setSubDivisionsMinDistance(float px)          { m_subDivMinDistance = px; return *this; }
+    ColumnOptions& setSubDivisionsMaxDistance(float px)          { m_subDivMaxDistance = px; return *this; }
+    ColumnOptions& setSubDivisionStripeEvery(unsigned int count) { m_subDivStripeEvery = count; return *this; }
+    ColumnOptions& setSubDivisionStripeColor(Color c)            { m_subDivStripeColor = c; return *this; }
+    ColumnOptions& setSubDivisionStripeColorRole(const std::string& r) { m_subDivStripeColorRole = r; return *this; }
 
     // Zoom -------------------------------------------------------------
     ColumnOptions& setZoomableY(bool v)   { m_zoomableY = v;  return *this; }
@@ -50,6 +55,11 @@ public:
     const std::string& getSubDivisionColorRole()   const { return m_subDivColorRole; }
     float              getSubDivisionMinScreenPx() const { return m_subDivMinPx; }
     float              getSubDivisionResubdivideMinScreenPx() const { return m_subDivResubdivideMinPx; }
+    float              getSubDivisionsMinDistance() const { return m_subDivMinDistance; }
+    float              getSubDivisionsMaxDistance() const { return m_subDivMaxDistance; }
+    unsigned int       getSubDivisionStripeEvery() const { return m_subDivStripeEvery; }
+    Color              getSubDivisionStripeColor() const { return m_subDivStripeColor; }
+    const std::string& getSubDivisionStripeColorRole() const { return m_subDivStripeColorRole; }
     bool               getZoomableY()              const { return m_zoomableY; }
     float              getZoomMin()                const { return m_zoomMin; }
     float              getZoomMax()                const { return m_zoomMax; }
@@ -74,6 +84,11 @@ private:
     std::string m_subDivColorRole;
     float       m_subDivMinPx     = 4.f;
     float       m_subDivResubdivideMinPx = 24.f;
+    float       m_subDivMinDistance = 0.f;
+    float       m_subDivMaxDistance = 0.f;
+    unsigned int m_subDivStripeEvery = 0;
+    Color       m_subDivStripeColor = Color{0, 0, 0, 0};
+    std::string m_subDivStripeColorRole;
     bool        m_zoomableY       = false;
     float       m_zoomMin         = 0.1f;
     float       m_zoomMax         = 50.f;
