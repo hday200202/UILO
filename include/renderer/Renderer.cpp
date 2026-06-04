@@ -669,6 +669,11 @@ void Renderer::beginFrame() {
     // pushes its uniforms (bgfx uniform state isn't guaranteed to
     // persist across bgfx::frame()).
     m_impl->lastClipValid = false;
+    // Defensive reset: clip stacks should be balanced each frame.
+    m_impl->scissorTop = 0;
+    m_impl->roundClipTop = 0;
+    m_impl->scissorOverflowDepth = 0;
+    m_impl->roundClipOverflowDepth = 0;
 }
 
 void Renderer::endFrame() {
@@ -876,7 +881,10 @@ void Renderer::drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size,
 void Renderer::pushScissor(Rectf b) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
-    if (impl.scissorTop >= Impl::kMaxScissor) return;
+    if (impl.scissorTop >= Impl::kMaxScissor) {
+        ++impl.scissorOverflowDepth;
+        return;
+    }
     if (impl.scissorTop > 0) {
         auto& p  = impl.scissorStack[impl.scissorTop - 1];
         float px = (float)p.x, py = (float)p.y;
@@ -889,16 +897,39 @@ void Renderer::pushScissor(Rectf b) {
         b.position = {nx, ny};
         b.size     = {std::max(0.f, nx2 - nx), std::max(0.f, ny2 - ny)};
     }
+
+    // Quantize to integer pixel bounds conservatively: floor min edges and
+    // ceil max edges so clipping remains symmetric and stable as UI scale
+    // introduces fractional coordinates.
+    const float qx0f = std::floor(b.position.x);
+    const float qy0f = std::floor(b.position.y);
+    const float qx1f = std::ceil(b.position.x + b.size.x);
+    const float qy1f = std::ceil(b.position.y + b.size.y);
+
+    const float x0f = std::max(0.f, qx0f);
+    const float y0f = std::max(0.f, qy0f);
+    const float x1f = std::max(x0f, qx1f);
+    const float y1f = std::max(y0f, qy1f);
+
+    const uint16_t x0 = (uint16_t)x0f;
+    const uint16_t y0 = (uint16_t)y0f;
+    const uint16_t w  = (uint16_t)std::max(0.f, x1f - x0f);
+    const uint16_t h  = (uint16_t)std::max(0.f, y1f - y0f);
+
     impl.scissorStack[impl.scissorTop++] = {
-        (uint16_t)std::max(0.f, b.position.x),
-        (uint16_t)std::max(0.f, b.position.y),
-        (uint16_t)std::max(0.f, b.size.x),
-        (uint16_t)std::max(0.f, b.size.y)
+        x0,
+        y0,
+        w,
+        h
     };
 }
 
 void Renderer::popScissor() {
     m_impl->flushSolidBatch();
+    if (m_impl->scissorOverflowDepth > 0) {
+        --m_impl->scissorOverflowDepth;
+        return;
+    }
     if (m_impl->scissorTop > 0) --m_impl->scissorTop;
 }
 
@@ -906,7 +937,10 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
     pushScissor(b);
-    if (impl.roundClipTop >= Impl::kMaxRoundClip) return;
+    if (impl.roundClipTop >= Impl::kMaxRoundClip) {
+        ++impl.roundClipOverflowDepth;
+        return;
+    }
     float r = std::max(0.f, radius);
     if (r <= 0.f) {
         // Plain rectangle: still record an "off" entry so pop balances
@@ -922,10 +956,17 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
         }
         return;
     }
-    float halfW = b.size.x * 0.5f;
-    float halfH = b.size.y * 0.5f;
-    float cx    = b.position.x + halfW;
-    float cy    = b.position.y + halfH;
+    // Snap rounded clip bounds to pixel edges to keep AA and corner shape
+    // visually consistent across scales.
+    const float x0 = std::floor(b.position.x);
+    const float y0 = std::floor(b.position.y);
+    const float x1 = std::ceil(b.position.x + b.size.x);
+    const float y1 = std::ceil(b.position.y + b.size.y);
+
+    float halfW = std::max(0.f, (x1 - x0) * 0.5f);
+    float halfH = std::max(0.f, (y1 - y0) * 0.5f);
+    float cx    = x0 + halfW;
+    float cy    = y0 + halfH;
     // Do NOT intersect the child's rounded-rect SDF with the parent's
     // rect. The SDF defines the *shape* of this element (circle, pill,
     // rounded button, etc.); shrinking halfW/halfH to the visible
@@ -941,7 +982,11 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
 void Renderer::popRoundClip() {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
-    if (impl.roundClipTop > 0) --impl.roundClipTop;
+    if (impl.roundClipOverflowDepth > 0) {
+        --impl.roundClipOverflowDepth;
+    } else if (impl.roundClipTop > 0) {
+        --impl.roundClipTop;
+    }
     popScissor();
 }
 
