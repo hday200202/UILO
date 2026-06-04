@@ -140,15 +140,17 @@ struct Renderer::Impl {
 
     // ---- Scissor stack ----
     struct ScissorEntry { uint16_t x, y, w, h; };
-    static constexpr int            kMaxScissor = 16;
+    static constexpr int            kMaxScissor = 64;
     ScissorEntry                    scissorStack[kMaxScissor]{};
     int                             scissorTop = 0;
+    int                             scissorOverflowDepth = 0;
 
     // ---- Rounded-rect clip stack (SDF in fragment shaders) ----
     struct RoundClipEntry { float cx, cy, halfW, halfH, radius; };
-    static constexpr int            kMaxRoundClip = 16;
+    static constexpr int            kMaxRoundClip = 64;
     RoundClipEntry                  roundClipStack[kMaxRoundClip]{};
     int                             roundClipTop = 0;
+    int                             roundClipOverflowDepth = 0;
 
     // Last clip uniform values actually pushed to bgfx. Used to dedup
     // setUniform calls when consecutive draws share the same clip state.
