@@ -30,6 +30,16 @@ void UILO::setPage(const std::string& pageName) {
     }
 }
 
+void UILO::setActivePage(Page* page) {
+    if (m_activePage == page) return;   // guard: per-frame calls don't reset state
+    if (page) page->setUILO(*this);
+    m_overlays.clear();
+    m_resizers.clear();
+    m_floating.clear();
+    setCurrInteractible(nullptr);
+    m_activePage = page;                // not owned: the caller keeps ownership
+}
+
 void UILO::setCurrInteractible(Interactible* i) {
     m_interactibleActivatedThisFrame = true;
     if (m_currInteractible == i) return;
@@ -123,8 +133,11 @@ void UILO::update() {
     // macOS: install the native scroll monitor + live-resize layer config
     // on the first frame, once a window (and therefore NSApp) is up.
     // Works for both constructor paths.
+    // Embedded (attach) mode: the host owns the window + CAMetalLayer + resize.
+    // Skip the native layer/live-resize setup -- it would clobber the host's
+    // strict-pixel drawable (manifests as the scene filling only a corner).
     static bool s_macInstalled = false;
-    if (!s_macInstalled) {
+    if (!s_macInstalled && m_renderer && m_renderer->ownsContext()) {
         s_macInstalled = true;
         if (m_renderer) {
             if (SDL_Window* w = m_renderer->sdlWindow()) {
