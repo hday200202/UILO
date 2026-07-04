@@ -6,6 +6,7 @@
 
 #include "Modifier.hpp"
 #include "../../include/utils/Math.hpp"
+#include "../utils/Gradient.hpp"
 
 namespace uilo {
 
@@ -52,6 +53,13 @@ public:
     // Returns `literal` unchanged when there's no UILO or the role is
     // empty/"none" or unknown. Defined in Element.cpp.
     Color resolveColor(std::string_view role, Color literal) const;
+    // Resolves an options gradient for drawing. A non-empty `gradientRole`
+    // that names a palette gradient wins over `literal`; each stop's own
+    // role is then resolved to a color. Returns true when the result should
+    // be drawn (an active gradient with at least one visible corner) and
+    // fills `out` in TL, TR, BL, BR order. Defined in Element.cpp.
+    bool resolveGradient(const Gradient& literal, std::string_view gradientRole,
+                         Color out[4]) const;
     void erase();
 
     virtual void setUILO(UILO& uiloRef);

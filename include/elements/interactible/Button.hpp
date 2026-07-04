@@ -11,17 +11,24 @@ public:
 
     ButtonOptions& setColor(const Color& c) { m_color    = c; return *this; }
     ButtonOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
+    // Gradient background — same semantics as RowOptions::setGradient.
+    ButtonOptions& setGradient(const Gradient& g)        { m_gradient     = g; return *this; }
+    ButtonOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
     ButtonOptions& setRounding(float r)          { m_rounding = r; return *this; }
     ButtonOptions& setLabel(Text* t)             { m_label    = t; return *this; }
 
     Color getColor()    const { return m_color; }
     const std::string& getColorRole() const { return m_colorRole; }
+    const Gradient&    getGradient()     const { return m_gradient; }
+    const std::string& getGradientRole() const { return m_gradientRole; }
     float     getRounding() const { return m_rounding; }
     Text*     getLabel()    const { return m_label; }
 
 private:
     Color m_color    = Color{0,0,0,0};
     std::string m_colorRole;
+    Gradient    m_gradient;
+    std::string m_gradientRole;
     float     m_rounding = 0.f;
     Text*     m_label    = nullptr;
 };

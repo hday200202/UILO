@@ -18,9 +18,13 @@ class CanvasOptions {
 public:
     CanvasOptions() = default;
 
-    // Backdrop fill.
+    // Backdrop fill. A gradient takes precedence over color when active;
+    // setGradientRole names a gradient stored in the Palette and wins over
+    // the literal gradient when it resolves.
     CanvasOptions& setColor(const Color& c)             { m_color     = c; return *this; }
     CanvasOptions& setColorRole(const std::string& r)   { m_colorRole = r; return *this; }
+    CanvasOptions& setGradient(const Gradient& g)        { m_gradient     = g; return *this; }
+    CanvasOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
     CanvasOptions& setRounding(float r)                 { m_rounding  = r; return *this; }
 
     // Grid metric. Children placed via addChild(elem, x, y) get x/y rounded
@@ -74,6 +78,8 @@ public:
 
     Color         getColor()           const { return m_color; }
     const std::string& getColorRole()  const { return m_colorRole; }
+    const Gradient&    getGradient()     const { return m_gradient; }
+    const std::string& getGradientRole() const { return m_gradientRole; }
     float         getRounding()        const { return m_rounding; }
     Vec2f         getGridSize()        const { return m_gridSize; }
     GridLineStyle getGridLineStyle()   const { return m_gridStyle; }
@@ -98,6 +104,8 @@ public:
 private:
     Color       m_color         = Color{0, 0, 0, 0};
     std::string m_colorRole;
+    Gradient    m_gradient;
+    std::string m_gradientRole;
     float       m_rounding      = 0.f;
 
     Vec2f       m_gridSize      = {0.f, 0.f};

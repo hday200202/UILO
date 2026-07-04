@@ -10,6 +10,12 @@ public:
 
     RowOptions& setColor(const Color& c)    { m_color       = c;  return *this; }
     RowOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
+    // Gradient background. Takes precedence over color when active; ignored
+    // when a Material owns the background. setGradientRole names a gradient
+    // stored in the Palette (palette.setGradient("hero", g)) and wins over
+    // the literal gradient when it resolves.
+    RowOptions& setGradient(const Gradient& g)        { m_gradient     = g; return *this; }
+    RowOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
     RowOptions& setRounding(float r)            { m_rounding    = r;  return *this; }
     RowOptions& setScrollable(bool v)           { m_scrollable  = v;  return *this; }
     RowOptions& setScrollSpeed(float s)         { m_scrollSpeed = s;  return *this; }
@@ -44,6 +50,8 @@ public:
 
     Color getColor()       const { return m_color; }
     const std::string& getColorRole() const { return m_colorRole; }
+    const Gradient&    getGradient()     const { return m_gradient; }
+    const std::string& getGradientRole() const { return m_gradientRole; }
     float     getRounding()    const { return m_rounding; }
     bool      getScrollable()  const { return m_scrollable; }
     float     getScrollSpeed() const { return m_scrollSpeed; }
@@ -73,6 +81,8 @@ public:
 private:
     Color m_color       = Color{0,0,0,0};
     std::string m_colorRole;
+    Gradient    m_gradient;
+    std::string m_gradientRole;
     float     m_rounding    = 0.f;
     bool      m_scrollable  = false;
     float     m_scrollSpeed = 40.f;

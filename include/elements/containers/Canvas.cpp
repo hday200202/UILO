@@ -221,7 +221,18 @@ void Canvas::render() {
     const Color bg = m_uiloRef->getPalette().resolve(
         m_options.getColorRole(), m_options.getColor());
     const float rounding = m_options.getRounding() * scale;
-    if (bg.a > 0) {
+    Color gc[4];
+    if (resolveGradient(m_options.getGradient(), m_options.getGradientRole(), gc)) {
+        if (rounding <= 0.f) {
+            Rect shape{m_bounds.position, m_bounds.size};
+            shape.setGradientColors(gc);
+            r.draw(shape);
+        } else {
+            RoundedRect shape{m_bounds.position, m_bounds.size, rounding, 8u};
+            shape.setGradientColors(gc);
+            r.draw(shape);
+        }
+    } else if (bg.a > 0) {
         if (rounding <= 0.f)
             r.draw(Rect{m_bounds.position, m_bounds.size, bg});
         else

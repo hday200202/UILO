@@ -16,6 +16,23 @@ namespace uilo {
         return m_uiloRef->getPalette().resolve(role, literal);
     }
 
+    bool Element::resolveGradient(const Gradient& literal,
+                                  std::string_view gradientRole,
+                                  Color out[4]) const {
+        if (!m_uiloRef) return false;
+        const Palette& palette = m_uiloRef->getPalette();
+
+        const Gradient* g = &literal;
+        if (!gradientRole.empty()) {
+            if (const Gradient* named = palette.getGradient(gradientRole))
+                g = named;
+        }
+        if (!g->active()) return false;
+
+        g->resolve(palette, out);
+        return out[0].a > 0 || out[1].a > 0 || out[2].a > 0 || out[3].a > 0;
+    }
+
     void Element::tick(Rectf& parentBounds, float dt) {
         if (m_uiloRef && m_uiloRef->isForcingTreeUpdate()) {
             m_dirty = true;

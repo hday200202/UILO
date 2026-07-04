@@ -43,7 +43,23 @@ Color Palette::resolveImpl(std::string_view role, int depth) const {
     return it->second.color;
 }
 
-void Palette::clear() { m_entries.clear(); }
+void Palette::setGradient(const std::string& role, const Gradient& gradient) {
+    m_gradients[role] = gradient;
+}
+
+const Gradient* Palette::getGradient(std::string_view role) const {
+    auto it = m_gradients.find(role);
+    return it == m_gradients.end() ? nullptr : &it->second;
+}
+
+bool Palette::hasGradient(std::string_view role) const {
+    return m_gradients.find(role) != m_gradients.end();
+}
+
+void Palette::clear() {
+    m_entries.clear();
+    m_gradients.clear();
+}
 
 // ---------------------------------------------------------------------------
 // Defaults

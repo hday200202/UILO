@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/Color.hpp"
+#include "utils/Gradient.hpp"
 
 #include <string>
 #include <string_view>
@@ -50,6 +51,16 @@ public:
     void  setFallback(Color c) { m_fallback = c; }
     Color getFallback() const  { return m_fallback; }
 
+    // ---- Named gradients ---------------------------------------------------
+    // Whole gradients can be palette entries too, so a theme can define e.g.
+    // "hero" once and every element using setGradientRole("hero") follows a
+    // palette swap. Individual GradientStop roles inside the gradient are
+    // still resolved against the color entries above at draw time.
+    void setGradient(const std::string& role, const Gradient& gradient);
+    // Returns nullptr when the role isn't present.
+    const Gradient* getGradient(std::string_view role) const;
+    bool hasGradient(std::string_view role) const;
+
     void clear();
 
     // Pre-populated palettes that cover every role UILO's built-in widgets
@@ -92,6 +103,7 @@ private:
     };
 
     std::unordered_map<std::string, Entry, StringHash, StringEq> m_entries;
+    std::unordered_map<std::string, Gradient, StringHash, StringEq> m_gradients;
     Color m_fallback { 255, 0, 255, 255 }; // unmistakable magenta
 };
 

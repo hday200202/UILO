@@ -465,8 +465,20 @@ void Column::render() {
         if (mat.kind != Material::Kind::None) {
             m_uiloRef->getRenderer().drawGlass(m_bounds, mat, bg);
         } else {
-            if (bg.a > 0) {
-                float r = m_options.getRounding() * scale;
+            float r = m_options.getRounding() * scale;
+            Color gc[4];
+            if (resolveGradient(m_options.getGradient(),
+                                m_options.getGradientRole(), gc)) {
+                if (r <= 0.f) {
+                    Rect shape{m_bounds.position, m_bounds.size};
+                    shape.setGradientColors(gc);
+                    m_uiloRef->getRenderer().draw(shape);
+                } else {
+                    RoundedRect shape{m_bounds.position, m_bounds.size, r, 8u};
+                    shape.setGradientColors(gc);
+                    m_uiloRef->getRenderer().draw(shape);
+                }
+            } else if (bg.a > 0) {
                 if (r <= 0.f)
                     m_uiloRef->getRenderer().draw(Rect{m_bounds.position, m_bounds.size, bg});
                 else
