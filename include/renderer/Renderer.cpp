@@ -1148,6 +1148,14 @@ inline bool scissorEmpty(const Renderer::Impl& impl) {
     const auto& sc = impl.scissorStack[impl.scissorTop - 1];
     return sc.w == 0 || sc.h == 0;
 }
+// Center-vertex color for gradient quads: the average of the four corners.
+inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
+    return packColor(Color{
+        uint8_t((a.r + b.r + c.r + d.r) / 4),
+        uint8_t((a.g + b.g + c.g + d.g) / 4),
+        uint8_t((a.b + b.b + c.b + d.b) / 4),
+        uint8_t((a.a + b.a + c.a + d.a) / 4)});
+}
 } // anon
 
 void Renderer::draw(const Rect& r) {
@@ -1160,7 +1168,6 @@ void Renderer::draw(const Rect& r) {
     }
     impl.solidBatchView = view;
 
-    uint32_t col = packColor(r.fillColor);
     float x = r.position.x, y = r.position.y;
     float w = r.size.x,     h = r.size.y;
 
@@ -1171,24 +1178,47 @@ void Renderer::draw(const Rect& r) {
     impl.rotPt(x0, y0); impl.rotPt(x1, y1);
     impl.rotPt(x2, y2); impl.rotPt(x3, y3);
 
+    // Vertex order is TL, TR, BR, BL.
+    uint32_t c0, c1, c2, c3;
+    if (r.gradient) {
+        c0 = packColor(r.colorTL); c1 = packColor(r.colorTR);
+        c2 = packColor(r.colorBR); c3 = packColor(r.colorBL);
+    } else {
+        c0 = c1 = c2 = c3 = packColor(r.fillColor);
+    }
+
+    const uint16_t vertsNeeded = r.gradient ? 5 : 4;
     const uint16_t base = (uint16_t)impl.solidBatchVerts.size();
     // A frame can legitimately overflow uint16_t indices (65535 / 4 = 16383
     // rects). Flush before crossing the line.
-    if (base + 4 > 65532) {
+    if (base + vertsNeeded > 65532) {
         impl.flushSolidBatch();
         impl.solidBatchView = view;
     }
     const uint16_t b2 = (uint16_t)impl.solidBatchVerts.size();
-    impl.solidBatchVerts.push_back({x0, y0, col});
-    impl.solidBatchVerts.push_back({x1, y1, col});
-    impl.solidBatchVerts.push_back({x2, y2, col});
-    impl.solidBatchVerts.push_back({x3, y3, col});
-    impl.solidBatchIdx.push_back(b2 + 0);
-    impl.solidBatchIdx.push_back(b2 + 1);
-    impl.solidBatchIdx.push_back(b2 + 2);
-    impl.solidBatchIdx.push_back(b2 + 0);
-    impl.solidBatchIdx.push_back(b2 + 2);
-    impl.solidBatchIdx.push_back(b2 + 3);
+    impl.solidBatchVerts.push_back({x0, y0, c0});
+    impl.solidBatchVerts.push_back({x1, y1, c1});
+    impl.solidBatchVerts.push_back({x2, y2, c2});
+    impl.solidBatchVerts.push_back({x3, y3, c3});
+    if (!r.gradient) {
+        impl.solidBatchIdx.push_back(b2 + 0);
+        impl.solidBatchIdx.push_back(b2 + 1);
+        impl.solidBatchIdx.push_back(b2 + 2);
+        impl.solidBatchIdx.push_back(b2 + 0);
+        impl.solidBatchIdx.push_back(b2 + 2);
+        impl.solidBatchIdx.push_back(b2 + 3);
+    } else {
+        // Two triangles interpolate a 4-corner gradient with a visible seam
+        // along the shared diagonal whenever the corner colors aren't
+        // coplanar; a center vertex at the average color keeps the blend
+        // symmetric.
+        float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        impl.rotPt(cx, cy);
+        impl.solidBatchVerts.push_back(
+            {cx, cy, packAvgColor(r.colorTL, r.colorTR, r.colorBL, r.colorBR)});
+        static constexpr uint16_t kFan[12] = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
+        for (uint16_t i : kFan) impl.solidBatchIdx.push_back(b2 + i);
+    }
 
     if (r.outlineThickness > 0.f && r.outlineColor.a > 0) {
         float t = r.outlineThickness;
@@ -1240,36 +1270,54 @@ void Renderer::draw(const RoundedRect& rr) {
 
     float r = std::min(rr.radius, std::min(rr.size.x, rr.size.y) * 0.5f);
     if (r <= 0.f) {
-        draw(Rect{rr.position, rr.size, rr.fillColor,
-                  rr.outlineColor, rr.outlineThickness});
+        Rect rect{rr.position, rr.size, rr.fillColor,
+                  rr.outlineColor, rr.outlineThickness};
+        rect.gradient = rr.gradient;
+        rect.colorTL = rr.colorTL; rect.colorTR = rr.colorTR;
+        rect.colorBL = rr.colorBL; rect.colorBR = rr.colorBR;
+        draw(rect);
         return;
     }
 
     // Render the outline as a slightly larger rounded rect underneath, then
     // the fill on top. Each is a single quad masked by the fragment-shader
-    // SDF clip — anti-aliased corners with no per-corner tessellation.
-    auto submitQuad = [&](float x, float y, float w, float h, Color color) {
-        uint32_t col = packColor(color);
+    // SDF clip — anti-aliased corners with no per-corner tessellation, which
+    // also means a gradient fill is nothing more than per-vertex colors.
+    auto submitQuad = [&](float x, float y, float w, float h,
+                          Color cTL, Color cTR, Color cBR, Color cBL,
+                          bool gradient) {
         float x0 = x,     y0 = y;
         float x1 = x + w, y1 = y;
         float x2 = x + w, y2 = y + h;
         float x3 = x,     y3 = y + h;
         impl.rotPt(x0, y0); impl.rotPt(x1, y1);
         impl.rotPt(x2, y2); impl.rotPt(x3, y3);
-        PosColorVertex verts[4] = {
-            {x0, y0, col},
-            {x1, y1, col},
-            {x2, y2, col},
-            {x3, y3, col},
+        PosColorVertex verts[5] = {
+            {x0, y0, packColor(cTL)},
+            {x1, y1, packColor(cTR)},
+            {x2, y2, packColor(cBR)},
+            {x3, y3, packColor(cBL)},
+            {0.f, 0.f, 0u},             // center, used for gradients only
         };
-        uint16_t idx[6] = {0,1,2, 0,2,3};
+        static constexpr uint16_t idxQuad[6]  = {0,1,2, 0,2,3};
+        // Center-vertex fan: see draw(Rect) — avoids the diagonal seam on
+        // non-coplanar corner colors.
+        static constexpr uint16_t idxFan[12]  = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
+        const uint16_t* idx  = idxQuad;
+        uint32_t        numV = 4, numI = 6;
+        if (gradient) {
+            float cx = x + w * 0.5f, cy = y + h * 0.5f;
+            impl.rotPt(cx, cy);
+            verts[4] = {cx, cy, packAvgColor(cTL, cTR, cBL, cBR)};
+            idx = idxFan; numV = 5; numI = 12;
+        }
 
         bgfx::TransientVertexBuffer tvb;
         bgfx::TransientIndexBuffer  tib;
-        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 4, &tib, 6))
+        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, numV, &tib, numI))
             return;
-        std::memcpy(tvb.data, verts, sizeof(verts));
-        std::memcpy(tib.data, idx,   sizeof(idx));
+        std::memcpy(tvb.data, verts, numV * sizeof(PosColorVertex));
+        std::memcpy(tib.data, idx,   numI * sizeof(uint16_t));
         bgfx::setVertexBuffer(0, &tvb);
         bgfx::setIndexBuffer(&tib);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
@@ -1286,12 +1334,19 @@ void Renderer::draw(const RoundedRect& rr) {
         const float oh = rr.size.y + t * 2.f;
         const float orad = r + t;
         pushRoundClip({{ox, oy}, {ow, oh}}, orad);
-        submitQuad(ox, oy, ow, oh, rr.outlineColor);
+        submitQuad(ox, oy, ow, oh, rr.outlineColor, rr.outlineColor,
+                   rr.outlineColor, rr.outlineColor, false);
         popRoundClip();
     }
 
     pushRoundClip({rr.position, rr.size}, r);
-    submitQuad(rr.position.x, rr.position.y, rr.size.x, rr.size.y, rr.fillColor);
+    if (rr.gradient) {
+        submitQuad(rr.position.x, rr.position.y, rr.size.x, rr.size.y,
+                   rr.colorTL, rr.colorTR, rr.colorBR, rr.colorBL, true);
+    } else {
+        submitQuad(rr.position.x, rr.position.y, rr.size.x, rr.size.y,
+                   rr.fillColor, rr.fillColor, rr.fillColor, rr.fillColor, false);
+    }
     popRoundClip();
 }
 
