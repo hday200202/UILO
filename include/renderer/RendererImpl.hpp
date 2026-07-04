@@ -5,7 +5,8 @@
 #include "Renderer.hpp"
 
 #include <bgfx/bgfx.h>
-#include <bgfx/platform.h>
+// NOTE: no <bgfx/platform.h> -- upstream bgfx merged it into bgfx.h; the old
+// header only exists in stale system installs and pulls in mismatched decls.
 
 #include <string>
 #include <unordered_map>
@@ -103,12 +104,25 @@ struct Renderer::Impl {
     bgfx::TextureHandle             blurColorB    = BGFX_INVALID_HANDLE;
     uint32_t                        fbWidth       = 0;
     uint32_t                        fbHeight      = 0;
-    static constexpr uint16_t       kSceneViewId        = 0;
-    static constexpr uint16_t       kBlurHViewId        = 1;
-    static constexpr uint16_t       kBlurVViewId        = 2;
-    static constexpr uint16_t       kGlassBgViewId      = 3;
-    static constexpr uint16_t       kGlassChildViewId   = 4;
-    static constexpr uint16_t       kCompositeViewId    = 5;
+    // Pipeline view ids. Non-const so an embedded host (e.g. the engine) can
+    // rebase them above its own views via setViewBase(); see Renderer::attach().
+    uint16_t       kSceneViewId        = 0;
+    uint16_t       kBlurHViewId        = 1;
+    uint16_t       kBlurVViewId        = 2;
+    uint16_t       kGlassBgViewId      = 3;
+    uint16_t       kGlassChildViewId   = 4;
+    uint16_t       kCompositeViewId    = 5;
+    void setViewBase(uint16_t base) {
+        kSceneViewId      = base + 0;
+        kBlurHViewId      = base + 1;
+        kBlurVViewId      = base + 2;
+        kGlassBgViewId    = base + 3;
+        kGlassChildViewId = base + 4;
+        kCompositeViewId  = base + 5;
+    }
+    // Embedded (attach) mode: composite alpha-blends over the host's image
+    // instead of an opaque blit. Set by Renderer::attach().
+    bool embedded = false;
 
     // ---- Deferred Material::Kind::* ("glass") draws ---------------------
     // drawGlass() captures here during the main render pass instead of

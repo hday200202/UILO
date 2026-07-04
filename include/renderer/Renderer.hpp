@@ -81,6 +81,12 @@ public:
     bool init(uint32_t width, uint32_t height,
               const std::string& title = "UILO",
               uint8_t msaa = 4);
+    // Embedded mode: attach to a host that already owns the SDL window + bgfx
+    // context. Skips SDL/bgfx/window creation and never calls bgfx::frame /
+    // reset / shutdown. UILO's pipeline views are rebased to start at baseView,
+    // and the scene clears transparent so the UI composites over the host image.
+    bool attach(SDL_Window* hostWindow, uint16_t baseView);
+    bool ownsContext() const { return m_ownsContext; } // false in attach mode
     void shutdown();
 
     void beginFrame();
@@ -248,6 +254,7 @@ private:
     // Views 0..3 are reserved for the scene FB + blur ladder + composite
     // (see RendererImpl.hpp::Impl). User framebuffers start at 4.
     uint16_t m_nextViewId = 6;
+    bool     m_ownsContext = true; // false in attach() mode: host owns bgfx/window/frame
 
     struct ViewEntry { uint16_t viewId; };
     static constexpr int kMaxViewStack = 16;

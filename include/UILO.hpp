@@ -40,6 +40,10 @@ public:
 
     void addPage(Page* page);
     void setPage(const std::string& pageName);
+    // Set the active page from a pointer WITHOUT taking ownership (unlike
+    // addPage). For hosts that own their pages (e.g. an engine Scene) and just
+    // want UILO to render them. No-op if it's already active.
+    void setActivePage(Page* page);
     void setScale(float scale);
 
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});

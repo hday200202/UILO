@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Cross-platform build wrapper for UILO (Linux / macOS / WSL / Git-Bash).
-# Auto-fetches SDL3 and bgfx via CMake FetchContent when not installed.
+# Vendors bgfx: clones bx/bimg/bgfx under ext/ and builds them ONCE with
+# bgfx's own GENie+make build; CMake links the prebuilt static libs.
+# SDL3 is auto-fetched via CMake FetchContent when not installed.
 #
 # Usage:
 #   ./build.sh                              # Release static
@@ -8,7 +10,8 @@
 #   ./build.sh release dynamic              # Release shared
 #   ./build.sh debug dynamic                # Debug shared
 #   ./build.sh clean release dynamic        # wipe build/ then rebuild
-#   UILO_AUTO_FETCH=OFF ./build.sh          # require system SDL3/bgfx
+#                                             (never touches ext/)
+#   UILO_AUTO_FETCH=OFF ./build.sh          # require system SDL3
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,8 +44,59 @@ fi
 
 BUILD_DIR="build/${MODE}-${LINK_TAG}"
 if [[ $DO_CLEAN -eq 1 ]]; then
+    # Deliberately never touches ext/ -- the one-time bgfx build survives cleans.
     echo "[UILO] cleaning $BUILD_DIR"
     rm -rf "$BUILD_DIR"
+fi
+
+# ---------------------------------------------------------------------------
+# Vendored bgfx: bx/bimg/bgfx MUST be sibling dirs under ext/ (bgfx's build
+# references ../bx and ../bimg). Clone all three together -- they version-lock
+# against each other. GENie needs no install; bx ships prebuilt binaries at
+# bx/tools/bin/<os>/genie, which bgfx's makefile uses automatically.
+# ---------------------------------------------------------------------------
+EXT="$ROOT_DIR/ext"
+mkdir -p "$EXT"
+
+clone_if_missing() {
+    local name="$1" url="$2"
+    if [[ ! -d "$EXT/$name" ]]; then
+        echo "[UILO] cloning $name into ext/"
+        git clone --depth 1 "$url" "$EXT/$name"
+    fi
+}
+clone_if_missing bx   "https://github.com/bkaradzic/bx.git"
+clone_if_missing bimg "https://github.com/bkaradzic/bimg.git"
+clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git"
+
+case "$(uname -s)" in
+    Darwin)
+        if [[ "$(uname -m)" == "arm64" ]]; then
+            BGFX_TARGET="osx-arm64-release"
+            BGFX_PLATFORM_DIR="osx-arm64"
+        else
+            BGFX_TARGET="osx-x64-release"
+            BGFX_PLATFORM_DIR="osx-x64"
+        fi
+        ;;
+    Linux)
+        BGFX_TARGET="linux-gcc-release64"
+        BGFX_PLATFORM_DIR="linux64_gcc"
+        ;;
+    *)
+        echo "[UILO] unsupported platform for vendored bgfx: $(uname -s)" >&2
+        echo "[UILO] on Windows use build.bat / build.ps1" >&2
+        exit 1
+        ;;
+esac
+BGFX_BIN_DIR="$EXT/bgfx/.build/$BGFX_PLATFORM_DIR/bin"
+
+# One-time build (release libs + shaderc via --with-tools), gated on the
+# output archive. Always Release, even for Debug UILO builds -- you debug
+# UILO, not bgfx.
+if [[ ! -f "$BGFX_BIN_DIR/libbgfxRelease.a" ]]; then
+    echo "[UILO] building bgfx ($BGFX_TARGET) -- one time only"
+    make -C "$EXT/bgfx" "$BGFX_TARGET"
 fi
 
 GENERATOR="Unix Makefiles"

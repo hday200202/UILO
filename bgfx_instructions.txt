@@ -1,0 +1,265 @@
+================================================================================
+ BGFX VENDORING INSTRUCTIONS -- how BGFX_ENGINE_2 clones, builds, and consumes
+ bgfx without any system installation.
+================================================================================
+
+Audience: someone (human or Claude) replicating this pattern in another repo
+(e.g. UILO). The goal is: no system install of bgfx, everything vendored under
+ext/, built exactly once, linked as prebuilt static libs. Works today on macOS
+(arm64 + x64) and Linux. A Windows section with the known-correct commands is
+at the bottom -- it is the part this project has NOT wired up yet.
+
+--------------------------------------------------------------------------------
+ 1. THE PATTERN IN ONE PARAGRAPH
+--------------------------------------------------------------------------------
+build.sh shallow-clones bx, bimg, and bgfx as SIBLING directories under ext/
+(sibling layout is mandatory -- bgfx's build expects ../bx and ../bimg), then
+runs bgfx's own native build system (GENie + make) ONE time, gated on the
+existence of the output archive. CMake never builds bgfx; it just
+find_library()s the prebuilt static libs out of bgfx's platform-specific
+output directory and links them in dependency order. `./build.sh clean` wipes
+the project's build/ and bin/ but deliberately never touches ext/, so the
+one-time bgfx build survives cleans.
+
+--------------------------------------------------------------------------------
+ 2. CLONING (build.sh)
+--------------------------------------------------------------------------------
+    clone_if_missing() {
+        local name="$1" url="$2"
+        if [[ ! -d "$EXT/$name" ]]; then
+            git clone --depth 1 "$url" "$EXT/$name"
+        fi
+    }
+    clone_if_missing bx   "https://github.com/bkaradzic/bx.git"
+    clone_if_missing bimg "https://github.com/bkaradzic/bimg.git"
+    clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git"
+
+Notes:
+  * All three MUST be siblings in the same directory (ext/). bgfx's makefile
+    and genie scripts reference ../bx and ../bimg by relative path.
+  * --depth 1 keeps the clones small. Downside: the three repos move together
+    upstream, so if a fresh clone ever breaks, clone all three fresh at the
+    same time (a new bgfx against an old bx is the classic mismatch).
+  * No submodules involved; these are three independent clones.
+  * GENie does NOT need to be installed -- bx ships prebuilt genie binaries at
+    bx/tools/bin/{darwin,linux,windows}/genie[.exe]. bgfx's makefile uses them
+    automatically ($(BX_DIR)/tools/bin/$(OS)/genie).
+
+--------------------------------------------------------------------------------
+ 3. BUILDING (one time, via bgfx's own makefile)
+--------------------------------------------------------------------------------
+Platform target + output dir are selected from uname:
+
+    OS        ARCH     make target             output dir under ext/bgfx/.build/
+    -------   ------   ---------------------   ---------------------------------
+    Darwin    arm64    osx-arm64-release       osx-arm64/bin
+    Darwin    x86_64   osx-x64-release         osx-x64/bin
+    Linux     any      linux-gcc-release64     linux64_gcc/bin
+
+Then:
+
+    if [[ ! -f "$BGFX_BIN_DIR/libbgfxRelease.a" ]]; then
+        make -C "$EXT/bgfx" "$BGFX_TARGET"
+    fi
+
+What that make target actually does (from ext/bgfx/makefile):
+  1. Runs GENie to generate project files:
+       genie --with-tools --with-combined-examples --with-shared-lib \
+             --gcc=<platform> gmake
+     --with-tools is what gets you shaderc (needed for runtime shader
+     compilation -- see section 6).
+  2. Runs make on the generated projects with config=release.
+
+Output (the files CMake consumes), e.g. ext/bgfx/.build/osx-arm64/bin/:
+    libbgfxRelease.a          the renderer
+    libbimgRelease.a          image lib
+    libbimg_decodeRelease.a   image DEcoders (imageParse/imageFree live here!)
+    libbxRelease.a            base lib
+    shadercRelease            offline/runtime shader compiler binary
+
+The engine always links the RELEASE bgfx libs, even for Debug builds of the
+engine itself. This is a deliberate simplification: you debug your engine, not
+bgfx. The one thing you must get right for that to work is BX_CONFIG_DEBUG
+(section 4).
+
+--------------------------------------------------------------------------------
+ 4. CONSUMING FROM CMAKE
+--------------------------------------------------------------------------------
+CMakeLists.txt resolves the same platform dir, then:
+
+    find_library(BGFX_LIB        NAMES bgfxRelease        PATHS "${BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
+    find_library(BIMG_LIB        NAMES bimgRelease        ...)
+    find_library(BIMG_DECODE_LIB NAMES bimg_decodeRelease ...)
+    find_library(BX_LIB          NAMES bxRelease          ...)
+
+Include dirs:
+    ext/bgfx/include
+    ext/bimg/include
+    ext/bx/include
+    ext/bx/include/compat/osx        <- APPLE only. (msvc/ and mingw/ variants
+                                        exist for Windows -- see section 8.)
+
+Compile definitions (REQUIRED -- bx headers static_assert on it):
+    BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,0>
+      bx headers hard-require this macro to be defined by the consumer. 1 in
+      Debug, 0 otherwise. Miss this and you get a wall of template errors.
+
+Link order (static libs: dependents BEFORE dependencies):
+    libuilo.a -> bgfx -> bimg_decode -> bimg -> bx
+  (UILO first because it references bgfx symbols; bimg_decode before bimg;
+   bx always last.)
+
+Platform link deps:
+    APPLE:  -framework Metal MetalKit QuartzCore AppKit Cocoa IOKit
+            CoreFoundation CoreGraphics CoreVideo CoreMedia VideoToolbox
+    LINUX:  Threads::Threads ${CMAKE_DL_LIBS} GL X11
+
+--------------------------------------------------------------------------------
+ 5. DRAW CALLS -- WHAT IS (AND ISN'T) EDITED
+--------------------------------------------------------------------------------
+There are TWO separate "how many draws" knobs in bgfx. Know which one you mean:
+
+(A) COMPILE-TIME: BGFX_CONFIG_MAX_DRAW_CALLS  (ext/bgfx/src/config.h:270)
+    Current state in this repo: NOT EDITED. The clone is pristine and the
+    value is the upstream default:
+        #define BGFX_CONFIG_MAX_DRAW_CALLS ((64<<10)-1)     // = 65,535/frame
+    65,535 draws/frame is far beyond anything this engine submits, so there
+    was never a reason to touch it. It is baked into libbgfxRelease.a at
+    compile time -- you cannot change it from the app.
+
+    If you ever DO need to change it (or any BGFX_CONFIG_* value), the clean
+    official mechanism is the BGFX_CONFIG environment variable, which
+    bgfx's genie script reads at project-GENERATION time and turns each
+    token into a -DBGFX_CONFIG_<token> define:
+
+        rm -rf ext/bgfx/.build            # force genie to regenerate + rebuild
+        BGFX_CONFIG="MAX_DRAW_CALLS=131071" make -C ext/bgfx osx-arm64-release
+
+    (Multiple values are space- or colon-separated. Editing src/config.h
+    directly also works but then the clone is dirty; prefer the env var and
+    put it in build.sh so it's reproducible.)
+    IMPORTANT: the env var only takes effect when genie regenerates projects.
+    If ext/bgfx/.build/projects already exists, make skips genie -- delete
+    .build first.
+
+(B) RUNTIME: bgfx::Init::limits  (THIS is what the project actually edits)
+    src/renderer/renderer_impl/R-CtxImpl.cpp, in initBGFX():
+
+        initSettings.resolution.maxFrameLatency = 3;
+        initSettings.limits.maxTransientVbSize  = 32u << 20;   // 32 MB (default ~6 MB)
+        initSettings.limits.maxTransientIbSize  =  8u << 20;   //  8 MB (default ~2 MB)
+
+    The transient buffer sizes were raised FOR UILO'S UI PASSES. UILO submits
+    its UI geometry through bgfx transient vertex/index buffers; when the
+    per-frame transient pool runs out, bgfx silently truncates -- draws just
+    disappear (debug builds print a warning, release says nothing). Raising
+    the pool is what effectively raised the number of UI draws that can be
+    submitted per frame. If the UILO repo sets up its own bgfx init, carry
+    these limits over (or size them to the heaviest UI you render).
+
+--------------------------------------------------------------------------------
+ 6. SHADERC + SHADER TREE STAGING (needed at runtime)
+--------------------------------------------------------------------------------
+The engine compiles shaders at runtime (dev hot-reload polls sources 4x/sec),
+so build.sh stages a self-contained shader toolchain next to the executable:
+
+    bin/shaders/
+      shader_tools/   shaderc binary   <- copied from $BGFX_BIN_DIR/shadercRelease
+                      *.sh includes    <- copied from ext/bgfx/src/*.sh
+                                          (bgfx_shader.sh etc. -- shaderc -i target)
+                      shaderlib.sh     <- from ext/bgfx/examples/common/
+      shader_src/     <- copied from src/shaders/ (developer sources)
+      shader_bin/     <- compiled output, filled at runtime
+
+Everything is resolved relative to the executable (utils::executableDir), so
+the bin/ directory is relocatable. Re-staged on every build because clean
+wipes bin/. On Windows the binary is shadercRelease.exe -- keep the .exe
+suffix when copying.
+
+--------------------------------------------------------------------------------
+ 7. OTHER DEPS FOR CONTEXT (same one-time-build pattern)
+--------------------------------------------------------------------------------
+  * SDL3: the ONE system/package-managed dep (find_package(SDL3 CONFIG)).
+    brew/apt on mac/linux; vcpkg is the path of least pain on Windows.
+  * UILO: vendored fork at ext/UILO, built once by its own build.sh into
+    ext/UILO/lib/libuilo.a. NOTE: UILO's own build system can FetchContent
+    bgfx + SDL3 itself (UILO_AUTO_FETCH=ON default) -- when embedding UILO in
+    a project that already vendors bgfx, make sure it builds against THE SAME
+    bgfx, not a second FetchContent'd copy (symbol/version mismatches
+    otherwise; here it links fine because the engine links UILO's archive
+    before its own bgfx libs and UILO's bgfx symbols resolve from those).
+    This is exactly the sharp edge the real-UILO-repo work should sort out.
+  * Jolt: cloned to ext/JoltPhysics, built once with CMake (Distribution
+    config, GPU-compute backends OFF -- see build.sh comments). Sharp edge:
+    the CONSUMER must compile with the same JPH_* defines Jolt was built with
+    (JPH_OBJECT_STREAM, JPH_USE_CPU_COMPUTE, JPH_USE_MTL) or Jolt aborts at
+    runtime with a version-hash mismatch.
+
+--------------------------------------------------------------------------------
+ 8. WINDOWS (the missing piece -- known-correct route)
+--------------------------------------------------------------------------------
+Nothing about the pattern changes; only the toolchain invocation does. bgfx on
+Windows does NOT use the top-level `make` flow comfortably -- use GENie to
+generate a VS solution, then msbuild it. GENie is already there:
+ext/bx/tools/bin/windows/genie.exe (no install needed).
+
+  1. Clone bx/bimg/bgfx exactly as in section 2 (same sibling layout).
+
+  2. Generate + build (from ext/bgfx, in a "x64 Native Tools" prompt or with
+     msbuild on PATH):
+
+        ..\bx\tools\bin\windows\genie.exe --with-tools vs2022
+        msbuild .build\projects\vs2022\bgfx.sln /m ^
+            /p:Configuration=Release /p:Platform=x64
+
+     (Equivalent of the mac flow's `make osx-arm64-release`. bgfx's makefile
+     vs2022 targets shell out to `devenv`, which needs full VS; msbuild works
+     with Build Tools alone. MinGW is also supported -- `make mingw-gcc-release64`
+     -- but MSVC is the well-trodden path for bgfx on Windows.)
+
+  3. Output layout (the win equivalent of osx-arm64/bin):
+
+        ext/bgfx/.build/win64_vs2022/bin/
+            bgfxRelease.lib  bimgRelease.lib  bimg_decodeRelease.lib
+            bxRelease.lib    shadercRelease.exe
+
+  4. CMakeLists changes needed (currently it FATAL_ERRORs on WIN32):
+        - BGFX_PLATFORM_DIR: "win64_vs2022"
+        - find_library NAMES stay the same ("bgfxRelease" finds .lib fine)
+        - compat include: ext/bx/include/compat/msvc   (instead of /osx)
+        - platform libs:  gdi32 psapi user32
+          (DirectX headers/libs are vendored inside bgfx -- no DX SDK needed)
+        - BX_CONFIG_DEBUG genex works as-is
+     Mixing MSVC-built bgfx .lib with the engine also built by MSVC is
+     required -- do not try to link the .lib from a MinGW/clang-gnu engine
+     build. Runtime library note: bgfx's genie build uses the static runtime
+     (/MT) for Release by default; if the engine builds with /MD (CMake's
+     default) and you get LNK2038 runtime mismatch errors, set the engine to
+     /MT too: CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>".
+
+  5. build script: mirror build.sh as build.bat/build.ps1 (UILO's repo already
+     has both -- same skeleton: clone-if-missing, build-if-lib-missing,
+     configure+build project, stage shader tree with shadercRelease.exe).
+
+  6. SDL3 on Windows: vcpkg (`vcpkg install sdl3`) +
+     -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake,
+     or drop SDL3's prebuilt dev package somewhere and point SDL3_DIR at it.
+
+--------------------------------------------------------------------------------
+ 9. GOTCHA CHECKLIST (things that actually bit, or will)
+--------------------------------------------------------------------------------
+  [ ] bx/bimg/bgfx must be sibling dirs; bgfx finds them by relative path.
+  [ ] Clone all three at the same time; they version-lock against each other.
+  [ ] BX_CONFIG_DEBUG must be defined by every consumer TU (1 Debug / 0 else).
+  [ ] Static link order: uilo -> bgfx -> bimg_decode -> bimg -> bx.
+  [ ] imageParse lives in bimg_DECODE, not bimg -- forget it and you get
+      undefined-symbol errors only when texture loading code is linked.
+  [ ] BGFX_CONFIG_* env only applies when genie REgenerates projects; nuke
+      ext/bgfx/.build first.
+  [ ] Transient buffer limits are set at bgfx::Init time and cannot be grown
+      later; UI-heavy frames silently drop draws when the pool is exhausted.
+  [ ] shaderc comes from --with-tools (the default make targets pass it; a
+      bare genie invocation without it won't build shaderc).
+  [ ] macOS: bx needs the compat/osx include dir; MSVC needs compat/msvc.
+  [ ] `clean` must never delete ext/ or you pay the full bgfx rebuild.
+================================================================================

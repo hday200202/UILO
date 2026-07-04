@@ -11,9 +11,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-option(UILO_AUTO_FETCH    "Auto-download missing dependencies via FetchContent" ON)
+option(UILO_AUTO_FETCH    "Auto-download missing SDL3 via FetchContent" ON)
 option(UILO_BUILD_EXAMPLES "Build example programs" ON)
 option(UILO_SHARED        "Build UILO as a shared library" OFF)
+
+if(MSVC)
+    # bgfx's GENie build uses the static runtime (/MT) for Release; the whole
+    # project must match or the linker reports LNK2038 runtime mismatches.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 include(FetchContent)
 
@@ -41,42 +47,53 @@ if(NOT SDL3_FOUND)
 endif()
 
 # ---------------------------------------------------------------------------
-# bgfx (via bgfx.cmake wrapper -> bgfx::bgfx / bgfx::bx / bgfx::bimg)
+# bgfx (vendored: prebuilt static libs under ext/, built once by build.sh)
 # ---------------------------------------------------------------------------
-find_package(bgfx CONFIG QUIET)
-if(NOT bgfx_FOUND)
-    if(UILO_AUTO_FETCH)
-        message(STATUS "[UILO] bgfx not found; fetching bgfx.cmake from GitHub...")
-        set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(BGFX_BUILD_TOOLS    ON  CACHE BOOL "" FORCE)  # needed for shaderc
-        set(BGFX_INSTALL        OFF CACHE BOOL "" FORCE)
-        set(BGFX_CUSTOM_TARGETS OFF CACHE BOOL "" FORCE)
-        FetchContent_Declare(bgfx
-            GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-            GIT_TAG        v1.143.9257-544
-            GIT_SHALLOW    TRUE
-        )
-        FetchContent_MakeAvailable(bgfx)
-        # bgfx.cmake does not create namespace aliases when used via FetchContent
-        add_library(bgfx::bgfx ALIAS bgfx)
-        add_library(bgfx::bx   ALIAS bx)
-        add_library(bgfx::bimg ALIAS bimg)
-        # bgfxToolUtils.cmake (bgfx_compile_shaders) is only auto-included by
-        # bgfxConfig.cmake in the find_package path; include it explicitly here.
-        include("${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
-        # BGFX_SHADER_INCLUDE_PATH is only set by Config.cmake.in (find_package
-        # path). Set it manually so bgfx_compile_shaders passes -i to shaderc.
-        set(BGFX_SHADER_INCLUDE_PATH "${bgfx_SOURCE_DIR}/bgfx/src")
+# build.sh / build.ps1 shallow-clone bx, bimg, and bgfx as SIBLING directories
+# under ext/ (bgfx's build expects ../bx and ../bimg) and run bgfx's own
+# GENie+make build exactly once, gated on the output archive existing. CMake
+# never builds bgfx; it links the prebuilt Release archives even for Debug
+# builds of UILO (you debug UILO, not bgfx -- see BX_CONFIG_DEBUG below).
+set(UILO_EXT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+
+if(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(UILO_BGFX_PLATFORM_DIR "osx-arm64")
     else()
-        message(FATAL_ERROR "bgfx not found and UILO_AUTO_FETCH is OFF")
+        set(UILO_BGFX_PLATFORM_DIR "osx-x64")
     endif()
+elseif(WIN32)
+    set(UILO_BGFX_PLATFORM_DIR "win64_vs2022")
+else()
+    set(UILO_BGFX_PLATFORM_DIR "linux64_gcc")
 endif()
+set(UILO_BGFX_BIN_DIR "${UILO_EXT_DIR}/bgfx/.build/${UILO_BGFX_PLATFORM_DIR}/bin")
+
+if(NOT EXISTS "${UILO_BGFX_BIN_DIR}")
+    message(FATAL_ERROR
+        "[UILO] prebuilt bgfx not found at ${UILO_BGFX_BIN_DIR}\n"
+        "Run ./build.sh (or build.ps1 on Windows) -- it clones bx/bimg/bgfx "
+        "into ext/ and builds them once.")
+endif()
+
+find_library(UILO_BGFX_LIB        NAMES bgfxRelease        PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(UILO_BIMG_DECODE_LIB NAMES bimg_decodeRelease PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(UILO_BIMG_LIB        NAMES bimgRelease        PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(UILO_BX_LIB          NAMES bxRelease          PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
 
 # ---------------------------------------------------------------------------
 # Shaders (compiled per-backend by bgfx-shaderc, embedded as headers)
 # ---------------------------------------------------------------------------
-# bgfxToolUtils / bgfx_compile_shaders: included in the bgfx block above
-# (FetchContent path) or by bgfxConfig.cmake (find_package path).
+# bgfx_compile_shaders comes from cmake/bgfxToolUtils.cmake (vendored from
+# bgfx.cmake). It requires the bgfx::shaderc target to exist BEFORE inclusion
+# (the whole shader section of that file is gated on it), plus
+# BGFX_SHADER_INCLUDE_PATH for shaderc's -i flag. shaderc itself is the
+# prebuilt binary from bgfx's --with-tools build.
+add_executable(bgfx::shaderc IMPORTED)
+set_target_properties(bgfx::shaderc PROPERTIES
+    IMPORTED_LOCATION "${UILO_BGFX_BIN_DIR}/shadercRelease${CMAKE_EXECUTABLE_SUFFIX}")
+set(BGFX_SHADER_INCLUDE_PATH "${UILO_EXT_DIR}/bgfx/src")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
 
 set(_SHADER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders")
 set(_SHADER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/shaders")
@@ -176,19 +193,62 @@ endforeach()
 target_include_directories(uilo PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/elements"
+    "${UILO_EXT_DIR}/bgfx/include"
+    "${UILO_EXT_DIR}/bimg/include"
+    "${UILO_EXT_DIR}/bx/include"
 )
+
+# bx needs a per-toolchain compat include dir on macOS and Windows.
+if(APPLE)
+    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/osx")
+elseif(MSVC)
+    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/msvc")
+elseif(MINGW)
+    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/mingw")
+endif()
+
+# bx headers static_assert unless every consumer TU defines this: 1 in Debug,
+# 0 otherwise. PUBLIC so anything that includes UILO headers gets it too.
+target_compile_definitions(uilo PUBLIC "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,0>")
 
 target_include_directories(uilo PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
     "${_SHADER_OUT_DIR}"
 )
 
+# Static link order matters: dependents before dependencies.
+# uilo -> bgfx -> bimg_decode -> bimg -> bx (bimg_decode holds imageParse and
+# depends on bimg; bx is always last).
 target_link_libraries(uilo PUBLIC
     SDL3::SDL3
-    bgfx::bgfx
-    bgfx::bx
-    bgfx::bimg
+    "${UILO_BGFX_LIB}"
+    "${UILO_BIMG_DECODE_LIB}"
+    "${UILO_BIMG_LIB}"
+    "${UILO_BX_LIB}"
 )
+
+# Platform deps required by the static bgfx/bx archives.
+if(APPLE)
+    target_link_libraries(uilo PUBLIC
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+        "-framework AppKit"   # also used directly by the native scroll-wheel monitor
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreFoundation"
+        "-framework CoreGraphics"
+        "-framework CoreVideo"
+        "-framework CoreMedia"
+        "-framework VideoToolbox"
+    )
+elseif(WIN32)
+    # DirectX headers/libs are vendored inside bgfx -- no DX SDK needed.
+    target_link_libraries(uilo PUBLIC gdi32 psapi user32)
+else()
+    find_package(Threads REQUIRED)
+    target_link_libraries(uilo PUBLIC Threads::Threads ${CMAKE_DL_LIBS} GL)
+endif()
 
 if(MSVC)
     target_compile_options(uilo PRIVATE /W3)
@@ -205,10 +265,6 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
-# macOS: link AppKit for the native scroll-wheel monitor.
-if(APPLE)
-    target_link_libraries(uilo PUBLIC "-framework AppKit")
-endif()
 
 if(UILO_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)

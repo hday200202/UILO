@@ -310,7 +310,8 @@ namespace {
                               uint16_t viewId,
                               float dstW, float dstH,
                               bgfx::ProgramHandle program,
-                              bool flipV) {
+                              bool flipV,
+                              bool alphaBlend = false) {
         bgfx::TransientVertexBuffer tvb;
         if (bgfx::getAvailTransientVertexBuffer(6, layout) < 6) return;
         bgfx::allocTransientVertexBuffer(&tvb, 6, layout);
@@ -331,7 +332,9 @@ namespace {
         v[5] = { 0.f,  dstH, white, 0.f, v1 };
 
         bgfx::setVertexBuffer(0, &tvb);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
+        uint64_t st = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A;
+        if (alphaBlend) st |= BGFX_STATE_BLEND_ALPHA; // overlay over the host image
+        bgfx::setState(st);
         bgfx::submit(viewId, program);
     }
 }
@@ -412,7 +415,7 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     if (bgfx::isValid(u_clipParams2)) bgfx::setUniform(u_clipParams2, clipZero);
 
     bgfx::setTexture(0, s_texColor, sceneColorTex);
-    submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV);
+    submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV, embedded);
 }
 
 // ============================================================================
@@ -524,12 +527,32 @@ bool Renderer::init(uint32_t width, uint32_t height,
     return true;
 }
 
+bool Renderer::attach(SDL_Window* hostWindow, uint16_t baseView) {
+    if (m_initialised) return true;
+
+    m_window      = hostWindow;        // borrowed; not destroyed in shutdown()
+    m_ownsContext = false;             // host owns SDL + bgfx + the frame loop
+    m_impl->embedded = true;           // composite alpha-blends over the host image
+    m_impl->setViewBase(baseView);     // rebase the pipeline views above the host's
+    m_nextViewId  = baseView + 6;      // user framebuffers above UILO's pipeline
+
+    // bgfx + window already exist; just build UILO's own GPU resources.
+    m_impl->ensureLayouts();
+    if (!m_impl->initShaders()) return false;
+
+    m_initialised = true;
+    return true;
+}
+
 void Renderer::shutdown() {
     if (!m_initialised) return;
-    if (m_impl) m_impl->shutdownResources();
-    bgfx::shutdown();
-    if (m_window) { SDL_DestroyWindow(m_window); m_window = nullptr; }
-    SDL_Quit();
+    if (m_impl) m_impl->shutdownResources();   // UILO's own FBs/shaders, both modes
+    if (m_ownsContext) {
+        bgfx::shutdown();
+        if (m_window) SDL_DestroyWindow(m_window);
+        SDL_Quit();
+    }
+    m_window = nullptr; // borrowed in attach mode; just drop the reference
     m_initialised = false;
 }
 
@@ -627,7 +650,7 @@ void Renderer::setCursor(CursorType type) {
 void Renderer::beginFrame() {
     Vec2u sz = getSize();
     if (sz.x != m_lastWidth || sz.y != m_lastHeight) {
-        bgfx::reset(sz.x, sz.y, m_resetFlags);
+        if (m_ownsContext) bgfx::reset(sz.x, sz.y, m_resetFlags); // host owns reset when embedded
         m_lastWidth  = sz.x;
         m_lastHeight = sz.y;
     }
@@ -649,17 +672,24 @@ void Renderer::beginFrame() {
     m_impl->bypassSceneFb     = !m_impl->hadGlassLastFrame;
     m_impl->hadGlassThisFrame = false;
 
-    // View 0 → sceneFB (set every frame in case bgfx reset clobbered it).
+    // Embedded: never bypass to the backbuffer (that would clear the host's
+    // scene). Always render to sceneFB, then composite over the host image.
+    if (!m_ownsContext) m_impl->bypassSceneFb = false;
+
+    // Scene view → sceneFB (set every frame in case bgfx reset clobbered it).
+    const uint16_t sceneView = m_impl->kSceneViewId;
     if (m_impl->bypassSceneFb) {
-        bgfx::setViewFrameBuffer(0, BGFX_INVALID_HANDLE);
+        bgfx::setViewFrameBuffer(sceneView, BGFX_INVALID_HANDLE);
     } else {
-        bgfx::setViewFrameBuffer(0, m_impl->sceneFB);
+        bgfx::setViewFrameBuffer(sceneView, m_impl->sceneFB);
     }
-    bgfx::setViewRect(0, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
-    bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.f, 0);
-    bgfx::setViewMode(0, bgfx::ViewMode::Sequential);
-    submitOrtho(0, sz);
-    bgfx::touch(0);
+    bgfx::setViewRect(sceneView, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
+    // Transparent clear when embedded so the UI composites over the host scene.
+    const uint32_t sceneClear = m_ownsContext ? 0x000000ff : 0x00000000;
+    bgfx::setViewClear(sceneView, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, sceneClear, 1.f, 0);
+    bgfx::setViewMode(sceneView, bgfx::ViewMode::Sequential);
+    submitOrtho(sceneView, sz);
+    bgfx::touch(sceneView);
 
     // Defensively clear any rotation left set by user code from the last
     // frame so internal/system draws (composite, blur, etc.) never inherit.
@@ -689,7 +719,7 @@ void Renderer::endFrame() {
     if (m_impl->bypassSceneFb) {
         // Scene was rendered directly to backbuffer; nothing else to do.
         m_impl->deferredGlass.clear();
-        bgfx::frame();
+        if (m_ownsContext) bgfx::frame(); // host presents when embedded
         // Framerate cap (unchanged from the FB path below).
         if (m_frameInterval > 0.0) {
             using clock = std::chrono::steady_clock;
@@ -759,7 +789,7 @@ void Renderer::endFrame() {
                                        m_impl->texLayout,
                                        m_impl->texProgram);
 
-    bgfx::frame();
+    if (m_ownsContext) bgfx::frame(); // host presents when embedded
     if (m_frameInterval > 0.0) {
         using clock = std::chrono::steady_clock;
         const auto now    = clock::now();
@@ -807,7 +837,7 @@ void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
 
 uint16_t Renderer::currentViewId() const {
     if (m_viewStackTop > 0) return m_viewStack[m_viewStackTop - 1].viewId;
-    return 0;
+    return m_impl->kSceneViewId; // rebased scene view (was hardcoded 0)
 }
 
 // ============================================================================
