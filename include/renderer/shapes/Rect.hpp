@@ -15,7 +15,8 @@ struct Rect {
     // the corner colors replace fillColor for the body; the outline is
     // unaffected. Set via setGradientColors (order: TL, TR, BL, BR).
     bool  gradient = false;
-    Color colorTL, colorTR, colorBL, colorBR;
+    Color colorTL = Color::White, colorTR = Color::White,
+          colorBL = Color::White, colorBR = Color::White;
 
     void setGradientColors(const Color c[4]) {
         gradient = true;
