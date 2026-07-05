@@ -12,5 +12,6 @@ build
 *.so
 *.dylib
 *.dll
+.claude
 # vendored bgfx clones + one-time build output (see build.sh)
 /ext/
