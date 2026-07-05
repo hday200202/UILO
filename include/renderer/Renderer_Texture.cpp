@@ -101,6 +101,47 @@ Texture Renderer::loadTexture(const std::string& path) {
     return tex;
 }
 
+bool Renderer::loadImagePixels(const std::string& path, std::vector<uint8_t>& outRgba,
+                               uint32_t& outWidth, uint32_t& outHeight) {
+    int w = 0, h = 0, comp = 0;
+    stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &comp, 4);
+    if (!pixels) {
+        std::fprintf(stderr, "[UILO] loadImagePixels: failed to load '%s': %s\n",
+                     path.c_str(), stbi_failure_reason());
+        return false;
+    }
+    outRgba.assign(pixels, pixels + (size_t)w * (size_t)h * 4);
+    stbi_image_free(pixels);
+    outWidth  = (uint32_t)w;
+    outHeight = (uint32_t)h;
+    return true;
+}
+
+Texture Renderer::createTexture(uint16_t width, uint16_t height) {
+    if (width == 0 || height == 0) return Texture{};
+    // mem == nullptr makes the texture mutable (bgfx only allows
+    // updateTexture2D on textures created without initial contents).
+    bgfx::TextureHandle th = bgfx::createTexture2D(
+        width, height, false, 1,
+        bgfx::TextureFormat::RGBA8,
+        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP |
+        BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC,
+        nullptr);
+    Texture tex;
+    tex.handle = th.idx;
+    tex.width  = width;
+    tex.height = height;
+    return tex;
+}
+
+void Renderer::updateTexture(const Texture& tex, const uint8_t* rgba) {
+    if (!tex.valid() || !rgba) return;
+    const bgfx::Memory* mem =
+        bgfx::copy(rgba, (uint32_t)tex.width * (uint32_t)tex.height * 4);
+    bgfx::TextureHandle th{ tex.handle };
+    bgfx::updateTexture2D(th, 0, 0, 0, 0, tex.width, tex.height, mem);
+}
+
 void Renderer::destroyTexture(Texture& tex) {
     if (!tex.valid()) return;
     bgfx::TextureHandle h{ tex.handle };

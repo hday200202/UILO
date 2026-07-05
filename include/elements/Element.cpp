@@ -122,6 +122,11 @@ namespace uilo {
     }
 
     void Element::setUILO(UILO& uiloRef) {
+        // Already registered with this UILO: re-running (e.g. switching the
+        // active page A -> B -> A re-walks A's tree) must not emplace `this`
+        // into m_elementPool a second time -- two unique_ptrs owning one
+        // element means a double delete at shutdown.
+        if (m_uiloRef == &uiloRef) return;
         m_uiloRef = &uiloRef;
         uiloRef.m_elementPool.emplace_back(this);
         if (!m_name.empty()) uiloRef.m_elements[m_name] = this;

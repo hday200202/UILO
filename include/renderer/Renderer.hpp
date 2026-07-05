@@ -135,6 +135,21 @@ public:
     Texture loadTexture(const std::string& path);
     void    destroyTexture(Texture& tex);
 
+    // Decode an image file to tightly-packed RGBA8 bytes without creating a
+    // GPU texture (row-major, top-left origin). Not cached. Returns false
+    // and leaves the outputs untouched on failure.
+    bool loadImagePixels(const std::string& path, std::vector<uint8_t>& outRgba,
+                         uint32_t& outWidth, uint32_t& outHeight);
+
+    // Create an empty *mutable* RGBA8 texture. Unlike loadTexture's cached
+    // textures (immutable: created with initial contents), these accept
+    // updateTexture and are owned by the caller — pair with destroyTexture.
+    Texture createTexture(uint16_t width, uint16_t height);
+
+    // Replace the full contents of a texture made by createTexture with
+    // width*height*4 RGBA8 bytes. No-op on invalid texture / null pixels.
+    void updateTexture(const Texture& tex, const uint8_t* rgba);
+
     // Draw a textured quad in screen space. uv defaults to the whole image.
     // If `clipEllipse` is true, alpha is masked to the inscribed ellipse of
     // the destination rectangle.
