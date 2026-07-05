@@ -16,6 +16,8 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <string_view>
 #include <thread>
 
 #if defined(SDL_PLATFORM_LINUX)
@@ -407,7 +409,13 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     bgfx::setUniform(u_imgFlags, flags);
 
     // The full-screen blit must not inherit a stale rounded-clip from the
-    // last in-scene draw call. Reset clip uniforms to "disabled".
+    // last in-scene draw call. Reset clip uniforms to "disabled",
+    // UNCONDITIONALLY: the lastClip* dedup's CPU-side model of encoder
+    // uniform state is not sound across program switches in bgfx, and a
+    // dedup-skip here can leave the composite clipped to the last glass
+    // child's SDF -- only that region of the backbuffer gets rewritten and
+    // everything else keeps the previous frame (moving glass elements leave
+    // permanent trails). Do not route this through applyClipUniforms.
     const float clipZero[4] = { 0.f, 0.f, 0.f, 0.f };
     if (bgfx::isValid(u_clipRect))    bgfx::setUniform(u_clipRect,    clipZero);
     if (bgfx::isValid(u_clipParams))  bgfx::setUniform(u_clipParams,  clipZero);
@@ -456,7 +464,11 @@ bool Renderer::init(uint32_t width, uint32_t height,
     pd.nwh = SDL_GetPointerProperty(props,
                 SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 #elif defined(SDL_PLATFORM_MACOS)
-    pd.nwh = SDL_Metal_CreateView(m_window);
+    // Pass the CAMetalLayer, not the SDL_MetalView (an NSView): the Metal
+    // backend accepts either, but bgfx's Vulkan/MoltenVK surface creation
+    // only accepts an NSWindow or CAMetalLayer and silently falls back to
+    // Metal when handed a view.
+    pd.nwh = SDL_Metal_GetLayer(SDL_Metal_CreateView(m_window));
 #elif defined(SDL_PLATFORM_LINUX)
     SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
     void* waylandSurf = SDL_GetPointerProperty(props,
@@ -481,8 +493,20 @@ bool Renderer::init(uint32_t width, uint32_t height,
     init.platformData      = pd;
     init.resolution.width  = width;
     init.resolution.height = height;
-    if (pd.type == bgfx::NativeWindowHandleType::Wayland)
-        init.type = bgfx::RendererType::Vulkan;
+    // Count = let bgfx pick the platform default (Metal / D3D / Vulkan).
+    // UILO_RENDERER overrides for A/B testing without a rebuild:
+    // vulkan | metal | d3d11 | d3d12 | gl | auto.
+    init.type = bgfx::RendererType::Count;
+    if (const char* env = std::getenv("UILO_RENDERER")) {
+        const std::string_view want{env};
+        if      (want == "vulkan") init.type = bgfx::RendererType::Vulkan;
+        else if (want == "metal")  init.type = bgfx::RendererType::Metal;
+        else if (want == "d3d11")  init.type = bgfx::RendererType::Direct3D11;
+        else if (want == "d3d12")  init.type = bgfx::RendererType::Direct3D12;
+        else if (want == "gl")     init.type = bgfx::RendererType::OpenGL;
+        else if (want == "auto")   init.type = bgfx::RendererType::Count;
+        else std::fprintf(stderr, "[UILO] unknown UILO_RENDERER '%s' (ignored)\n", env);
+    }
 
     // Raise transient buffer budgets so dense UI passes (grids, markers,
     // waveform-like primitives) don't hit allocation cliffs and silently drop
@@ -511,7 +535,8 @@ bool Renderer::init(uint32_t width, uint32_t height,
 
     if (const bgfx::Caps* caps = bgfx::getCaps()) {
         std::fprintf(stderr,
-            "[UILO] bgfx caps: maxDrawCalls=%u transientVB=%u KB transientIB=%u KB\n",
+            "[UILO] bgfx renderer=%s caps: maxDrawCalls=%u transientVB=%u KB transientIB=%u KB\n",
+            bgfx::getRendererName(bgfx::getRendererType()),
             caps->limits.maxDrawCalls,
             caps->limits.maxTransientVbSize / 1024u,
             caps->limits.maxTransientIbSize / 1024u);
@@ -909,8 +934,9 @@ void Renderer::drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size,
 // ============================================================================
 
 void Renderer::pushScissor(Rectf b) {
+    // No batch flush here: the solid-rect batch flushes lazily on state
+    // mismatch at the next draw (see draw(Rect)).
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
     if (impl.scissorTop >= Impl::kMaxScissor) {
         ++impl.scissorOverflowDepth;
         return;
@@ -955,7 +981,6 @@ void Renderer::pushScissor(Rectf b) {
 }
 
 void Renderer::popScissor() {
-    m_impl->flushSolidBatch();
     if (m_impl->scissorOverflowDepth > 0) {
         --m_impl->scissorOverflowDepth;
         return;
@@ -965,12 +990,12 @@ void Renderer::popScissor() {
 
 void Renderer::pushRoundClip(Rectf b, float radius) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
     pushScissor(b);
     if (impl.roundClipTop >= Impl::kMaxRoundClip) {
         ++impl.roundClipOverflowDepth;
         return;
     }
+    ++impl.clipVersion;    // stack changes below; invalidate the clip cache
     float r = std::max(0.f, radius);
     if (r <= 0.f) {
         // Plain rectangle: still record an "off" entry so pop balances
@@ -1011,17 +1036,19 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
 
 void Renderer::popRoundClip() {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
     if (impl.roundClipOverflowDepth > 0) {
         --impl.roundClipOverflowDepth;
     } else if (impl.roundClipTop > 0) {
         --impl.roundClipTop;
+        ++impl.clipVersion;
     }
     popScissor();
 }
 
 void Renderer::setRotation(float degrees, Vec2f pivot) {
-    m_impl->flushSolidBatch();
+    // No flush: rotation is applied CPU-side when vertices are appended,
+    // so rects already queued in the batch keep the rotation they were
+    // emitted under.
     auto& r = m_impl->rotation;
     r.pivotX   = pivot.x;
     r.pivotY   = pivot.y;
@@ -1033,7 +1060,6 @@ void Renderer::setRotation(float degrees, Vec2f pivot) {
 }
 
 void Renderer::rotate(float deltaDegrees) {
-    m_impl->flushSolidBatch();
     auto& r = m_impl->rotation;
     r.angleDeg += deltaDegrees;
     const float rad = r.angleDeg * (3.14159265f / 180.f);
@@ -1043,7 +1069,6 @@ void Renderer::rotate(float deltaDegrees) {
 }
 
 void Renderer::clearRotation() {
-    m_impl->flushSolidBatch();
     auto& r = m_impl->rotation;
     r.angleDeg = 0.f;
     r.cosA = 1.f;
@@ -1079,75 +1104,66 @@ void Renderer::clear(Color color) {
 
 static constexpr float kDeg2Rad = 3.14159265f / 180.f;
 
-namespace {
-inline void applyRoundClipInner(Renderer::Impl& impl) {
-    // Walk the clip stack from the top down and collect the two
-    // top-most rounded entries (radius > 0). The first becomes the
-    // "inner" SDF (the shape being drawn, e.g. a button's own rounded
-    // body); the second becomes the "outer" SDF (the enclosing rounded
-    // ancestor, e.g. the parent panel). Both are applied in the
-    // fragment shader, so a child element stays its own shape AND
-    // gets cropped by the parent's rounded corners.
-    float rect[4]    = {0.f, 0.f, 0.f, 0.f};
-    float params[4]  = {0.f, 0.f, 0.f, 0.f};
-    float rect2[4]   = {0.f, 0.f, 0.f, 0.f};
-    float params2[4] = {0.f, 0.f, 0.f, 0.f};
+// Walk the clip stack from the top down and collect the two top-most rounded
+// entries (radius > 0). The first becomes the "inner" SDF (the shape being
+// drawn, e.g. a button's own rounded body); the second becomes the "outer"
+// SDF (the enclosing rounded ancestor, e.g. the parent panel). Both are
+// applied in the fragment shader, so a child element stays its own shape AND
+// gets cropped by the parent's rounded corners.
+void Renderer::Impl::refreshClipCache() {
+    if (curClipVersion == clipVersion) return;
+    for (int i = 0; i < 4; ++i) {
+        curClipRect[i]    = 0.f;
+        curClipParams[i]  = 0.f;
+        curClipRect2[i]   = 0.f;
+        curClipParams2[i] = 0.f;
+    }
     int picked = 0;
-    for (int i = impl.roundClipTop - 1; i >= 0 && picked < 2; --i) {
-        const auto& c = impl.roundClipStack[i];
+    for (int i = roundClipTop - 1; i >= 0 && picked < 2; --i) {
+        const auto& c = roundClipStack[i];
         if (c.radius <= 0.f) continue;
         if (picked == 0) {
-            rect[0] = c.cx; rect[1] = c.cy;
-            rect[2] = c.halfW; rect[3] = c.halfH;
-            params[0] = c.radius; params[1] = 1.f;
+            curClipRect[0] = c.cx;    curClipRect[1] = c.cy;
+            curClipRect[2] = c.halfW; curClipRect[3] = c.halfH;
+            curClipParams[0] = c.radius; curClipParams[1] = 1.f;
         } else {
-            rect2[0] = c.cx; rect2[1] = c.cy;
-            rect2[2] = c.halfW; rect2[3] = c.halfH;
-            params2[0] = c.radius; params2[1] = 1.f;
+            curClipRect2[0] = c.cx;    curClipRect2[1] = c.cy;
+            curClipRect2[2] = c.halfW; curClipRect2[3] = c.halfH;
+            curClipParams2[0] = c.radius; curClipParams2[1] = 1.f;
         }
         ++picked;
     }
-    // Dedup: bgfx setUniform on a Vec4 is cheap but not free, and the
-    // overwhelming majority of consecutive draws share the same clip
-    // (sibling children inside the same container). Skip the push when
-    // nothing changed.
-    const bool same = impl.lastClipValid
-        && rect[0]    == impl.lastClipRect[0]    && rect[1]    == impl.lastClipRect[1]
-        && rect[2]    == impl.lastClipRect[2]    && rect[3]    == impl.lastClipRect[3]
-        && params[0]  == impl.lastClipParams[0]  && params[1]  == impl.lastClipParams[1]
-        && rect2[0]   == impl.lastClipRect2[0]   && rect2[1]   == impl.lastClipRect2[1]
-        && rect2[2]   == impl.lastClipRect2[2]   && rect2[3]   == impl.lastClipRect2[3]
-        && params2[0] == impl.lastClipParams2[0] && params2[1] == impl.lastClipParams2[1];
-    if (same) return;
-    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
-    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
-    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
-    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
-    impl.lastClipRect[0]    = rect[0];    impl.lastClipRect[1]    = rect[1];
-    impl.lastClipRect[2]    = rect[2];    impl.lastClipRect[3]    = rect[3];
-    impl.lastClipParams[0]  = params[0];  impl.lastClipParams[1]  = params[1];
-    impl.lastClipParams[2]  = params[2];  impl.lastClipParams[3]  = params[3];
-    impl.lastClipRect2[0]   = rect2[0];   impl.lastClipRect2[1]   = rect2[1];
-    impl.lastClipRect2[2]   = rect2[2];   impl.lastClipRect2[3]   = rect2[3];
-    impl.lastClipParams2[0] = params2[0]; impl.lastClipParams2[1] = params2[1];
-    impl.lastClipParams2[2] = params2[2]; impl.lastClipParams2[3] = params2[3];
-    impl.lastClipValid = true;
+    curClipVersion = clipVersion;
 }
-inline void applyScissor(Renderer::Impl& impl) {
-    if (impl.scissorTop > 0) {
-        auto& sc = impl.scissorStack[impl.scissorTop - 1];
-        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
+
+bool Renderer::Impl::batchStateMatches(uint16_t viewId) {
+    if (solidBatchView != viewId) return false;
+    const bool hasSc = scissorTop > 0;
+    if (hasSc != batchHasScissor) return false;
+    if (hasSc) {
+        const auto& sc = scissorStack[scissorTop - 1];
+        if (sc.x != batchScissor.x || sc.y != batchScissor.y ||
+            sc.w != batchScissor.w || sc.h != batchScissor.h) return false;
     }
-    applyRoundClipInner(impl);
+    refreshClipCache();
+    return std::memcmp(curClipRect,    batchClipRect,    sizeof(curClipRect))    == 0
+        && std::memcmp(curClipParams,  batchClipParams,  sizeof(curClipParams))  == 0
+        && std::memcmp(curClipRect2,   batchClipRect2,   sizeof(curClipRect2))   == 0
+        && std::memcmp(curClipParams2, batchClipParams2, sizeof(curClipParams2)) == 0;
 }
-inline void applyRoundClip(Renderer::Impl& impl) {
-    applyRoundClipInner(impl);
+
+void Renderer::Impl::captureBatchState(uint16_t viewId) {
+    solidBatchView  = viewId;
+    batchHasScissor = scissorTop > 0;
+    if (batchHasScissor) batchScissor = scissorStack[scissorTop - 1];
+    refreshClipCache();
+    std::memcpy(batchClipRect,    curClipRect,    sizeof(batchClipRect));
+    std::memcpy(batchClipParams,  curClipParams,  sizeof(batchClipParams));
+    std::memcpy(batchClipRect2,   curClipRect2,   sizeof(batchClipRect2));
+    std::memcpy(batchClipParams2, curClipParams2, sizeof(batchClipParams2));
 }
-inline bool scissorEmpty(const Renderer::Impl& impl) {
-    if (impl.scissorTop == 0) return false;
-    const auto& sc = impl.scissorStack[impl.scissorTop - 1];
-    return sc.w == 0 || sc.h == 0;
-}
+
+namespace {
 // Center-vertex color for gradient quads: the average of the four corners.
 inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
     return packColor(Color{
@@ -1162,11 +1178,14 @@ void Renderer::draw(const Rect& r) {
     auto& impl = *m_impl;
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
 
+    // Lazy flush: only break the batch when this rect's pipeline state
+    // (view + scissor + round-clip) differs from what the queued rects
+    // were recorded under.
     const uint16_t view = currentViewId();
-    if (impl.solidBatchView != view && !impl.solidBatchVerts.empty()) {
+    if (!impl.solidBatchVerts.empty() && !impl.batchStateMatches(view))
         impl.flushSolidBatch();
-    }
-    impl.solidBatchView = view;
+    if (impl.solidBatchVerts.empty())
+        impl.captureBatchState(view);
 
     float x = r.position.x, y = r.position.y;
     float w = r.size.x,     h = r.size.y;
@@ -1193,7 +1212,7 @@ void Renderer::draw(const Rect& r) {
     // rects). Flush before crossing the line.
     if (base + vertsNeeded > 65532) {
         impl.flushSolidBatch();
-        impl.solidBatchView = view;
+        impl.captureBatchState(view);
     }
     const uint16_t b2 = (uint16_t)impl.solidBatchVerts.size();
     impl.solidBatchVerts.push_back({x0, y0, c0});
@@ -1253,10 +1272,15 @@ void Renderer::Impl::flushSolidBatch() {
         bgfx::setIndexBuffer(&tib);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
                        BGFX_STATE_BLEND_ALPHA);
-        // Apply the scissor/round-clip snapshot in effect right now; the
-        // batch is always flushed before any state change so this matches
-        // every rect in the batch.
-        applyScissor(*this);
+        // Apply the scissor/round-clip snapshot captured when the batch
+        // started. Flushing is lazy, so the live stacks may have changed
+        // since these rects were queued — the snapshot is what they were
+        // actually drawn under.
+        if (batchHasScissor)
+            bgfx::setScissor(batchScissor.x, batchScissor.y,
+                             batchScissor.w, batchScissor.h);
+        applyClipUniforms(*this, batchClipRect, batchClipParams,
+                          batchClipRect2, batchClipParams2);
         bgfx::submit(solidBatchView, solidProgram);
     }
     solidBatchVerts.clear();
@@ -1278,6 +1302,10 @@ void Renderer::draw(const RoundedRect& rr) {
         draw(rect);
         return;
     }
+
+    // Immediate-mode submits below: flush queued rects first so draw order
+    // is preserved (push/popRoundClip no longer flush).
+    impl.flushSolidBatch();
 
     // Render the outline as a slightly larger rounded rect underneath, then
     // the fill on top. Each is a single quad masked by the fragment-shader

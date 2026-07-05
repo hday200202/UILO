@@ -174,15 +174,44 @@ struct Renderer::Impl {
     float lastClipParams2[4] = { 1e30f, 0.f, 0.f, 0.f };
     bool  lastClipValid      = false;
 
+    // ---- Effective round-clip uniform cache -------------------------------
+    // The four vec4s the fragment-shader clip needs for the CURRENT
+    // round-clip stack (top-most two radius>0 entries). push/popRoundClip
+    // bump clipVersion; refreshClipCache() recomputes lazily so repeated
+    // draws under an unchanged stack don't re-walk it.
+    float    curClipRect[4]    = {0.f, 0.f, 0.f, 0.f};
+    float    curClipParams[4]  = {0.f, 0.f, 0.f, 0.f};
+    float    curClipRect2[4]   = {0.f, 0.f, 0.f, 0.f};
+    float    curClipParams2[4] = {0.f, 0.f, 0.f, 0.f};
+    uint32_t clipVersion    = 1;
+    uint32_t curClipVersion = 0;
+    void refreshClipCache();
+
     // ---- Solid-rect batch ------------------------------------------------
     // All `draw(Rect&)` calls sharing the same view + scissor + round-clip
-    // + rotation snapshot get coalesced into a single transient vertex
-    // buffer + submit. The batch must be flushed whenever any of those
-    // pipeline inputs change, so flush points are wired into every
-    // push/pop helper and every non-Rect submit path.
+    // state get coalesced into a single transient vertex buffer + submit.
+    // Flushing is lazy: scissor/round-clip push+pop do NOT flush; instead
+    // draw(Rect) compares the current state against the snapshot below and
+    // flushes only on a real mismatch, so push/pop cycles between rects that
+    // resolve to the same state (e.g. per-child pushRoundClip of the same
+    // container bounds) keep extending one batch. Every immediate-mode
+    // submit path still flushes first to preserve draw order. Rotation never
+    // flushes at all — it's baked into vertices at append time.
     std::vector<PosColorVertex> solidBatchVerts;
     std::vector<uint16_t>       solidBatchIdx;
     uint16_t                    solidBatchView = UINT16_MAX;
+
+    // Scissor + round-clip snapshot the queued rects were recorded under. By
+    // flush time the live stacks may have moved on, so flushSolidBatch()
+    // applies this snapshot, never the current stacks.
+    ScissorEntry batchScissor{};
+    bool         batchHasScissor    = false;
+    float        batchClipRect[4]    = {0.f, 0.f, 0.f, 0.f};
+    float        batchClipParams[4]  = {0.f, 0.f, 0.f, 0.f};
+    float        batchClipRect2[4]   = {0.f, 0.f, 0.f, 0.f};
+    float        batchClipParams2[4] = {0.f, 0.f, 0.f, 0.f};
+    bool batchStateMatches(uint16_t viewId);
+    void captureBatchState(uint16_t viewId);
 
     // ---- Affine rotation (applied CPU-side to draw vertices) -------------
     // Convention: degrees, +x at 0, +y at 90 (matches a (cos t, sin t)
@@ -251,6 +280,52 @@ struct Renderer::Impl {
     // scissor, round-clip, FB, rotation, non-Rect shader/program).
     void flushSolidBatch();
 };
+
+// ---- Shared draw-path helpers ---------------------------------------------
+// (One definition here instead of a copy per Renderer*.cpp TU.)
+
+// Push the four clip vec4s unless they're already bound (dedup vs lastClip*).
+inline void applyClipUniforms(Renderer::Impl& impl,
+                              const float rect[4],  const float params[4],
+                              const float rect2[4], const float params2[4]) {
+    const bool same = impl.lastClipValid
+        && std::memcmp(rect,    impl.lastClipRect,    sizeof(impl.lastClipRect))    == 0
+        && std::memcmp(params,  impl.lastClipParams,  sizeof(impl.lastClipParams))  == 0
+        && std::memcmp(rect2,   impl.lastClipRect2,   sizeof(impl.lastClipRect2))   == 0
+        && std::memcmp(params2, impl.lastClipParams2, sizeof(impl.lastClipParams2)) == 0;
+    if (same) return;
+    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
+    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
+    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
+    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
+    std::memcpy(impl.lastClipRect,    rect,    sizeof(impl.lastClipRect));
+    std::memcpy(impl.lastClipParams,  params,  sizeof(impl.lastClipParams));
+    std::memcpy(impl.lastClipRect2,   rect2,   sizeof(impl.lastClipRect2));
+    std::memcpy(impl.lastClipParams2, params2, sizeof(impl.lastClipParams2));
+    impl.lastClipValid = true;
+}
+
+// Bind the round-clip uniforms for the current round-clip stack.
+inline void applyRoundClipInner(Renderer::Impl& impl) {
+    impl.refreshClipCache();
+    applyClipUniforms(impl, impl.curClipRect, impl.curClipParams,
+                      impl.curClipRect2, impl.curClipParams2);
+}
+
+// Bind scissor + round-clip for an immediate (non-batched) submit.
+inline void applyScissor(Renderer::Impl& impl) {
+    if (impl.scissorTop > 0) {
+        const auto& sc = impl.scissorStack[impl.scissorTop - 1];
+        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
+    }
+    applyRoundClipInner(impl);
+}
+
+inline bool scissorEmpty(const Renderer::Impl& impl) {
+    if (impl.scissorTop == 0) return false;
+    const auto& sc = impl.scissorStack[impl.scissorTop - 1];
+    return sc.w == 0 || sc.h == 0;
+}
 
 // ---- Vertex packing helpers ----
 inline uint32_t packColor(Color c) {

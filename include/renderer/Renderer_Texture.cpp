@@ -7,65 +7,8 @@
 
 namespace uilo {
 
-namespace {
-inline void applyRoundClipInner(Renderer::Impl& impl) {
-    float rect[4]    = {0.f, 0.f, 0.f, 0.f};
-    float params[4]  = {0.f, 0.f, 0.f, 0.f};
-    float rect2[4]   = {0.f, 0.f, 0.f, 0.f};
-    float params2[4] = {0.f, 0.f, 0.f, 0.f};
-    int picked = 0;
-    for (int i = impl.roundClipTop - 1; i >= 0 && picked < 2; --i) {
-        const auto& c = impl.roundClipStack[i];
-        if (c.radius <= 0.f) continue;
-        if (picked == 0) {
-            rect[0] = c.cx; rect[1] = c.cy;
-            rect[2] = c.halfW; rect[3] = c.halfH;
-            params[0] = c.radius; params[1] = 1.f;
-        } else {
-            rect2[0] = c.cx; rect2[1] = c.cy;
-            rect2[2] = c.halfW; rect2[3] = c.halfH;
-            params2[0] = c.radius; params2[1] = 1.f;
-        }
-        ++picked;
-    }
-    const bool same = impl.lastClipValid
-        && rect[0]    == impl.lastClipRect[0]    && rect[1]    == impl.lastClipRect[1]
-        && rect[2]    == impl.lastClipRect[2]    && rect[3]    == impl.lastClipRect[3]
-        && params[0]  == impl.lastClipParams[0]  && params[1]  == impl.lastClipParams[1]
-        && rect2[0]   == impl.lastClipRect2[0]   && rect2[1]   == impl.lastClipRect2[1]
-        && rect2[2]   == impl.lastClipRect2[2]   && rect2[3]   == impl.lastClipRect2[3]
-        && params2[0] == impl.lastClipParams2[0] && params2[1] == impl.lastClipParams2[1];
-    if (same) return;
-    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
-    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
-    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
-    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
-    impl.lastClipRect[0]    = rect[0];    impl.lastClipRect[1]    = rect[1];
-    impl.lastClipRect[2]    = rect[2];    impl.lastClipRect[3]    = rect[3];
-    impl.lastClipParams[0]  = params[0];  impl.lastClipParams[1]  = params[1];
-    impl.lastClipParams[2]  = params[2];  impl.lastClipParams[3]  = params[3];
-    impl.lastClipRect2[0]   = rect2[0];   impl.lastClipRect2[1]   = rect2[1];
-    impl.lastClipRect2[2]   = rect2[2];   impl.lastClipRect2[3]   = rect2[3];
-    impl.lastClipParams2[0] = params2[0]; impl.lastClipParams2[1] = params2[1];
-    impl.lastClipParams2[2] = params2[2]; impl.lastClipParams2[3] = params2[3];
-    impl.lastClipValid = true;
-}
-inline void applyScissor(Renderer::Impl& impl) {
-    if (impl.scissorTop > 0) {
-        auto& sc = impl.scissorStack[impl.scissorTop - 1];
-        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
-    }
-    applyRoundClipInner(impl);
-}
-inline void applyRoundClip(Renderer::Impl& impl) {
-    applyRoundClipInner(impl);
-}
-inline bool scissorEmpty(const Renderer::Impl& impl) {
-    if (impl.scissorTop == 0) return false;
-    const auto& sc = impl.scissorStack[impl.scissorTop - 1];
-    return sc.w == 0 || sc.h == 0;
-}
-} // anon
+// applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in
+// RendererImpl.hpp.
 
 Texture Renderer::loadTexture(const std::string& path) {
     auto& impl = *m_impl;
