@@ -79,7 +79,7 @@ private:
     std::string             m_content;
     std::string             m_wrappedContent;
     unsigned int            m_charSize      = 30;
-    float                   m_lastBoundsH   = 0.f;
+    // float                   m_lastBoundsH   = 0.f;
     Color                   m_lastColor     = Color::White;
     float                   m_lastWrapWidth = 0.f;
     float                   m_lastScale     = 1.f;

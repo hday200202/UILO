@@ -10,65 +10,10 @@
 
 namespace uilo {
 
-namespace {
-inline void applyRoundClipInner(Renderer::Impl& impl) {
-    float rect[4]    = {0.f, 0.f, 0.f, 0.f};
-    float params[4]  = {0.f, 0.f, 0.f, 0.f};
-    float rect2[4]   = {0.f, 0.f, 0.f, 0.f};
-    float params2[4] = {0.f, 0.f, 0.f, 0.f};
-    int picked = 0;
-    for (int i = impl.roundClipTop - 1; i >= 0 && picked < 2; --i) {
-        const auto& c = impl.roundClipStack[i];
-        if (c.radius <= 0.f) continue;
-        if (picked == 0) {
-            rect[0] = c.cx; rect[1] = c.cy;
-            rect[2] = c.halfW; rect[3] = c.halfH;
-            params[0] = c.radius; params[1] = 1.f;
-        } else {
-            rect2[0] = c.cx; rect2[1] = c.cy;
-            rect2[2] = c.halfW; rect2[3] = c.halfH;
-            params2[0] = c.radius; params2[1] = 1.f;
-        }
-        ++picked;
-    }
-    const bool same = impl.lastClipValid
-        && rect[0]    == impl.lastClipRect[0]    && rect[1]    == impl.lastClipRect[1]
-        && rect[2]    == impl.lastClipRect[2]    && rect[3]    == impl.lastClipRect[3]
-        && params[0]  == impl.lastClipParams[0]  && params[1]  == impl.lastClipParams[1]
-        && rect2[0]   == impl.lastClipRect2[0]   && rect2[1]   == impl.lastClipRect2[1]
-        && rect2[2]   == impl.lastClipRect2[2]   && rect2[3]   == impl.lastClipRect2[3]
-        && params2[0] == impl.lastClipParams2[0] && params2[1] == impl.lastClipParams2[1];
-    if (same) return;
-    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
-    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
-    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
-    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
-    impl.lastClipRect[0]    = rect[0];    impl.lastClipRect[1]    = rect[1];
-    impl.lastClipRect[2]    = rect[2];    impl.lastClipRect[3]    = rect[3];
-    impl.lastClipParams[0]  = params[0];  impl.lastClipParams[1]  = params[1];
-    impl.lastClipParams[2]  = params[2];  impl.lastClipParams[3]  = params[3];
-    impl.lastClipRect2[0]   = rect2[0];   impl.lastClipRect2[1]   = rect2[1];
-    impl.lastClipRect2[2]   = rect2[2];   impl.lastClipRect2[3]   = rect2[3];
-    impl.lastClipParams2[0] = params2[0]; impl.lastClipParams2[1] = params2[1];
-    impl.lastClipParams2[2] = params2[2]; impl.lastClipParams2[3] = params2[3];
-    impl.lastClipValid = true;
-}
-inline void applyScissor(Renderer::Impl& impl) {
-    if (impl.scissorTop > 0) {
-        auto& sc = impl.scissorStack[impl.scissorTop - 1];
-        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
-    }
-    applyRoundClipInner(impl);
-}
-inline void applyRoundClip(Renderer::Impl& impl) {
-    applyRoundClipInner(impl);
-}
-inline bool scissorEmpty(const Renderer::Impl& impl) {
-    if (impl.scissorTop == 0) return false;
-    const auto& sc = impl.scissorStack[impl.scissorTop - 1];
-    return sc.w == 0 || sc.h == 0;
-}
+// applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in
+// RendererImpl.hpp.
 
+namespace {
 // Slurp a file fully into a vector.
 bool readFile(const char* path, std::vector<uint8_t>& out) {
     std::FILE* f = std::fopen(path, "rb");
@@ -155,8 +100,7 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     if (gw <= 0 || gh <= 0) {
         g.x = g.y = 0;
         g.w = g.h = 0;
-        face.glyphs.emplace(codepoint, g);
-        return &face.glyphs[codepoint];
+        return &face.glyphs.emplace(codepoint, g).first->second;
     }
 
     // Reserve space in atlas
@@ -169,8 +113,7 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     if (face.penY + gh + pad >= face.atlasH) {
         // Atlas full — give up on this glyph (no visible draw)
         g.w = g.h = 0;
-        face.glyphs.emplace(codepoint, g);
-        return &face.glyphs[codepoint];
+        return &face.glyphs.emplace(codepoint, g).first->second;
     }
 
     // Render glyph into temp buffer
@@ -192,8 +135,7 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     face.penX += gw + pad;
     if (gh > face.rowH) face.rowH = gh;
 
-    face.glyphs.emplace(codepoint, g);
-    return &face.glyphs[codepoint];
+    return &face.glyphs.emplace(codepoint, g).first->second;
 }
 
 Font Renderer::loadFont(const std::string& path) {
@@ -336,27 +278,18 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
     FontFace* face = impl.getFace(font.id, sizePx);
     if (!face || !bgfx::isValid(face->atlas)) return;
 
-    // Pre-count glyphs that actually emit a quad
-    uint32_t nQuads = 0;
-    {
-        const char* s = utf8.data();
-        size_t left = utf8.size();
-        uint32_t cp = 0;
-        while (left > 0) {
-            int n = utf8Decode(s, left, &cp);
-            if (n <= 0) break;
-            s += n; left -= n;
-            if (cp == '\n' || cp == '\r' || cp == '\t' || cp == ' ') continue;
-            const Glyph* g = impl.getGlyph(*face, cp);
-            if (g && g->w > 0 && g->h > 0) ++nQuads;
-        }
-    }
-    if (nQuads == 0) return;
-
+    // Single pass: allocate transient space for the worst case (one quad per
+    // UTF-8 byte, an upper bound on codepoints) and submit only the range
+    // actually filled. This avoids a separate pre-count pass that would
+    // decode the string and hit the glyph cache twice per draw. Cap at the
+    // 16-bit index range; longer strings truncate (they produced garbage
+    // indices before, so nothing sane is lost).
+    const uint32_t maxQuads =
+        (uint32_t)std::min<size_t>(utf8.size(), 65532u / 4u);
     bgfx::TransientVertexBuffer tvb;
     bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.texLayout, nQuads * 4,
-                                     &tib, nQuads * 6))
+    if (!bgfx::allocTransientBuffers(&tvb, impl.texLayout, maxQuads * 4,
+                                     &tib, maxQuads * 6))
         return;
 
     auto* verts = reinterpret_cast<PosColorUvVertex*>(tvb.data);
@@ -387,7 +320,7 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
         const Glyph* g = impl.getGlyph(*face, cp);
         if (!g) continue;
 
-        if (g->w > 0 && g->h > 0) {
+        if (g->w > 0 && g->h > 0 && vi + 4 <= maxQuads * 4) {
             float gx = std::floor(penX + g->xoff + 0.5f);
             float gy = std::floor(penY + g->yoff + 0.5f);
             float gw = (float)g->w;
@@ -417,10 +350,11 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
         }
         penX += g->xadvance;
     }
+    if (ii == 0) return;   // whitespace-only: nothing to submit
 
     bgfx::setTexture(0, impl.s_texColor, face->atlas);
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
+    bgfx::setVertexBuffer(0, &tvb, 0, vi);
+    bgfx::setIndexBuffer(&tib, 0, ii);
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
                    BGFX_STATE_BLEND_ALPHA);
     applyScissor(impl);
