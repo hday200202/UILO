@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Cross-platform build wrapper for UILO (Linux / macOS / WSL / Git-Bash).
-# Vendors bgfx: clones bx/bimg/bgfx under ext/ and builds them ONCE with
-# bgfx's own GENie+make build; CMake links the prebuilt static libs.
-# SDL3 is auto-fetched via CMake FetchContent when not installed.
+# Vendors all third-party dependencies under ext/:
+#   - SDL3: cloned at a pinned release tag, built via CMake
+#   - bgfx/bimg/bx: cloned at HEAD, built once with bgfx's GENie+make
+#   - stb: headers copied from third_party (for backwards compatibility)
+# CMake links the prebuilt static libs and builds SDL3 as part of UILO.
 #
 # Usage:
 #   ./build.sh                              # Release static
@@ -11,7 +13,8 @@
 #   ./build.sh debug dynamic                # Debug shared
 #   ./build.sh clean release dynamic        # wipe build/ then rebuild
 #                                             (never touches ext/)
-#   UILO_AUTO_FETCH=OFF ./build.sh          # require system SDL3
+# Env:
+#   UILO_CLEAN_EXT=1 ./build.sh             # also wipe ext/ (forces re-clone/rebuild)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,21 +53,34 @@ if [[ $DO_CLEAN -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Vendored bgfx: bx/bimg/bgfx MUST be sibling dirs under ext/ (bgfx's build
-# references ../bx and ../bimg). Clone all three together -- they version-lock
-# against each other. GENie needs no install; bx ships prebuilt binaries at
-# bx/tools/bin/<os>/genie, which bgfx's makefile uses automatically.
+# Vendored dependencies under ext/
 # ---------------------------------------------------------------------------
 EXT="$ROOT_DIR/ext"
 mkdir -p "$EXT"
 
+UILO_CLEAN_EXT="${UILO_CLEAN_EXT:-0}"
+if [[ $UILO_CLEAN_EXT -eq 1 ]]; then
+    echo "[UILO] cleaning ext/ (UILO_CLEAN_EXT=1)"
+    rm -rf "$EXT"/{SDL3,bgfx,bimg,bx}
+    mkdir -p "$EXT"
+fi
+
 clone_if_missing() {
-    local name="$1" url="$2"
+    local name="$1" url="$2" tag="${3:-}"
     if [[ ! -d "$EXT/$name" ]]; then
         echo "[UILO] cloning $name into ext/"
-        git clone --depth 1 "$url" "$EXT/$name"
+        if [[ -n "$tag" ]]; then
+            git clone --depth 1 --branch "$tag" "$url" "$EXT/$name"
+        else
+            git clone --depth 1 "$url" "$EXT/$name"
+        fi
     fi
 }
+
+# SDL3: pinned release tag for reproducible builds
+clone_if_missing SDL3 "https://github.com/libsdl-org/SDL.git" "release-3.2.10"
+
+# bgfx: bx/bimg/bgfx MUST be sibling dirs (bgfx's build references ../bx and ../bimg)
 clone_if_missing bx   "https://github.com/bkaradzic/bx.git"
 clone_if_missing bimg "https://github.com/bkaradzic/bimg.git"
 clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git"
@@ -104,12 +120,9 @@ if command -v ninja >/dev/null 2>&1; then
     GENERATOR="Ninja"
 fi
 
-AUTO_FETCH="${UILO_AUTO_FETCH:-ON}"
-
-echo "[UILO] configure ($MODE, $LINK_TAG, $GENERATOR, AUTO_FETCH=$AUTO_FETCH)"
+echo "[UILO] configure ($MODE, $LINK_TAG, $GENERATOR)"
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$GENERATOR" \
     -DCMAKE_BUILD_TYPE="$MODE" \
-    -DUILO_AUTO_FETCH="$AUTO_FETCH" \
     -DUILO_SHARED="$UILO_SHARED"
 
 echo "[UILO] build"

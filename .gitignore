@@ -13,5 +13,9 @@ build
 *.dylib
 *.dll
 .claude
-# vendored bgfx clones + one-time build output (see build.sh)
-/ext/
+# Vendored dependencies in ext/ — all cloned by build.sh at pinned versions.
+# Keep the ext/stb/ directory (contains committed headers), wipe the rest on clean.
+/ext/SDL3
+/ext/bgfx
+/ext/bimg
+/ext/bx
