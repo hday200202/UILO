@@ -100,7 +100,7 @@ case "$(uname -s)" in
         BGFX_PLATFORM_DIR="linux64_gcc"
         ;;
     *)
-        echo "[UILO] unsupported platform for vendored bgfx: $(uname -s)" >&2
+        echo "[UILO] unsupported platform: $(uname -s)" >&2
         echo "[UILO] on Windows use build.bat / build.ps1" >&2
         exit 1
         ;;
@@ -113,6 +113,11 @@ BGFX_BIN_DIR="$EXT/bgfx/.build/$BGFX_PLATFORM_DIR/bin"
 if [[ ! -f "$BGFX_BIN_DIR/libbgfxRelease.a" ]]; then
     echo "[UILO] building bgfx ($BGFX_TARGET) -- one time only"
     make -C "$EXT/bgfx" "$BGFX_TARGET"
+fi
+# Ensure shaderc is available (needed for shader compilation)
+if [[ ! -f "$BGFX_BIN_DIR/shadercRelease" ]]; then
+    echo "[UILO] building bgfx tools -- one time only"
+    make -C "$EXT/bgfx" "$BGFX_TARGET" TOOLS=1 2>/dev/null || true
 fi
 
 GENERATOR="Unix Makefiles"
