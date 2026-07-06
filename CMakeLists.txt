@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
-project(UILO LANGUAGES C CXX)
+# Enable OBJCXX upfront so SDL3's subdirectory can use it on macOS (Ninja + OBJCXX
+# requires the language to be declared in the parent project, not deferred).
+if(APPLE)
+    project(UILO LANGUAGES C CXX OBJCXX)
+else()
+    project(UILO LANGUAGES C CXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,27 +30,22 @@ endif()
 include(FetchContent)
 
 # ---------------------------------------------------------------------------
-# SDL3
+# SDL3 (vendored in ext/SDL3, cloned by build.sh at a pinned tag)
 # ---------------------------------------------------------------------------
-find_package(SDL3 CONFIG QUIET)
-if(NOT SDL3_FOUND)
-    if(UILO_AUTO_FETCH)
-        message(STATUS "[UILO] SDL3 not found; fetching from GitHub...")
-        set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
-        set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
-        set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-        set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
-        set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
-        FetchContent_Declare(SDL3
-            GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-            GIT_TAG        release-3.2.10
-            GIT_SHALLOW    TRUE
-        )
-        FetchContent_MakeAvailable(SDL3)
-    else()
-        message(FATAL_ERROR "SDL3 not found and UILO_AUTO_FETCH is OFF")
-    endif()
+set(UILO_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/SDL3")
+if(NOT EXISTS "${UILO_SDL3_DIR}")
+    message(FATAL_ERROR
+        "[UILO] vendored SDL3 not found at ${UILO_SDL3_DIR}\n"
+        "Run ./build.sh (or build.ps1 on Windows) -- it clones SDL3 "
+        "into ext/SDL3 at a pinned release tag.")
 endif()
+
+set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
+set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
+add_subdirectory("${UILO_SDL3_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext_SDL3")
 
 # ---------------------------------------------------------------------------
 # bgfx (vendored: prebuilt static libs under ext/, built once by build.sh)
@@ -149,8 +150,8 @@ file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
 
 # macOS: native scroll shim (Objective-C++) — gives us precise trackpad
 # deltas + OS momentum that SDL3's Cocoa backend drops.
+# (OBJCXX language already enabled in project() declaration above.)
 if(APPLE)
-    enable_language(OBJCXX)
     list(APPEND UILO_SRCS
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacScroll.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacWindow.mm"
@@ -212,15 +213,15 @@ endif()
 target_compile_definitions(uilo PUBLIC "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,0>")
 
 target_include_directories(uilo PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ext/stb"
     "${_SHADER_OUT_DIR}"
 )
 
 # Static link order matters: dependents before dependencies.
-# uilo -> bgfx -> bimg_decode -> bimg -> bx (bimg_decode holds imageParse and
+# uilo -> SDL3 -> bgfx -> bimg_decode -> bimg -> bx (bimg_decode holds imageParse and
 # depends on bimg; bx is always last).
 target_link_libraries(uilo PUBLIC
-    SDL3::SDL3
+    SDL3-static
     "${UILO_BGFX_LIB}"
     "${UILO_BIMG_DECODE_LIB}"
     "${UILO_BIMG_LIB}"
