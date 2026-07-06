@@ -16,7 +16,7 @@ UILO provides a retained-mode UI system with automatic layout management, respon
 - **Automatic Layout** — Responsive rows, columns, and flexible sizing
 - **Hardware Accelerated** — bgfx rendering with direct GPU support
 - **Cross-platform** — macOS, Linux, Windows support (SDL3 + bgfx)
-- **Declarative API** — Chainable modifiers and composable layouts
+- **Declarative API** — Chainable Modifiers and Options, composable layouts
 - **Static & Dynamic** — Build as static or shared library
 - **Integrated Build** — Vendored dependencies, one-command builds
 
@@ -33,10 +33,10 @@ UILO provides a retained-mode UI system with automatic layout management, respon
 Build UILO with one of these commands:
 
 ```bash
-./build.sh                  # Release, static
-./build.sh debug            # Debug, static
-./build.sh release dynamic  # Release, shared
-./build.sh clean            # Clean build/ (preserves vendor cache)
+./build.sh                # Release, static
+./build.sh debug          # Debug, static
+./build.sh release dynamic # Release, shared
+./build.sh clean          # Clean build/ (preserves vendor cache)
 UILO_CLEAN_EXT=1 ./build.sh # Force rebuild of dependencies
 ```
 
@@ -47,45 +47,93 @@ The build script:
 - Configures and builds UILO via CMake
 - Outputs binaries to `build/{Release,Debug}-{static,dynamic}/`
 
-## Architecture
+## Core Concepts
 
-UILO is structured around a few core concepts:
+### Modifier — Layout & Events
 
-### Element & Widgets
-
-All UI components inherit from `Element`. Common widgets:
-
-- **Container**: `Column`, `Row`, `ScrollableColumn`, `ScrollableRow`
-- **Input**: `Button`, `Slider`, `Dropdown`, `TextInput`
-- **Display**: `Text`, `Image`, `Spacer`
-
-### Layout System
-
-- **Column** — Vertical stacking with height distribution
-- **Row** — Horizontal layout with width distribution
-- **Fixed/Percentage sizing** — Mix pixel and proportional dimensions
-- **Alignment flags** — `CENTER_X`, `CENTER_Y`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM`
-
-### Modifiers
-
-Configure appearance and behavior with chainable methods:
+Every element takes a `Modifier` for common configuration: sizing, alignment, callbacks, padding, and visibility.
 
 ```cpp
 Modifier()
-    .setWidth(0.5f)         // 50% of parent width
-    .setfixedHeight(40.f)   // 40 pixels
-    .setColor(0xFF0000FF)   // RGBA color
-    .align(Align::CENTER_X)
-    .onLClick([]() { /* ... */ })
+    .setWidth(50_pct)         // 50% of parent width
+    .setHeight(100_px)        // 100 pixels
+    .setAlign(Align::Center)
+    .setOnLeftClick([](Button* btn) { /* ... */ })
+    .setOnHoverEnter([](Element* el) { /* ... */ })
+    .setOuterPadding(8.f)
+    .setVisible(true)
 ```
 
-### Pages
+### Options — Widget-Specific Styling
 
-Named UI screens that can be switched at runtime:
+Each widget has dedicated Options for its own properties: colors, fonts, gradients, scrolling, ranges, etc.
 
 ```cpp
-app.addPage(page({/* ... */}), "main");
-app.switchToPage("main");
+TextOptions()
+    .setFont("fonts/regular.ttf")
+    .setContent("Hello World")
+    .setCharSize(16)
+    .setColor(Color::White)
+    .setWrap(true)
+    .setBold(true)
+
+ButtonOptions()
+    .setColor(Color::Blue)
+    .setGradient({topLeft, topRight, bottomLeft, bottomRight})
+    .setRounding(8.f)
+    .setLabel(labelText)
+
+SliderOptions()
+    .setTrackColor(Color::Gray)
+    .setThumbColor(Color::White)
+    .setRange(0.f, 100.f)
+    .setStep(1.f)
+    .setOrientation(SliderOrientation::Horizontal)
+    .setOnValueChanged([](Slider* s, float v) { /* ... */ })
+
+RowOptions()
+    .setColor(Color::Panel)
+    .setGradient({c1, c2, c3, c4})
+    .setRounding(4.f)
+    .setScrollable(true)
+    .setScrollSpeed(20.f)
+```
+
+### Factory Functions
+
+Create elements using simple factory functions. All take `Modifier` and widget-specific `Options`:
+
+```cpp
+text(Modifier(), TextOptions().setContent("Label"), "label_name");
+button(Modifier().setOnLeftClick([](Button* b) { }), ButtonOptions());
+slider(Modifier(), SliderOptions().setRange(0.f, 1.f));
+column(Modifier(), ColumnOptions(), {child1, child2, child3}, "my_column");
+row(Modifier(), RowOptions().setGradient(g), {child1, child2});
+```
+
+### Dimension Literals
+
+Sizes use `Dimension` with convenient syntax:
+
+```cpp
+50_pct    // 50% of parent
+100_px    // 100 pixels
+```
+
+### Containers
+
+Stack and arrange elements with automatic layout:
+
+```cpp
+column(
+    Modifier().setHeight(100_pct),
+    ColumnOptions(),
+    {
+        text(Modifier().setHeight(20_pct), TextOptions().setContent("Header")),
+        row(Modifier().setHeight(60_pct), RowOptions(), {/*children*/}),
+        spacer(Modifier().setHeight(20_pct))
+    }
+)
 ```
 
 ## Example
@@ -96,24 +144,37 @@ app.switchToPage("main");
 int main() {
     UILO app("My App");
 
-    auto mainPage = page({
-        column({
-            text(
-                Modifier().setfixedHeight(40.f).align(Align::CENTER_X),
-                "Welcome to UILO",
-                "path/to/font.ttf"
-            ),
-            button(
-                Modifier()
-                    .setfixedSize({150.f, 40.f})
-                    .align(Align::CENTER_X)
-                    .onLClick([]() { std::cout << "Clicked!\n"; }),
-                ButtonStyle::Pill,
-                "Click Me",
-                "path/to/font.ttf"
-            )
-        })
-    });
+    auto mainPage = page(
+        column(
+            Modifier(),
+            ColumnOptions(),
+            {
+                text(
+                    Modifier().setHeight(50_px).setAlign(Align::CenterX),
+                    TextOptions()
+                        .setFont("fonts/regular.ttf")
+                        .setContent("Welcome to UILO")
+                        .setCharSize(24),
+                    "header"
+                ),
+                button(
+                    Modifier()
+                        .setHeight(40_px)
+                        .setWidth(150_px)
+                        .setAlign(Align::CenterX)
+                        .setOnLeftClick([](Button* btn) { 
+                            std::cout << "Clicked!\n"; 
+                        }),
+                    ButtonOptions()
+                        .setColor(Color::Blue)
+                        .setRounding(4.f),
+                    "click_me"
+                )
+            },
+            "main_column"
+        ),
+        "main"
+    );
 
     app.addPage(std::move(mainPage), "main");
     app.switchToPage("main");
@@ -140,76 +201,115 @@ void render();
 bool isRunning();
 ```
 
-### Modifiers & Options
-
-UILO uses two complementary configuration systems:
-
-**Modifier** — Common layout and event handling (all widgets):
+### Modifier Methods
 
 ```cpp
-Modifier()
-    .setWidth(0.5f)              // 50% of parent width
-    .setfixedHeight(40.f)        // 40 pixels
-    .align(Align::CENTER_X)
-    .onLClick([]() { /* ... */ })
-
-// Key methods:
-.setWidth(float pct)
-.setHeight(float pct)
-.setfixedWidth(float px)
-.setfixedHeight(float px)
-.setColor(Color c)
+.setWidth(Dimension)
+.setHeight(Dimension)
+.setAlign(Align)
+.setOnLeftClick(callback)
+.setOnRightClick(callback)
+.setOnHoverEnter(callback)
+.setOnHoverExit(callback)
+.setOnScroll(callback)
+.setOnUpdateStart(callback)
+.setOnUpdateEnd(callback)
+.setOuterPadding(float)
 .setVisible(bool)
-.align(Align flags)
-.onLClick(std::function<void()>)
-.onRClick(std::function<void()>)
+.ignoreScroll(bool)
+.setFreePosition(Vec2f)
+.setMaterial(Material)
 ```
 
-**Options** — Widget-specific styling and behavior:
-
-Each widget has specialized Options (ButtonOptions, SliderOptions, RowOptions, etc.):
+### Common Widget Factories
 
 ```cpp
-ButtonOptions()
-    .setColor(Color::Red)
-    .setRounding(8.f)
+Column*    column(Modifier, ColumnOptions, contains children, const std::string& name);
+Row*       row(Modifier, RowOptions, contains children, const std::string& name);
+Canvas*    canvas(Modifier, CanvasOptions, contains children, const std::string& name);
+Text*      text(Modifier, TextOptions, const std::string& name);
+Button*    button(Modifier, ButtonOptions, const std::string& name);
+Slider*    slider(Modifier, SliderOptions, const std::string& name);
+Knob*      knob(Modifier, KnobOptions, const std::string& name);
+Dropdown*  dropdown(Modifier, DropdownOptions, std::initializer_list<std::string> items, const std::string& name);
+Image*     image(Modifier, ImageOptions, const std::string& name);
+Spacer*    spacer(Modifier, SpacerOptions, const std::string& name);
+Textbox*   textbox(Modifier, TextboxOptions, const std::string& name);
+Resizer*   resizer(Modifier, ResizerOptions, const std::string& name);
+Waveform*  waveform(Modifier, WaveformOptions, const std::string& name);
 
-SliderOptions()
-    .setTrackColor(Color::Gray)
-    .setThumbColor(Color::Blue)
-    .setRange(0.f, 100.f)
-    .setOnValueChanged([](float v) { /* ... */ })
-
-RowOptions()
-    .setGradient({topLeft, topRight, bottomLeft, bottomRight})
-    .setRounding(4.f)
-    .setScrollable(true)
+// Floating elements (positioned in window space, outside layout)
+FreeElement freeColumn(Modifier, ColumnOptions, contains children, const std::string& name);
+FreeElement freeRow(Modifier, RowOptions, contains children, const std::string& name);
 ```
 
-Pass both to factory functions:
+### Common Options
+
+**TextOptions:**
 
 ```cpp
-row(
-    Modifier().setHeight(0.5f),      // Layout
-    RowOptions().setGradient(g),     // Widget-specific styling
-    {/* children */}
-)
+.setFont(path)
+.setContent(string)
+.setCharSize(unsigned int)
+.setColor(Color)
+.setColorRole(string)
+.setWrap(bool)
+.setBold(bool)
+.setItalic(bool)
+.setUnderlined(bool)
+.setStrikeThrough(bool)
+.setTextAlignX(Align)
+.setTextAlignY(Align)
 ```
 
-### Common Widgets
+**ButtonOptions:**
 
 ```cpp
-Text*               text(Modifier, const std::string& str, const std::string& fontPath);
-Button*             button(Modifier, ButtonStyle, const std::string& label, const std::string& fontPath);
-Slider*             horizontalSlider(Modifier, uint32_t knobColor, uint32_t barColor);
-Slider*             verticalSlider(Modifier, uint32_t knobColor, uint32_t barColor);
-Dropdown*           dropdown(Modifier, const std::string& defaultText, std::vector<std::string> options, ...);
-Image*              image(Modifier, const sf::Image&);
-Column*             column(std::vector<Element*> children);
-Row*                row(std::vector<Element*> children);
-ScrollableColumn*   scrollableColumn(Modifier, std::vector<Element*> children);
-ScrollableRow*      scrollableRow(Modifier, std::vector<Element*> children);
-Spacer*             spacer(Modifier);
+.setColor(Color)
+.setColorRole(string)
+.setGradient(Gradient)
+.setGradientRole(string)
+.setRounding(float)
+.setLabel(Text*)
+```
+
+**SliderOptions:**
+
+```cpp
+.setTrackColor(Color)
+.setTrackColorRole(string)
+.setFillColor(Color)
+.setFillColorRole(string)
+.setThumbColor(Color)
+.setThumbColorRole(string)
+.setThumbShape(ThumbShape)
+.setTrackThickness(float)
+.setTrackRounding(float)
+.setThumbSize(float width, float height)
+.setThumbRounding(float)
+.setRange(float min, float max)
+.setStep(float)
+.setInvertScroll(bool)
+.setDefaultValue(float)
+.setOnValueChanged(callback)
+.setOrientation(SliderOrientation)
+```
+
+**RowOptions / ColumnOptions:**
+
+```cpp
+.setColor(Color)
+.setColorRole(string)
+.setGradient(Gradient)
+.setGradientRole(string)
+.setRounding(float)
+.setScrollable(bool)
+.setScrollSpeed(float)
+.setScrollMin(float)
+.setScrollMax(float)
+.setScrollLink(string)
+.setSubDivisions(float)
+.setSubDivisionMajor(unsigned int)
 ```
 
 ## Dependencies
@@ -219,7 +319,7 @@ UILO vendors and manages all dependencies:
 - **SDL3** — Window, input, and event handling ([release-3.2.10](https://github.com/libsdl-org/SDL/releases/tag/release-3.2.10))
 - **bgfx** — Rendering backend (latest from main)
 - **bx/bimg** — bgfx utilities
-- **stb** — Header-only image/font libraries (included in third_party/)
+- **stb** — Header-only image/font libraries
 
 All dependencies are cloned into `ext/` and built once, then cached. Clean builds don't rebuild them.
 
@@ -227,19 +327,8 @@ All dependencies are cloned into `ext/` and built once, then cached. Clean build
 
 - **One-time builds** — bgfx and SDL3 build once and are cached
 - **Incremental rebuilds** — Only UILO sources recompile on changes
-- **Stress testing** — Benchmark suite included (`make render-stress-benchmark`)
+- **Stress testing** — Benchmark suite included
 - **Hardware accelerated** — bgfx provides direct GPU rendering with minimal overhead
-
-## Development
-
-```bash
-# View available targets
-cmake --build build/Release-static --target help
-
-# Run a specific benchmark
-cmake --build build/Release-static --target render-stress-benchmark
-cmake --build build/Release-static --config Release --target render-stress-benchmark --verbose
-```
 
 ## License
 
