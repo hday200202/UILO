@@ -9,6 +9,7 @@ obj
 *.o
 *.a
 build
+.sdl3build
 *.so
 *.dylib
 *.dll

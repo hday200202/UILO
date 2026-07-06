@@ -28,9 +28,11 @@ if(MSVC)
 endif()
 
 include(FetchContent)
+find_package(Threads REQUIRED)
 
 # ---------------------------------------------------------------------------
 # SDL3 (vendored in ext/SDL3, cloned by build.sh at a pinned tag)
+# Built once in a separate directory so `./build.sh clean` doesn't rebuild it
 # ---------------------------------------------------------------------------
 set(UILO_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/SDL3")
 if(NOT EXISTS "${UILO_SDL3_DIR}")
@@ -45,7 +47,50 @@ set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
-add_subdirectory("${UILO_SDL3_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext_SDL3")
+
+# Use a persistent build directory (.sdl3build in project root) that survives
+# clean rebuilds. This way SDL3 only builds once.
+set(UILO_SDL3_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.sdl3build")
+
+# Only configure/build SDL3 if the library doesn't exist
+# (subsequent runs skip this to avoid unnecessary rebuilds)
+find_library(UILO_SDL3_BUILT NAMES SDL3 PATHS "${UILO_SDL3_BUILD_DIR}" NO_DEFAULT_PATH)
+if(NOT UILO_SDL3_BUILT)
+    add_subdirectory("${UILO_SDL3_DIR}" "${UILO_SDL3_BUILD_DIR}")
+else()
+    # SDL3 already built, create a target to link against
+    add_library(SDL3-static STATIC IMPORTED)
+    set_target_properties(SDL3-static PROPERTIES
+        IMPORTED_LOCATION "${UILO_SDL3_BUILT}"
+    )
+    target_include_directories(SDL3-static INTERFACE "${UILO_SDL3_DIR}/include")
+
+    # Link against required system frameworks (same as when built via add_subdirectory)
+    if(APPLE)
+        target_link_libraries(SDL3-static INTERFACE
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreVideo"
+            "-framework CoreMedia"
+            "-framework CoreAudio"
+            "-framework AudioToolbox"
+            "-framework GameController"
+            "-framework AVFoundation"
+            "-framework MetalKit"
+            "-framework Carbon"
+            "-framework CoreHaptics"
+            "-framework ForceFeedback"
+            "-framework UniformTypeIdentifiers"
+        )
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(SDL3-static INTERFACE
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # bgfx (vendored: prebuilt static libs under ext/, built once by build.sh)
@@ -247,7 +292,6 @@ elseif(WIN32)
     # DirectX headers/libs are vendored inside bgfx -- no DX SDK needed.
     target_link_libraries(uilo PUBLIC gdi32 psapi user32)
 else()
-    find_package(Threads REQUIRED)
     target_link_libraries(uilo PUBLIC Threads::Threads ${CMAKE_DL_LIBS} GL)
 endif()
 
