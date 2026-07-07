@@ -1,0 +1,244 @@
+UILO TODO & Roadmap
+===================
+
+## High-Priority Widgets
+
+- [ ] Calendar / Date Picker
+      - Range selection mode
+      - Month/year navigation
+      - Keyboard shortcuts
+
+- [ ] File Browser
+      - Floating window mode (for dialogs)
+      - Docked mode (embedded in panels)
+      - File filtering by extension
+      - Multi-select mode
+      - Favorites / Recent files
+      - Search/filter bar
+
+- [ ] Color Picker
+      - HSV/RGB selector
+      - Gradient picker
+      - Palette presets
+      - Alpha channel control
+
+- [ ] Tree View
+      - Hierarchical display with expand/collapse
+      - Lazy-load children on expand (virtualization for large trees)
+      - Multi-level nesting support
+      - Icons or custom content per node
+      - Selection modes (single, multi, range)
+      - Keyboard navigation (arrows, home/end, expand/collapse with left/right)
+      - Optional drag-and-drop between nodes
+      - Context menu integration
+      - Scrollable when exceeds bounds
+
+- [ ] Tabs / Tab Bar
+      - Closeable tabs
+      - Active tab highlighting
+      - Overflow handling (scroll or menu)
+
+## Medium-Priority Widgets
+
+- [ ] Context Menu (right-click)
+      - Submenu support
+      - Keyboard navigation
+      - Icon support per item
+
+- [ ] Modal Dialog / Overlay
+      - Blocking modal with backdrop
+      - Button presets (OK, Cancel, Yes/No)
+      - Custom button layouts
+
+- [ ] Toast Notifications
+      - Auto-dismiss with timeout
+      - Position (top, bottom, corner)
+      - Multiple simultaneous notifications
+
+- [ ] Progress Bar
+      - Horizontal and vertical orientations
+      - Indeterminate mode
+      - Text label support
+
+- [ ] Checkbox
+      - Tri-state support (checked, unchecked, partial)
+      - Label support
+
+- [ ] Radio Button Group
+      - Exclusive selection
+      - Vertical or horizontal layout
+
+- [ ] Menu Bar / Top Menu
+      - Dropdown menus
+      - Keyboard mnemonics
+      - Separators
+
+- [ ] Tooltip
+      - Hover-triggered
+      - Delay before show
+      - Auto-position to avoid edges
+
+- [ ] Breadcrumb Navigation
+      - Clickable items
+      - Separator styling
+      - Overflow handling
+
+## Low-Priority Widgets
+
+- [ ] Autocomplete / Search Input
+      - Suggestions dropdown
+      - Fuzzy matching
+
+- [ ] Pagination Widget
+      - Previous/next buttons
+      - Page indicators
+      - Jump to page input
+
+- [ ] Resizable Panels
+      - Divider dragging
+      - Min/max size constraints
+      - Save/restore layout
+
+- [ ] Spinbox / Number Input
+      - Up/down buttons
+      - Keyboard arrow support
+      - Range validation
+
+- [ ] Tag Input
+      - Add/remove tags
+      - Auto-complete suggestions
+
+- [ ] Switch / Toggle Button
+      - Animated state transition
+      - Label support
+
+## Features & Infrastructure
+
+- [ ] Palette System (for application-defined theming)
+      - Centralized color palette definitions
+      - Palette switching at runtime
+      - NO built-in themes; apps define their own palettes
+      - Palette serialization/deserialization
+
+- [ ] Style System
+      - CSS-like selectors or style sheets
+      - Reusable style objects
+      - Cascading properties
+
+- [ ] Animation System
+      - Lerp between two or more Modifiers over time
+      - Lerp between two or more Options over time
+      - Easing functions (linear, ease-in, ease-out, etc.)
+      - Duration and playback control
+      - Design question: How does element know when to animate?
+        * Manual trigger (.animate(startModifier, endModifier, duration))?
+        * Callback-driven?
+        * Event-based?
+      - Callbacks on animation start/end
+
+- [ ] Drag and Drop
+      - Draggable elements
+      - Drop targets
+      - Visual feedback during drag
+      - Mouse class with "bucket" for arbitrary payload data
+        * Store any type of data during drag (void* or template-based)
+        * Query payload at drop target
+        * Enables flexible, type-safe data passing
+
+- [ ] Keyboard Navigation
+      - Tab order management
+      - Focus indicators
+      - Arrow key navigation in containers
+
+- [ ] Virtual Scrolling
+      - Lazy rendering for massive lists
+      - Performance for 10k+ items
+
+- [ ] Hot Reload / Live Edit
+      - UI state preservation on reload
+      - Fast iteration during development
+
+- [ ] Inspector / Debug Tools
+      - Visual element hierarchy
+      - Property viewer
+      - Performance profiler
+      - Event logger
+
+- [ ] Native File Dialog Abstraction
+      - Unified interface for file open/save dialogs
+      - Works across macOS, Linux, Windows
+      - Path filtering and file type restrictions
+      - Async or blocking modes
+      - Returns selected path(s) and metadata
+
+- [ ] Platform-Specific Features
+      - OS-level drag & drop into UILO window
+      - Cut/copy/paste integration with system clipboard
+
+## Documentation & Examples
+
+- [ ] API Documentation
+      - Doxygen or similar
+      - Generated HTML docs
+
+- [ ] Example Applications
+      - Todo app
+      - Settings panel
+      - Dashboard/metrics view
+      - Music player UI
+      - Text editor
+
+- [ ] Video Tutorials
+      - Getting started
+      - Common patterns
+      - Performance tips
+
+- [ ] Best Practices Guide
+      - Layout patterns
+      - Event handling
+      - Memory management
+      - Performance optimization
+
+## Testing & Performance
+
+- [ ] Unit Tests
+      - Layout calculation tests
+      - Event handling tests
+      - Widget behavior tests
+
+- [ ] Integration Tests
+      - Multi-widget interactions
+      - Page switching
+      - State preservation
+
+- [ ] Performance Benchmarks
+      - Rendering speed (elements per frame)
+      - Memory usage patterns
+      - Event handling latency
+
+- [ ] Profiling Tools
+      - Frame time breakdown
+      - Element count/memory tracking
+      - Render target statistics
+
+## Bug Fixes & Polish
+
+- [ ] Input Handling
+      - Touch/pointer support
+      - IME support for international text
+      - Text selection and clipboard
+
+- [ ] Rendering
+      - Sub-pixel rendering
+      - Text antialiasing quality
+      - High DPI support
+
+- [ ] Layout Edge Cases
+      - Very small containers
+      - Deeply nested hierarchies
+      - Rapid add/remove cycles
+
+- [ ] Memory & Performance
+      - Reduce allocations
+      - Cache layout calculations
+      - Optimize draw calls
