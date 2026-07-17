@@ -3,11 +3,19 @@
 #include <SDL3/SDL.h>
 
 // Disable embedded-shader references to backends we don't compile for.
-// Must come before <bgfx/embedded_shader.h>.
+// Must come before <bgfx/embedded_shader.h>. bx/platform.h defines the
+// BX_PLATFORM_* macros the guards below test -- it must be included first, or
+// BX_PLATFORM_WINDOWS reads as undefined and DXBC (the Direct3D11 shaders) gets
+// disabled on Windows, leaving the embedded-shader table with no D3D11 entry.
+#include <bx/platform.h>
 #if !defined(BX_PLATFORM_WINDOWS) || !BX_PLATFORM_WINDOWS
 #  define BGFX_PLATFORM_SUPPORTS_DXBC 0
-#  define BGFX_PLATFORM_SUPPORTS_DXIL 0
 #endif
+// D3D12 (DXIL) shaders need Microsoft's DXC compiler at build time, which isn't
+// shipped with a stock VS install. We only compile/embed DXBC (D3D11) shaders,
+// so force DXIL off everywhere; bgfx defaults to the Direct3D11 backend on
+// Windows regardless.
+#define BGFX_PLATFORM_SUPPORTS_DXIL 0
 #define BGFX_PLATFORM_SUPPORTS_WGSL 0
 #define BGFX_PLATFORM_SUPPORTS_PSSL 0
 #define BGFX_PLATFORM_SUPPORTS_NVN  0
@@ -63,13 +71,13 @@
 #endif
 
 #if BX_PLATFORM_WINDOWS
-#  include "dx11/vs_solid.sc.bin.h"
-#  include "dx11/vs_tex.sc.bin.h"
-#  include "dx11/fs_solid.sc.bin.h"
-#  include "dx11/fs_tex.sc.bin.h"
-#  include "dx11/fs_text.sc.bin.h"
-#  include "dx11/fs_blur.sc.bin.h"
-#  include "dx11/fs_glass.sc.bin.h"
+#  include "dxbc/vs_solid.sc.bin.h"
+#  include "dxbc/vs_tex.sc.bin.h"
+#  include "dxbc/fs_solid.sc.bin.h"
+#  include "dxbc/fs_tex.sc.bin.h"
+#  include "dxbc/fs_text.sc.bin.h"
+#  include "dxbc/fs_blur.sc.bin.h"
+#  include "dxbc/fs_glass.sc.bin.h"
 #endif
 
 namespace uilo {

@@ -25,97 +25,114 @@ Install the following (once):
 
 | Tool | Notes |
 |------|-------|
-| **Visual Studio 2022** (Community is fine) | Must include the **"Desktop development with C++"** workload. This provides the MSVC toolchain, the **Windows 10/11 SDK** (needed for `gdi32`/`user32`/`psapi` and, importantly, `d3dcompiler_47.dll` which bgfx's `shaderc` loads to compile the D3D shaders), and MSBuild. |
-| **CMake 3.16+** | 3.20+ recommended. The VS installer can add it, or install standalone and ensure it's on `PATH`. |
+| **Visual Studio 2022 or 2026** (Community is fine) | Must include the **"Desktop development with C++"** workload. This provides the MSVC toolchain, the **Windows 10/11 SDK** (needed for `gdi32`/`user32`/`psapi` and, importantly, `d3dcompiler_47.dll` which bgfx's `shaderc` loads to compile the D3D shaders), and MSBuild. **This workload also bundles CMake and Ninja**, so you don't need to install them separately. |
 | **Python 3** | Required by bgfx's build (GENie codegen steps). Ensure `python` is on `PATH`. |
 | **Git** | Used to clone the vendored dependencies. |
 
 You do **not** need a separate DirectX SDK — the DirectX headers/libs are vendored
-inside bgfx, and the CMake already links `gdi32 psapi user32` on Windows.
+inside bgfx, and the CMake already links `gdi32 psapi user32` on Windows. You also
+don't need a standalone CMake install; the C++ workload ships one (VS 2026 bundles
+CMake 4.x under `Common7\IDE\CommonExtensions\Microsoft\CMake\`).
 
-All commands below assume the **"x64 Native Tools Command Prompt for VS 2022"** or a
-PowerShell where you've run the VS dev-shell import (so `msbuild` and `cl` are on
-`PATH`). The easiest reliable option: open **"x64 Native Tools Command Prompt for
-VS 2022"** from the Start menu, then launch `powershell` from inside it.
+> This guide has been validated against **Visual Studio Community 2026 (v18)** with
+> MSVC toolset **v145** (14.51) and Windows SDK **10.0.26100.0**. On VS 2022 the
+> flow is identical except the toolset is `v143` and the CMake generator is
+> `"Visual Studio 17 2022"` — see the notes inline.
+
+### Activating the compiler in your shell
+
+**This is the thing that trips people up:** after installing Visual Studio,
+`cl`, `msbuild`, and `cmake` are **deliberately not on your global `PATH`**. They
+only become available in a shell that has had the VS "developer environment"
+imported. Running `cl` in a plain PowerShell/CMD and getting *"not recognized"* is
+expected — nothing is broken. You have two ways to get a working shell:
+
+**Option A — use the Start-menu shortcut (easiest).** Search the Start menu for
+**"Developer PowerShell for VS 2026"** (or *"x64 Native Tools Command Prompt for
+VS 2026"*) and run everything from there. It's a normal shell with the toolchain
+pre-activated.
+
+**Option B — activate an existing PowerShell.** Dot-source VS's dev-shell launcher.
+For VS 2026 Community:
+
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+```
+
+(For VS 2022 the path uses `...\Microsoft Visual Studio\2022\Community\...`. A
+harmless `'vswhere.exe' is not recognized` warning may print — activation still
+succeeds.) After this, `cl`, `msbuild`, `cmake`, and `ninja` all resolve. Verify
+with `cl` (prints the compiler banner) or `where.exe cl`.
+
+The `build.ps1` in [§5](#5-automated-build-buildps1) activates this automatically,
+so if you use it you can run it from any shell.
+
+All the `msbuild`/`cmake` commands in the sections below must be run from an
+activated shell.
 
 ---
 
-## 2. Required source fix: shader include paths
+## 2. Source changes (already applied)
 
-This is a real bug that will break the Windows build regardless of how you drive
-it, so fix it first.
+Getting Windows to build **and run** took four source fixes. These are already
+committed to the repo — this section documents *why* they exist so nobody
+reintroduces the bugs. If you're building from a checkout that already has them,
+skip to [§3](#3-one-time-dependency-build-bgfx). Windows uses **Direct3D11 (DXBC)
+shaders only**; the Direct3D12 (DXIL) path is deliberately disabled (see below).
 
-### Why
+### 2a. `BX_PLATFORM_WINDOWS` must be defined before the shader-backend guards
 
-The shaders are compiled to embedded C headers at configure/build time by
-`bgfx_compile_shaders` (`cmake/bgfxToolUtils.cmake`). That helper names each
-output directory after the **profile**, mapping:
-
-- `s_5_0` → `dxbc/`  (Direct3D11 bytecode)
-- `s_6_0` → `dxil/`  (Direct3D12 IL)
-
-(see `_bgfx_get_profile_path_ext` at `cmake/bgfxToolUtils.cmake:542-543`).
-
-`CMakeLists.txt:154-156` already adds `s_5_0` and `s_6_0` to the profile list on
-Windows, so the build produces `generated/shaders/dxbc/*.bin.h` and
-`generated/shaders/dxil/*.bin.h`.
-
-But `include/renderer/Renderer.cpp:65-73` includes them from a **`dx11/`**
-directory that is never generated:
+The top of `Renderer.cpp` disables embedded-shader backends it doesn't ship:
 
 ```cpp
-#if BX_PLATFORM_WINDOWS
-#  include "dx11/vs_solid.sc.bin.h"   // <-- no such directory
-   ...
+#if !defined(BX_PLATFORM_WINDOWS) || !BX_PLATFORM_WINDOWS
+#  define BGFX_PLATFORM_SUPPORTS_DXBC 0
 #endif
 ```
 
-On top of that, on Windows bgfx's `BGFX_EMBEDDED_SHADER(...)` macro references
-**both** a `<name>_dxbc` array *and* a `<name>_dxil` array (Direct3D11 and
-Direct3D12 are both "supported" platforms in `embedded_shader.h`). So the file
-must include **both** the `dxbc/` and `dxil/` headers, which together define
-`vs_solid_dxbc`, `vs_solid_dxil`, etc. The current single `dx11/` block satisfies
-neither.
+But `BX_PLATFORM_WINDOWS` comes from `<bx/platform.h>`, which nothing had included
+yet at that point (`bgfx.h` pulls in only `defines.h`). So the macro read as
+*undefined*, the guard was true, and **DXBC got disabled on Windows** — leaving the
+embedded-shader table with no Direct3D11 entry. The build succeeded but every run
+died with `Failed to create shaders (renderer=Direct3D 11)`. On macOS/Linux the bug
+is invisible (disabling DXBC is correct there). **Fix:** `#include <bx/platform.h>`
+before the guard block.
 
-### Fix
+### 2b. Shader include paths: `dx11/` → `dxbc/`
 
-Replace the `#if BX_PLATFORM_WINDOWS` shader block in
-`include/renderer/Renderer.cpp` (lines 65-73) with:
+`bgfx_compile_shaders` names each output dir after the profile —
+`s_5_0` → `dxbc/` (see `_bgfx_get_profile_path_ext`,
+`cmake/bgfxToolUtils.cmake:542`) — but `Renderer.cpp` included them from a `dx11/`
+directory that is never generated. The `#if BX_PLATFORM_WINDOWS` block now includes
+the seven `dxbc/*.sc.bin.h` headers (matching the `vs_solid_dxbc` … array names the
+`BGFX_EMBEDDED_SHADER` macro references for `RendererType::Direct3D11`).
 
-```cpp
-#if BX_PLATFORM_WINDOWS
-#  include "dxbc/vs_solid.sc.bin.h"
-#  include "dxbc/vs_tex.sc.bin.h"
-#  include "dxbc/fs_solid.sc.bin.h"
-#  include "dxbc/fs_tex.sc.bin.h"
-#  include "dxbc/fs_text.sc.bin.h"
-#  include "dxbc/fs_blur.sc.bin.h"
-#  include "dxbc/fs_glass.sc.bin.h"
+### 2c. Direct3D12 / DXIL disabled
 
-#  include "dxil/vs_solid.sc.bin.h"
-#  include "dxil/vs_tex.sc.bin.h"
-#  include "dxil/fs_solid.sc.bin.h"
-#  include "dxil/fs_tex.sc.bin.h"
-#  include "dxil/fs_text.sc.bin.h"
-#  include "dxil/fs_blur.sc.bin.h"
-#  include "dxil/fs_glass.sc.bin.h"
-#endif
+`BGFX_EMBEDDED_SHADER` would otherwise also reference `<name>_dxil` arrays for
+Direct3D12. Compiling those (`s_6_0`) requires Microsoft's **DXC** compiler, which
+isn't in a stock VS install — `shaderc` fails with *"Unable to load DXC compiler"*.
+Since bgfx defaults to Direct3D11 on Windows anyway, DXIL is turned off rather than
+adding a DXC dependency:
+
+- `Renderer.cpp`: `#define BGFX_PLATFORM_SUPPORTS_DXIL 0` (before
+  `<bgfx/embedded_shader.h>`), and no `dxil/` includes.
+- `CMakeLists.txt`: the Windows profile list is `s_5_0` only (no `s_6_0`).
+
+> If you ever need the D3D12 backend, install the DirectX Shader Compiler (DXC), add
+> `s_6_0` back to the profiles, re-enable DXIL, and include the `dxil/*` headers
+> alongside the `dxbc/*` ones.
+
+### 2d. MSVC compiler flags bx requires
+
+bx's `platform.h` hard-errors on MSVC unless the compiler reports the true C++
+standard and uses the conforming preprocessor. `CMakeLists.txt` adds these as
+**PUBLIC** options on the `uilo` target (so consumers that include the vendored
+bgfx/bx headers get them too):
+
+```cmake
+target_compile_options(uilo PUBLIC /Zc:__cplusplus /Zc:preprocessor /utf-8)
 ```
-
-No CMake change is needed with this approach, since the CMake already compiles
-both `s_5_0` and `s_6_0`.
-
-> **Alternative (Direct3D11 only, simpler headers):** if you'd rather not carry the
-> D3D12 IL, you can instead force DXIL off and keep only `dxbc/`. Add, near the top
-> of `Renderer.cpp` alongside the other `BGFX_PLATFORM_SUPPORTS_*` defines
-> (before `#include <bgfx/embedded_shader.h>`):
-> ```cpp
-> #define BGFX_PLATFORM_SUPPORTS_DXIL 0
-> ```
-> then include only the seven `dxbc/...` headers above, and drop `s_6_0` from
-> `_UILO_SHADER_PROFILES` in `CMakeLists.txt:155`. bgfx defaults to Direct3D11 on
-> Windows, so this loses nothing in practice. The dual-include fix above is
-> recommended because it leaves the D3D12 path intact.
 
 ---
 
@@ -157,11 +174,31 @@ cd ext/bgfx
 
 This creates `ext\bgfx\.build\projects\vs2022\bgfx.sln`.
 
+> **Note:** this GENie version has no `vs2026` action — `vs2022` is the newest it
+> emits, and it pins the projects to the **v143** toolset. That's handled in the
+> next step by retargeting at build time; you do **not** need to install the old
+> VS 2022 build tools.
+
 ### 3c. Build the Release x64 libraries + shaderc
 
+The generated projects target `v143` (VS 2022). On **VS 2026** that toolset isn't
+installed, so retarget to your installed toolset (`v145`) and current SDK on the
+MSBuild command line — no file edits needed:
+
 ```powershell
-msbuild .build\projects\vs2022\bgfx.sln /p:Configuration=Release /p:Platform=x64 /m
+msbuild .build\projects\vs2022\bgfx.sln /p:Configuration=Release /p:Platform=x64 `
+  /p:PlatformToolset=v145 /p:WindowsTargetPlatformVersion=10.0.26100.0 /m
 ```
+
+> **On VS 2022** the projects already match your toolset, so drop the two
+> `/p:` overrides:
+> ```powershell
+> msbuild .build\projects\vs2022\bgfx.sln /p:Configuration=Release /p:Platform=x64 /m
+> ```
+> If you get `MSB8020: build tools ... v143 cannot be found`, that's exactly the
+> toolset mismatch — add the `/p:PlatformToolset=` / `/p:WindowsTargetPlatformVersion=`
+> overrides shown above, using whatever toolset you have installed (check
+> `MSBuild\Microsoft\VC\<ver>\Platforms\x64\PlatformToolsets\`).
 
 Output lands in `ext\bgfx\.build\win64_vs2022\bin\`:
 
@@ -187,9 +224,15 @@ UILO builds — you debug UILO, not bgfx.
 From the UILO root, with the §2 fix applied and bgfx built:
 
 ```powershell
-cmake -S . -B build/Release-static -G "Visual Studio 17 2022" -A x64 -DUILO_SHARED=OFF
+cmake -S . -B build/Release-static -G "Visual Studio 18 2026" -A x64 -DUILO_SHARED=OFF
 cmake --build build/Release-static --config Release --parallel
 ```
+
+> On **VS 2022** use `-G "Visual Studio 17 2022"` instead. UILO's own sources are
+> compiled by CMake with the default (installed) toolset, so no `/p:PlatformToolset`
+> override is needed here — that was only for bgfx's pre-generated projects. Because
+> bgfx was built with `v145` `/MT`, UILO must use the same toolset family and static
+> CRT; the default VS 2026 toolchain does exactly that.
 
 - `-DUILO_SHARED=ON` builds a DLL instead of a static lib (`WINDOWS_EXPORT_ALL_SYMBOLS`
   is already set, so no `__declspec` annotations are required).
@@ -220,8 +263,9 @@ requires the §2 source fix.
 ```powershell
 #requires -Version 5
 # Windows build wrapper for UILO — counterpart of build.sh.
-# Run from an "x64 Native Tools Command Prompt for VS 2022" (so msbuild is on PATH),
-# e.g.:  powershell -ExecutionPolicy Bypass -File build.ps1 release static
+# Can be run from ANY PowerShell: it locates Visual Studio via vswhere, imports the
+# developer environment itself, auto-detects the MSVC toolset + Windows SDK, builds
+# bgfx once (GENie + MSBuild), then configures and builds UILO.
 #
 # Usage:
 #   .\build.ps1                    # Release static
@@ -229,42 +273,67 @@ requires the §2 source fix.
 #   .\build.ps1 release dynamic    # Release shared (DLL)
 #   .\build.ps1 clean release      # wipe build dir then rebuild (never touches ext/)
 $ErrorActionPreference = 'Stop'
-
 $Root = $PSScriptRoot
 Set-Location $Root
 
-$Mode  = 'Release'
-$Link  = 'static'
-$Clean = $false
-$Extra = @()
+$Mode = 'Release'; $Link = 'static'; $Clean = $false; $Extra = @()
 foreach ($a in $args) {
     switch ($a.ToLower()) {
-        'clean'                    { $Clean = $true }
-        'debug'                    { $Mode  = 'Debug' }
-        'release'                  { $Mode  = 'Release' }
-        'static'                   { $Link  = 'static' }
-        { $_ -in 'dynamic','shared' } { $Link = 'dynamic' }
-        default                    { $Extra += $a }
+        'clean'                       { $Clean = $true }
+        'debug'                       { $Mode  = 'Debug' }
+        'release'                     { $Mode  = 'Release' }
+        'static'                      { $Link  = 'static' }
+        { $_ -in 'dynamic','shared' } { $Link  = 'dynamic' }
+        default                       { $Extra += $a }
     }
 }
-$Shared  = if ($Link -eq 'dynamic') { 'ON' } else { 'OFF' }
+$Shared = if ($Link -eq 'dynamic') { 'ON' } else { 'OFF' }
 $BuildDir = "build/$Mode-$Link"
 
+# --- locate Visual Studio and import the developer environment -------------
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path $vswhere)) { throw "vswhere not found -- is Visual Studio installed?" }
+$vsPath = & $vswhere -latest -products * `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+    -property installationPath
+if (-not $vsPath) { throw "No VS install with the C++ toolset found." }
+
+if (-not (Get-Command cl -ErrorAction SilentlyContinue)) {
+    Write-Host "[UILO] activating VS developer environment ($vsPath)"
+    & "$vsPath\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation *> $null
+    Set-Location $Root
+}
+
+# Pick the newest installed platform toolset + Windows SDK (retargets bgfx's
+# v143 vs2022 projects onto whatever this machine actually has, e.g. v145).
+$Toolset = (Get-ChildItem "$vsPath\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets" `
+    -Directory -ErrorAction SilentlyContinue | Where-Object Name -match '^v\d+$' |
+    Sort-Object Name | Select-Object -Last 1).Name
+$WinSdk  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory `
+    -ErrorAction SilentlyContinue | Where-Object Name -match '^10\.' |
+    Sort-Object Name | Select-Object -Last 1).Name
+if (-not $Toolset) { throw "No MSVC platform toolset found." }
+Write-Host "[UILO] toolset=$Toolset  winsdk=$WinSdk"
+
+# Newest VS-generator CMake knows about (VS 18 2026 / VS 17 2022 / ...).
+$Generator = (cmake --help 2>$null | Select-String '^\*?\s*Visual Studio \d+ \d+' |
+    ForEach-Object { ($_ -replace '^\*?\s*','') -replace '\s*=.*$','' } |
+    Select-Object -First 1)
+if (-not $Generator) { throw "No Visual Studio CMake generator available." }
+Write-Host "[UILO] cmake generator: $Generator"
+
 if ($Clean -and (Test-Path $BuildDir)) {
-    Write-Host "[UILO] cleaning $BuildDir"
-    Remove-Item -Recurse -Force $BuildDir
+    Write-Host "[UILO] cleaning $BuildDir"; Remove-Item -Recurse -Force $BuildDir
 }
 
 # --- vendored dependencies -------------------------------------------------
 $Ext = Join-Path $Root 'ext'
 New-Item -ItemType Directory -Force -Path $Ext | Out-Null
-
 function Clone-IfMissing($name, $url, $tag) {
     $dst = Join-Path $Ext $name
     if (-not (Test-Path $dst)) {
         Write-Host "[UILO] cloning $name into ext/"
-        if ($tag) { git clone --depth 1 --branch $tag $url $dst }
-        else      { git clone --depth 1 $url $dst }
+        if ($tag) { git clone --depth 1 --branch $tag $url $dst } else { git clone --depth 1 $url $dst }
     }
 }
 Clone-IfMissing 'SDL3' 'https://github.com/libsdl-org/SDL.git'  'release-3.2.10'
@@ -278,15 +347,18 @@ if (-not (Test-Path (Join-Path $BgfxBin 'bgfxRelease.lib'))) {
     Write-Host "[UILO] building bgfx (win64_vs2022, Release) -- one time only"
     Push-Location (Join-Path $Ext 'bgfx')
     & ../bx/tools/bin/windows/genie.exe --with-tools --file=scripts/genie.lua vs2022
-    if ($LASTEXITCODE -ne 0) { throw "genie failed" }
-    msbuild .build/projects/vs2022/bgfx.sln /p:Configuration=Release /p:Platform=x64 /m
-    if ($LASTEXITCODE -ne 0) { throw "bgfx msbuild failed" }
+    if ($LASTEXITCODE -ne 0) { Pop-Location; throw "genie failed" }
+    $msbArgs = @('.build/projects/vs2022/bgfx.sln','/p:Configuration=Release','/p:Platform=x64',
+                 "/p:PlatformToolset=$Toolset",'/m')
+    if ($WinSdk) { $msbArgs += "/p:WindowsTargetPlatformVersion=$WinSdk" }
+    msbuild @msbArgs
+    if ($LASTEXITCODE -ne 0) { Pop-Location; throw "bgfx msbuild failed" }
     Pop-Location
 }
 
 # --- configure + build UILO ------------------------------------------------
 Write-Host "[UILO] configure ($Mode, $Link)"
-cmake -S $Root -B $BuildDir -G "Visual Studio 17 2022" -A x64 -DUILO_SHARED=$Shared
+cmake -S $Root -B $BuildDir -G $Generator -A x64 -DUILO_SHARED=$Shared
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
 Write-Host "[UILO] build"
@@ -296,11 +368,10 @@ if ($Extra.Count -gt 0) {
     cmake --build $BuildDir --config $Mode --parallel
 }
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-
 Write-Host "[UILO] done -> $BuildDir"
 ```
 
-Run it from a VS x64 dev prompt:
+Run it from **any** PowerShell (it self-activates the VS environment):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1 release static
@@ -310,12 +381,16 @@ powershell -ExecutionPolicy Bypass -File build.ps1 release static
 
 ## 6. Summary checklist
 
-- [ ] Install VS 2022 (+ C++ workload / Windows SDK), CMake, Python 3, Git.
-- [ ] **Apply the shader-include fix** in `include/renderer/Renderer.cpp` ([§2](#2-required-source-fix-shader-include-paths)).
+**Fastest path:** open any PowerShell and run `.\build.ps1` — it self-activates the
+VS environment, builds bgfx once, and builds UILO. The source fixes in
+[§2](#2-source-changes-already-applied) are already committed. The manual steps
+below are only needed if you'd rather not use the script:
+
+- [ ] Install VS 2022/2026 (+ C++ workload, which includes the Windows SDK, CMake, and Ninja), Python 3, Git.
+- [ ] Open a **Developer PowerShell** (or activate one — [§1](#activating-the-compiler-in-your-shell)) so `cl`/`msbuild`/`cmake` resolve.
 - [ ] Clone SDL3 / bx / bimg / bgfx into `ext/` ([§3a](#3a-clone-the-dependencies-if-ext-is-empty)).
-- [ ] Build bgfx once with GENie + MSBuild ([§3b](#3b-generate-the-vs2022-project-files)–[§3c](#3c-build-the-release-x64-libraries--shaderc)).
-- [ ] `cmake` configure + build UILO from a VS x64 dev prompt ([§4](#4-configure-and-build-uilo)).
-- [ ] (Optional) Drop in `build.ps1` ([§5](#5-automated-build-buildps1)) to automate steps 3–4.
+- [ ] Build bgfx once with GENie + MSBuild, retargeting to your toolset ([§3b](#3b-generate-the-vs2022-project-files)–[§3c](#3c-build-the-release-x64-libraries--shaderc)).
+- [ ] `cmake` configure + build UILO ([§4](#4-configure-and-build-uilo)).
 
 ## 7. Optional follow-ups (not required to build)
 
