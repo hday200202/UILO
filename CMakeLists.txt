@@ -146,13 +146,16 @@ set(_SHADER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/shaders")
 file(MAKE_DIRECTORY "${_SHADER_OUT_DIR}")
 
 # Profiles: spirv (Vulkan), 120 (OpenGL), 300_es (GLES/WebGL2), metal (Apple),
-# s_5_0 / s_6_0 (D3D11 / D3D12 on Windows).
+# s_5_0 (D3D11 on Windows). s_6_0 (D3D12/DXIL) is intentionally omitted: it
+# requires Microsoft's DXC compiler at build time, and bgfx defaults to the
+# Direct3D11 backend on Windows anyway (see BGFX_PLATFORM_SUPPORTS_DXIL 0 in
+# Renderer.cpp).
 set(_UILO_SHADER_PROFILES spirv 120 300_es)
 if(APPLE)
     list(APPEND _UILO_SHADER_PROFILES metal)
 endif()
 if(WIN32)
-    list(APPEND _UILO_SHADER_PROFILES s_5_0 s_6_0)
+    list(APPEND _UILO_SHADER_PROFILES s_5_0)
 endif()
 
 bgfx_compile_shaders(
@@ -296,6 +299,11 @@ else()
 endif()
 
 if(MSVC)
+    # bx's platform.h hard-errors unless MSVC reports the real C++ standard via
+    # /Zc:__cplusplus (off by default). PUBLIC so any consumer that includes the
+    # vendored bgfx/bx headers through UILO gets it too. /utf-8 keeps source and
+    # execution charsets consistent for the embedded assets.
+    target_compile_options(uilo PUBLIC /Zc:__cplusplus /Zc:preprocessor /utf-8)
     target_compile_options(uilo PRIVATE /W3)
 else()
     target_compile_options(uilo PRIVATE -Wall -Wextra)
