@@ -262,7 +262,7 @@ int main() {
     ui.setRenderer(renderer);
     ui.addPage(page(buildRootContainer(ui), "main_page"));
     ui.setPage("main_page");
-    ui.setScale(1.5f);
+    ui.setScale(1.f);
     applyTheme(ui, true);
 
     FpsHud hud = installFpsHud(ui);
