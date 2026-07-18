@@ -9,6 +9,8 @@
 #   .\build.ps1 debug              # Debug static
 #   .\build.ps1 release dynamic    # Release shared (DLL)
 #   .\build.ps1 clean release      # wipe build dir then rebuild (never touches ext/)
+# Env:
+#   $env:UILO_CLEAN_EXT=1          # also wipe ext/ (forces re-clone/rebuild)
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 Set-Location $Root
@@ -74,6 +76,16 @@ if ($Clean -and (Test-Path $BuildDir)) {
 # --- vendored dependencies -------------------------------------------------
 $Ext = Join-Path $Root 'ext'
 New-Item -ItemType Directory -Force -Path $Ext | Out-Null
+
+if ($env:UILO_CLEAN_EXT -eq '1') {
+    Write-Host "[UILO] cleaning ext/ (UILO_CLEAN_EXT=1)"
+    foreach ($d in 'SDL3','bgfx','bimg','bx') {
+        $p = Join-Path $Ext $d
+        if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+    }
+    New-Item -ItemType Directory -Force -Path $Ext | Out-Null
+}
+
 function Clone-IfMissing($name, $url, $tag) {
     $dst = Join-Path $Ext $name
     if (-not (Test-Path $dst)) {
