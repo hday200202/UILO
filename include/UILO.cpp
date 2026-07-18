@@ -8,17 +8,40 @@
 
 namespace uilo {
 
+/*
+    UILO(Renderer& renderer, Page* page):
+    - Params:   Renderer& renderer, Page* page
+    - Returns:  UILO
+    - Desc:     Set's UILO's renderer reference, adds the Page to UILO, sets
+                active page
+*/
 UILO::UILO(Renderer& renderer, Page* page) {
     m_renderer = &renderer;
     addPage(page);
     setPage(page->m_name);
 }
 
+
+/*
+    addPage(Page* page):
+    - Params:   Page* page
+    - Returns:  void
+    - Desc:     Registers a page with UILO, taking ownership and binding it
+                to this instance. Keyed by the page's name.
+*/
 void UILO::addPage(Page* page) {
     page->setUILO(*this);
     m_pages[page->m_name] = std::unique_ptr<Page>(page);
 }
 
+
+/*
+    setPage(const std::string& pageName):
+    - Params:   const std::string& pageName
+    - Returns:  void
+    - Desc:     Makes the named page active, clearing overlays, resizers,
+                floating elements, and the current interactible.
+*/
 void UILO::setPage(const std::string& pageName) {
     auto it = m_pages.find(pageName);
     if (it != m_pages.end()) {
@@ -30,16 +53,34 @@ void UILO::setPage(const std::string& pageName) {
     }
 }
 
+
+/*
+    setActivePage(Page* page):
+    - Params:   Page* page
+    - Returns:  void
+    - Desc:     Sets the active page without taking ownership. No-op when the
+                page is already active so per-frame calls don't reset the
+                overlay, floating, and interactible state.
+*/
 void UILO::setActivePage(Page* page) {
-    if (m_activePage == page) return;   // guard: per-frame calls don't reset state
+    if (m_activePage == page) return;
     if (page) page->setUILO(*this);
     m_overlays.clear();
     m_resizers.clear();
     m_floating.clear();
     setCurrInteractible(nullptr);
-    m_activePage = page;                // not owned: the caller keeps ownership
+    m_activePage = page;
 }
 
+
+/*
+    setCurrInteractible(Interactible* i):
+    - Params:   Interactible* i
+    - Returns:  void
+    - Desc:     Sets the focused interactible, deactivating the previous one,
+                and starts or stops SDL text input depending on whether the
+                new interactible wants keyboard text.
+*/
 void UILO::setCurrInteractible(Interactible* i) {
     m_interactibleActivatedThisFrame = true;
     if (m_currInteractible == i) return;
@@ -56,14 +97,36 @@ void UILO::setCurrInteractible(Interactible* i) {
     }
 }
 
+
+/*
+    setScale(float scale):
+    - Params:   float scale
+    - Returns:  void
+    - Desc:     Sets the global UI scale factor. Ignores non-positive values.
+*/
 void UILO::setScale(float scale) { if (scale > 0.f) m_scale = scale; }
 
+
+/*
+    registerOverlay(Element* e, std::function<void()> onDismiss):
+    - Params:   Element* e, std::function<void()> onDismiss
+    - Returns:  void
+    - Desc:     Registers an element as a modal overlay with an optional
+                dismiss callback. Ignores duplicates.
+*/
 void UILO::registerOverlay(Element* e, std::function<void()> onDismiss) {
     for (auto& ov : m_overlays)
-        if (ov.element == e) return;  // already registered
+        if (ov.element == e) return;
     m_overlays.push_back({e, std::move(onDismiss)});
 }
 
+
+/*
+    unregisterOverlay(Element* e):
+    - Params:   Element* e
+    - Returns:  void
+    - Desc:     Removes an element from the overlay list.
+*/
 void UILO::unregisterOverlay(Element* e) {
     m_overlays.erase(
         std::remove_if(m_overlays.begin(), m_overlays.end(),
@@ -72,9 +135,18 @@ void UILO::unregisterOverlay(Element* e) {
     );
 }
 
+
+/*
+    addFloating(FreeElement f):
+    - Params:   FreeElement f
+    - Returns:  Element*
+    - Desc:     Adds a free-floating element at a fixed or percent position,
+                optionally draggable, and returns it. Registers the element
+                and any child elements with UILO.
+*/
 Element* UILO::addFloating(FreeElement f) {
     if (!f.element) return nullptr;
-    f.element->setUILO(*this);  // registers in m_elementPool + m_elements (recursively for containers)
+    f.element->setUILO(*this);
     FloatingEntry entry;
     entry.element   = f.element;
     entry.xPos      = f.xPos;
@@ -84,6 +156,13 @@ Element* UILO::addFloating(FreeElement f) {
     return f.element;
 }
 
+
+/*
+    removeFloating(Element* e):
+    - Params:   Element* e
+    - Returns:  void
+    - Desc:     Removes a floating element by pointer.
+*/
 void UILO::removeFloating(Element* e) {
     m_floating.erase(
         std::remove_if(m_floating.begin(), m_floating.end(),
@@ -92,6 +171,14 @@ void UILO::removeFloating(Element* e) {
     );
 }
 
+
+/*
+    requestCursor(CursorType type, int priority):
+    - Params:   CursorType type, int priority
+    - Returns:  void
+    - Desc:     Requests a cursor for this frame. The highest-priority request
+                wins; ties keep the most recent.
+*/
 void UILO::requestCursor(CursorType type, int priority) {
     if (priority >= m_pendingCursorPriority) {
         m_pendingCursor         = type;
@@ -99,6 +186,14 @@ void UILO::requestCursor(CursorType type, int priority) {
     }
 }
 
+
+/*
+    getScrollLinkOffset(const std::string& linkId, bool horizontal):
+    - Params:   const std::string& linkId, bool horizontal
+    - Returns:  float
+    - Desc:     Returns the shared scroll offset for a link id on the given
+                axis, or 0 when unset.
+*/
 float UILO::getScrollLinkOffset(const std::string& linkId, bool horizontal) const {
     if (linkId.empty()) return 0.f;
     const auto& links = horizontal ? m_scrollLinksX : m_scrollLinksY;
@@ -106,12 +201,28 @@ float UILO::getScrollLinkOffset(const std::string& linkId, bool horizontal) cons
     return it != links.end() ? it->second : 0.f;
 }
 
+
+/*
+    setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal):
+    - Params:   const std::string& linkId, float offset, bool horizontal
+    - Returns:  void
+    - Desc:     Stores a shared scroll offset for a link id on the given axis
+                so linked containers scroll together.
+*/
 void UILO::setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal) {
     if (linkId.empty()) return;
     auto& links = horizontal ? m_scrollLinksX : m_scrollLinksY;
     links[linkId] = offset;
 }
 
+
+/*
+    getZoomLinkValue(const std::string& linkId, bool horizontal):
+    - Params:   const std::string& linkId, bool horizontal
+    - Returns:  float
+    - Desc:     Returns the shared zoom value for a link id on the given axis,
+                or 1 when unset.
+*/
 float UILO::getZoomLinkValue(const std::string& linkId, bool horizontal) const {
     if (linkId.empty()) return 1.f;
     const auto& links = horizontal ? m_zoomLinksX : m_zoomLinksY;
@@ -119,23 +230,50 @@ float UILO::getZoomLinkValue(const std::string& linkId, bool horizontal) const {
     return it != links.end() ? it->second : 1.f;
 }
 
+
+/*
+    setZoomLinkValue(const std::string& linkId, float zoom, bool horizontal):
+    - Params:   const std::string& linkId, float zoom, bool horizontal
+    - Returns:  void
+    - Desc:     Stores a shared zoom value for a link id on the given axis so
+                linked containers zoom together.
+*/
 void UILO::setZoomLinkValue(const std::string& linkId, float zoom, bool horizontal) {
     if (linkId.empty()) return;
     auto& links = horizontal ? m_zoomLinksX : m_zoomLinksY;
     links[linkId] = zoom;
 }
 
+
+/*
+    setOnLiveResize(std::function<void()> cb):
+    - Params:   std::function<void()> cb
+    - Returns:  void
+    - Desc:     Sets a callback invoked during native live window resize so
+                the host can redraw at each intermediate size.
+*/
 void UILO::setOnLiveResize(std::function<void()> cb) {
     m_onLiveResize = std::move(cb);
 }
 
+
+/*
+    update():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Advances the UI by one frame. On the first frame -- and only
+                when UILO owns its window, never when embedded in a host -- it
+                installs the macOS native scroll and zoom monitors and the
+                live-resize configuration. Each frame it converts the SDL mouse
+                position from logical points to backing pixels, updates layout
+                for the active page and every floating element, culls elements
+                marked for deletion, then dispatches hover, left-click, and
+                right-click input. Floating elements are opaque to input: the
+                topmost one under the cursor consumes hover and clicks so the
+                page beneath is shielded, and draggable ones follow the cursor
+                while held.
+*/
 void UILO::update() {
-    // macOS: install the native scroll monitor + live-resize layer config
-    // on the first frame, once a window (and therefore NSApp) is up.
-    // Works for both constructor paths.
-    // Embedded (attach) mode: the host owns the window + CAMetalLayer + resize.
-    // Skip the native layer/live-resize setup -- it would clobber the host's
-    // strict-pixel drawable (manifests as the scene filling only a corner).
     static bool s_macInstalled = false;
     if (!s_macInstalled && m_renderer && m_renderer->ownsContext()) {
         s_macInstalled = true;
@@ -147,10 +285,6 @@ void UILO::update() {
                 configureMacWindowForLiveResize(ns);
             }
         }
-        // SDL fires this watcher synchronously from the AppKit live-resize
-        // runloop on macOS, so the host's render callback runs at every
-        // intermediate size during the drag instead of waiting for our
-        // main loop to unblock.
         SDL_AddEventWatch(+[](void* userdata, SDL_Event* ev) -> bool {
             auto* self = static_cast<UILO*>(userdata);
             if (!self->m_onLiveResize) return true;
@@ -163,7 +297,6 @@ void UILO::update() {
         installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
             float mx = m_mousePos.x, my = m_mousePos.y;
             SDL_GetMouseState(&mx, &my);
-            // SDL_GetMouseState returns logical points; layout uses backing pixels.
             if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
                 int lw = 1, lh = 1, pw = 1, ph = 1;
                 SDL_GetWindowSize(w, &lw, &lh);
@@ -172,11 +305,6 @@ void UILO::update() {
                 if (lh > 0) my *= (float)ph / (float)lh;
             }
             const Vec2f pos { mx, my };
-            // Always dispatch the live delta — sliders/knobs/textboxes
-            // get scrolled through the normal checkScroll path. Return
-            // value tells the Mac monitor whether momentum is allowed:
-            // true only when the cursor is over a scrollable container
-            // (not over an interactible like a slider/knob/textbox).
             dispatchScroll(pos, Vec2f{dxLines, dyLines}, true, momentum);
             return !isSDLScrollTarget(pos);
         });
@@ -222,15 +350,10 @@ void UILO::update() {
     const float winH  = static_cast<float>(windowSize.y);
     const float scale = m_scale;
     for (auto& f : m_floating) {
-        // Scale only applies to fixed-pixel positions — percent positions
-        // resolve against the full window so they stay anchored.
         const float x = f.xPos.percent ? (f.xPos.value / 100.f * winW)
                                        : (f.xPos.value * scale);
         const float y = f.yPos.percent ? (f.yPos.value / 100.f * winH)
                                        : (f.yPos.value * scale);
-        // Slot size = full window so percent widths/heights on the
-        // element resolve against window size. The element will compute
-        // its own real bounds inside tick() via its Modifier.
         Rectf slot = { {x, y}, {winW, winH} };
         f.element->tick(slot, m_deltaTime);
     }
@@ -253,8 +376,6 @@ void UILO::update() {
 
     float mx, my;
     SDL_GetMouseState(&mx, &my);
-    // SDL reports mouse in logical (point) coordinates, but our layout is
-    // sized in backing pixels. Convert by the window's pixel density.
     if (SDL_Window* w = m_renderer->sdlWindow()) {
         int lw = 1, lh = 1, pw = 1, ph = 1;
         SDL_GetWindowSize(w, &lw, &lh);
@@ -265,8 +386,6 @@ void UILO::update() {
     m_mousePos = { mx, my };
     const Vec2f mouse = m_mousePos;
 
-    // Feed the cursor through to the renderer so interactive Materials
-    // (Ripple / Hover) can sample it without each element needing to.
     if (m_renderer) m_renderer->setMouseState(mouse);
 
     bool leftDown  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
@@ -274,11 +393,6 @@ void UILO::update() {
 
     auto* root = m_activePage->m_rootContainer;
 
-    // Topmost floating element under the cursor (if any). Floating
-    // elements are opaque to input: they fully consume hover, cursor
-    // requests, and clicks for the region they cover — the page beneath
-    // never sees the event. Iterate back-to-front because later entries
-    // render on top.
     FloatingEntry* hoveredFloating = nullptr;
     for (auto it = m_floating.rbegin(); it != m_floating.rend(); ++it) {
         if (!it->element->getModifier().getVisible()) continue;
@@ -288,8 +402,6 @@ void UILO::update() {
         }
     }
 
-    // Floating draggable HUDs: start drag on press-in-bounds, follow the
-    // mouse while held. Any click on a floating element is consumed.
     bool floatingConsumedClick = false;
     if (leftDown) {
         if (!m_prevLeftMouse) {
@@ -305,8 +417,6 @@ void UILO::update() {
         }
         for (auto& f : m_floating) {
             if (f.dragging) {
-                // While dragging, snap position to absolute (unscaled)
-                // pixels so the cursor tracks 1:1 regardless of UI scale.
                 const float sc = m_scale > 0.f ? m_scale : 1.f;
                 f.xPos = { (mouse.x - f.dragOffset.x) / sc, false };
                 f.yPos = { (mouse.y - f.dragOffset.y) / sc, false };
@@ -319,11 +429,6 @@ void UILO::update() {
             requestCursor(CursorType::Crosshair, 5);
     }
 
-    // Hover: Resizers first (they render on top), then overlays, then
-    // either the topmost floating (if hovered) or the page root. The
-    // floating branch is exclusive — the page does NOT also receive
-    // hover, so cursor/state requests from elements behind the floating
-    // panel can't leak through.
     for (auto* r : m_resizers) r->checkHover(mouse);
     Element* hoveredOverlay = nullptr;
     for (auto& ov : m_overlays)
@@ -332,7 +437,6 @@ void UILO::update() {
     else if (hoveredFloating) hoveredFloating->element->checkHover(mouse);
     else                     root->checkHover(mouse);
 
-    // Apply pending cursor
     if (m_pendingCursor != m_activeCursor) {
         m_renderer->setCursor(m_pendingCursor);
         m_activeCursor = m_pendingCursor;
@@ -365,8 +469,6 @@ void UILO::update() {
             }
         }
     } else if (leftDown && !m_prevLeftMouse && hoveredFloating) {
-        // Dispatch the click to the floating element so interactives
-        // inside it still respond. The page beneath remains shielded.
         m_interactibleActivatedThisFrame = false;
         hoveredFloating->element->checkLeftClick(mouse);
     }
@@ -385,27 +487,38 @@ void UILO::update() {
     m_prevLeftMouse  = leftDown;
     m_prevRightMouse = rightDown;
 
-    // Force mode is only valid for this single update tick.
     m_forceTreeUpdate = false;
 }
 
+
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the active page, then floating elements, overlays, and
+                resizers in back-to-front order.
+*/
 void UILO::render() {
     if (!m_activePage) return;
 
     m_activePage->render();
-    for (auto& f : m_floating)
-        f.element->render();
-    for (auto& ov : m_overlays)
-        ov.element->render();
-    for (auto* r : m_resizers)
-        r->render();
+    for (auto& f : m_floating)  f.element->render();
+    for (auto& ov : m_overlays) ov.element->render();
+    for (auto* r : m_resizers)  r->render();
 }
 
+
+/*
+    dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum):
+    - Params:   const Vec2f& pos, Vec2f delta, bool precise, bool momentum
+    - Returns:  void
+    - Desc:     Routes a scroll delta at a position to the topmost overlay
+                under it, or the active page's root otherwise. Refreshes the
+                cached cursor first so callbacks reading getMousePosition() see
+                the position that triggered the scroll.
+*/
 void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum) {
     if (!m_activePage || (delta.x == 0.f && delta.y == 0.f)) return;
-    // Refresh cached cursor so callbacks that consult ui.getMousePosition()
-    // (e.g. zoom-at-mouse on the waveform) see the position that triggered
-    // this scroll, not the one captured during the last UILO::update().
     m_mousePos = pos;
     m_inMomentumScroll = momentum;
     Element* scrollOverlay = nullptr;
@@ -416,6 +529,14 @@ void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool mome
     m_inMomentumScroll = false;
 }
 
+
+/*
+    dispatchZoom(const Vec2f& pos, float magnification):
+    - Params:   const Vec2f& pos, float magnification
+    - Returns:  void
+    - Desc:     Routes a zoom magnification at a position to the topmost
+                overlay under it, or the active page's root otherwise.
+*/
 void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
     if (!m_activePage || magnification == 0.f) return;
     m_mousePos = pos;
@@ -426,12 +547,18 @@ void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
     else         m_activePage->m_rootContainer->checkZoom(pos, magnification);
 }
 
+
+/*
+    isSDLScrollTarget(const Vec2f& pos):
+    - Params:   const Vec2f& pos
+    - Returns:  bool
+    - Desc:     Walks the visible element tree from the topmost overlay (or the
+                page root) down to the deepest element containing the position,
+                and returns true when that element is an Interactible. Such hits
+                should receive raw wheel events through the cross-platform SDL
+                path rather than the macOS momentum-scroll monitor.
+*/
 bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
-    // Walks the visible element tree from the topmost overlay (or root)
-    // downward, following children whose bounds contain `pos`, and returns
-    // true if the deepest hit is an Interactible (slider/knob/textbox/
-    // button/etc.) \u2014 those should receive raw wheel events via the
-    // cross-platform SDL path, not the macOS momentum-scroll hack.
     auto hit = [&](Element* root) -> Element* {
         Element* cur = root;
         while (cur) {
@@ -439,7 +566,7 @@ bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
             if (!c) return cur;
             Element* next = nullptr;
             for (auto* child : c->getChildren())
-                if (child->getBounds().contains(pos)) next = child; // last wins (drawn on top)
+                if (child->getBounds().contains(pos)) next = child;
             if (!next) return cur;
             cur = next;
         }
@@ -456,11 +583,24 @@ bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
     return dynamic_cast<Interactible*>(deepest) != nullptr;
 }
 
+
+/*
+    handleEvent(const SDL_Event& event):
+    - Params:   const SDL_Event& event
+    - Returns:  void
+    - Desc:     Processes one SDL event. Mouse-wheel events map to zoom when
+                Ctrl/Cmd is held, horizontal scroll when Shift is held, or
+                normal scroll otherwise. Text input and key input route to the
+                focused interactible, with a filter that drops the stale
+                key-repeat events Wayland can deliver after a key is released.
+                UTF-8 text is decoded one codepoint at a time so batched or IME
+                input is not dropped.
+*/
 void UILO::handleEvent(const SDL_Event& event) {
     if (!m_activePage) return;
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        const float dy = event.wheel.y;  // positive = scroll up
+        const float dy = event.wheel.y;
         const float dx = event.wheel.x;
         const SDL_Keymod mods = SDL_GetModState();
         const bool shiftHeld = (mods & SDL_KMOD_SHIFT) != 0;
@@ -471,16 +611,11 @@ void UILO::handleEvent(const SDL_Event& event) {
             return;
         }
         if (shiftHeld && dx == 0.f && dy != 0.f) {
-            // Real mouse wheel + shift -> horizontal scroll. Trackpads keep
-            // using their native horizontal delta instead.
             const bool precise = std::fabs(dy - std::round(dy)) > 1e-4f
                               || (dy != 0.f && std::fabs(dy) < 1.f);
             dispatchScroll(m_mousePos, Vec2f{dy, 0.f}, precise);
             return;
         }
-        // On macOS the native NSEvent monitor consumes trackpad events,
-        // so anything reaching here is a real mouse wheel: deltas are
-        // ±N integers. Other platforms still get the heuristic.
         const bool precise = std::fabs(dy - std::round(dy)) > 1e-4f
                           || (dy != 0.f && std::fabs(dy) < 1.f);
         dispatchScroll(m_mousePos, Vec2f{dx, dy}, precise);
@@ -492,11 +627,6 @@ void UILO::handleEvent(const SDL_Event& event) {
 
     if (event.type == SDL_EVENT_TEXT_INPUT)
         if (m_currInteractible) {
-            // Wayland tends to deliver key-repeat events (and their
-            // matching TEXT_INPUTs) a moment after the user has physically
-            // released the key. If this TEXT_INPUT was generated AFTER
-            // the most recent KEY_UP and no key is currently held, treat
-            // it as a stale repeat and drop it.
             if (event.common.timestamp > m_lastKeyUpNs) {
                 int nKeys = 0;
                 const bool* state = SDL_GetKeyboardState(&nKeys);
@@ -507,9 +637,6 @@ void UILO::handleEvent(const SDL_Event& event) {
                 if (!anyDown) return;
             }
 
-            // SDL_EVENT_TEXT_INPUT gives a UTF-8 string that may contain
-            // multiple codepoints (IME / batched repeats on Wayland).
-            // Dispatch every codepoint so we don't drop characters.
             const unsigned char* s = reinterpret_cast<const unsigned char*>(event.text.text);
             while (*s) {
                 uint32_t cp = 0;
@@ -565,8 +692,6 @@ void UILO::handleEvent(const SDL_Event& event) {
 
         if (!m_currInteractible) return;
 
-        // Same stale-repeat filter for key-only events (backspace,
-        // arrows, etc. don't produce TEXT_INPUT).
         if (event.key.repeat && event.common.timestamp > m_lastKeyUpNs) {
             int nKeys = 0;
             const bool* state = SDL_GetKeyboardState(&nKeys);
