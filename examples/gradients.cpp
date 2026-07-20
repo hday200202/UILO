@@ -13,7 +13,7 @@ static Palette makePalette() {
     // Named gradient: elements reference it with setGradientRole("hero"),
     // so swapping the palette restyles them all at once.
     p.setGradient("hero",
-        Gradient::vertical(Color{97, 62, 180}, Color{34, 27, 58}));
+        Gradient().setTop(Color{97, 62, 180}).setBottom(Color{34, 27, 58}));
     return p;
 }
 
@@ -22,14 +22,13 @@ static Container* buildRoot() {
         Modifier().setOuterPadding(16.f),
         ColumnOptions().setColorRole("app.bg"),
         contains{
-            // Vertical two-stop gradient, rounded.
+            // Vertical fade, rounded. Position-named setters read top->bottom.
             row(
                 Modifier().setHeight(22_pct).setOuterPadding(8.f),
                 RowOptions()
-                    .setGradient(Gradient::vertical(
-                        Color{240, 120, 90},
-                        Color{140, 40, 80}
-                    ))
+                    .setGradient(Gradient()
+                        .setTop(Color{240, 120, 90})
+                        .setBottom(Color{140, 40, 80}))
                     .setRounding(18.f)
             ),
 
@@ -37,16 +36,21 @@ static Container* buildRoot() {
             row(
                 Modifier().setHeight(22_pct).setOuterPadding(8.f),
                 RowOptions()
-                    .setGradient(Gradient::horizontal("accent", "panel"))
+                    .setGradient(Gradient()
+                        .setLeft("accent")
+                        .setRight("panel"))
                     .setRounding(18.f)
             ),
 
-            // Four explicit corners (reading order TL, TR, BL, BR).
+            // Four explicit corners, each named by where it sits.
             row(
                 Modifier().setHeight(22_pct).setOuterPadding(8.f),
                 RowOptions()
-                    .setGradient({Color{80, 170, 255}, Color{170, 80, 255},
-                                  Color{20, 60, 90},  Color{90, 20, 60}})
+                    .setGradient(Gradient()
+                        .setTopLeft(Color{80, 170, 255})
+                        .setTopRight(Color{170, 80, 255})
+                        .setBottomLeft(Color{20, 60, 90})
+                        .setBottomRight(Color{90, 20, 60}))
                     .setRounding(18.f)
             ),
 
@@ -61,18 +65,19 @@ static Container* buildRoot() {
                             .setWidth(40_pct).setHeight(60_pct)
                             .setAlign(Align::CenterX | Align::CenterY)
                             .setOnHoverEnter([](Button* b) {
-                                b->getOptions().setGradient(
-                                    Gradient::vertical(Color{255, 210, 120},
-                                                       Color{210, 120, 60}));
+                                b->getOptions().setGradient(Gradient()
+                                    .setTop(Color{255, 210, 120})
+                                    .setBottom(Color{210, 120, 60}));
                             })
                             .setOnHoverExit([](Button* b) {
-                                b->getOptions().setGradient(
-                                    Gradient::vertical(Color{120, 210, 170},
-                                                       Color{40, 110, 90}));
+                                b->getOptions().setGradient(Gradient()
+                                    .setTop(Color{120, 210, 170})
+                                    .setBottom(Color{40, 110, 90}));
                             }),
                         ButtonOptions()
-                            .setGradient(Gradient::vertical(Color{120, 210, 170},
-                                                            Color{40, 110, 90}))
+                            .setGradient(Gradient()
+                                .setTop(Color{120, 210, 170})
+                                .setBottom(Color{40, 110, 90}))
                             .setRounding(14.f)
                     ),
                 }

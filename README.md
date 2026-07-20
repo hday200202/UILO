@@ -79,7 +79,7 @@ TextOptions()
 
 ButtonOptions()
     .setColor(Color::Blue)
-    .setGradient({topLeft, topRight, bottomLeft, bottomRight})
+    .setGradient(Gradient().setTop(topColor).setBottom(bottomColor))
     .setRounding(8.f)
     .setLabel(labelText)
 
@@ -93,10 +93,45 @@ SliderOptions()
 
 RowOptions()
     .setColor(Color::Panel)
-    .setGradient({c1, c2, c3, c4})
+    .setGradient(Gradient().setLeft("accent").setRight("panel"))
     .setRounding(4.f)
     .setScrollable(true)
     .setScrollSpeed(20.f)
+```
+
+### Gradients
+
+A `Gradient` is a per-corner background fill. Each corner takes a `Color` **or** a
+palette role name (resolved at draw time, so switching palettes restyles gradients
+automatically) — the two are freely mixable. Fluent setters name the position each
+color occupies:
+
+```cpp
+// Vertical fade (top -> bottom)
+Gradient().setTop(Color{97, 62, 180}).setBottom(Color{34, 27, 58})
+
+// Horizontal, driven by palette roles (follows the active theme)
+Gradient().setLeft("accent").setRight("panel")
+
+// Four explicit corners
+Gradient()
+    .setTopLeft(c1).setTopRight(c2)
+    .setBottomLeft(c3).setBottomRight(c4)
+
+// Mixed literal color + role
+Gradient().setTop(Color::Red).setBottom("panel")
+```
+
+`setTop` / `setBottom` / `setLeft` / `setRight` each set both corners of that edge;
+the four corner setters give full control. Apply a gradient with
+`setGradient(...)` on any container/button Options; it composes with `setRounding`.
+
+Gradients can also be named once in the `Palette` and referenced per element:
+
+```cpp
+palette.setGradient("hero", Gradient().setTop(Color{97, 62, 180})
+                                      .setBottom(Color{34, 27, 58}));
+row(Modifier(), RowOptions().setGradientRole("hero"));
 ```
 
 ### Factory Functions

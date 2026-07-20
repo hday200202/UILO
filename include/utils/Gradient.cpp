@@ -3,11 +3,11 @@
 
 namespace uilo {
 
-Gradient Gradient::vertical(GradientStop top, GradientStop bottom) {
+Gradient Gradient::vertical(GradientColor top, GradientColor bottom) {
     return Gradient(top, top, bottom, bottom);
 }
 
-Gradient Gradient::horizontal(GradientStop left, GradientStop right) {
+Gradient Gradient::horizontal(GradientColor left, GradientColor right) {
     return Gradient(left, right, left, right);
 }
 
