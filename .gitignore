@@ -20,3 +20,6 @@ build
 /ext/bgfx
 /ext/bimg
 /ext/bx
+# Web backend (UILO_WT) only.
+/ext/wt
+/ext/boost

@@ -140,3 +140,10 @@ private:
 };
 
 }
+
+// The web backend. Included last so every UILO declaration above is complete by
+// the time it is parsed, and only when the UILO_WT build is active -- a normal
+// desktop build never sees it, and never links Wt.
+#ifdef UILO_WT
+#include "wt/UiloWt.hpp"
+#endif

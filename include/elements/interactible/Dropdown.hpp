@@ -132,6 +132,9 @@ public:
     int                getSelectedIndex() const { return m_selectedIndex; }
     const std::string& getSelectedItem()  const;
     void               setSelectedIndex(int idx);
+    // The items the dropdown was built with. Alternate renderers need the
+    // whole list to populate their own control, not just the selection.
+    const std::vector<std::string>& getItems() const { return m_items; }
 
     const DropdownOptions& getOptions() const { return m_options; }
     DropdownOptions&       getOptions()       { return m_options; }

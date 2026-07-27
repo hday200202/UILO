@@ -21,6 +21,19 @@ option(UILO_AUTO_FETCH    "Auto-download missing SDL3 via FetchContent" ON)
 option(UILO_BUILD_EXAMPLES "Build example programs" ON)
 option(UILO_SHARED        "Build UILO as a shared library" OFF)
 
+# Web backend. UILO's element tree is renderer-free to construct -- bgfx and
+# SDL are only touched from update()/render(), which the web backend never
+# calls. With this ON we swap one rendering target for another: the renderer and
+# platform sources are dropped, a no-op backend takes their place, <SDL3/SDL.h>
+# resolves to the shim in include/wt/shim, and Wt is built and linked instead of
+# bgfx/SDL3. The UI code you write is identical either way.
+option(UILO_WT "Build UILO for the web (Wt) instead of bgfx/SDL3" OFF)
+
+if(UILO_WT)
+    set(UILO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    message(STATUS "[UILO] UILO_WT: web build -- Wt instead of SDL3/bgfx/shaders")
+endif()
+
 if(MSVC)
     # bgfx's GENie build uses the static runtime (/MT) for Release; the whole
     # project must match or the linker reports LNK2038 runtime mismatches.
@@ -29,6 +42,74 @@ endif()
 
 include(FetchContent)
 find_package(Threads REQUIRED)
+
+# ---------------------------------------------------------------------------
+# Wt + Boost (vendored in ext/wt and ext/boost, provisioned by `build.sh wt`)
+# ---------------------------------------------------------------------------
+# The web backend's equivalent of the SDL3/bgfx section below: same pattern,
+# same ext/ directory, cloned and built once by build.sh.
+if(UILO_WT)
+    set(UILO_WT_DIR    "${CMAKE_CURRENT_SOURCE_DIR}/ext/wt")
+    set(UILO_BOOST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/boost")
+
+    if(NOT EXISTS "${UILO_WT_DIR}/CMakeLists.txt" OR NOT EXISTS "${UILO_BOOST_DIR}")
+        message(FATAL_ERROR
+            "[UILO] vendored Wt/Boost not found under ${CMAKE_CURRENT_SOURCE_DIR}/ext\n"
+            "Run ./build.sh wt (or build.ps1 wt on Windows) -- it clones Wt and "
+            "clones + builds Boost the same way it does SDL3 and bgfx.")
+    endif()
+
+    # Boost is built statically by build.sh into ext/boost/stage/lib. Point Wt's
+    # find_package(Boost) at exactly that and nothing else, so a system Boost
+    # can never be picked up by accident.
+    set(BOOST_ROOT            "${UILO_BOOST_DIR}" CACHE PATH "" FORCE)
+    set(Boost_USE_STATIC_LIBS ON  CACHE BOOL "" FORCE)
+    set(Boost_NO_BOOST_CMAKE  ON  CACHE BOOL "" FORCE)
+    set(Boost_NO_SYSTEM_PATHS ON  CACHE BOOL "" FORCE)
+
+    # Wt has a lot of optional pieces (PDF, image rendering, every Dbo database
+    # backend, Qt interop, SSL, its own examples and tests). None of them are
+    # reachable through the UILO API, so they stay off and the build stays small.
+    # CONNECTOR_HTTP is the exception: it builds libwthttp, the stand-alone
+    # server that uilo::wt::run() starts.
+    #
+    # SHARED_LIBS OFF forces static libs on every platform (Wt defaults to
+    # shared on Linux/macOS), so the result is one self-contained executable
+    # with no Wt libraries to locate at runtime.
+    set(SHARED_LIBS        OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES     OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTS        OFF CACHE BOOL "" FORCE)
+    set(ENABLE_LIBWTTEST   OFF CACHE BOOL "" FORCE)
+    set(ENABLE_LIBWTDBO    OFF CACHE BOOL "" FORCE)
+    set(ENABLE_SQLITE      OFF CACHE BOOL "" FORCE)
+    set(ENABLE_POSTGRES    OFF CACHE BOOL "" FORCE)
+    set(ENABLE_FIREBIRD    OFF CACHE BOOL "" FORCE)
+    set(ENABLE_MYSQL       OFF CACHE BOOL "" FORCE)
+    set(ENABLE_MSSQLSERVER OFF CACHE BOOL "" FORCE)
+    set(ENABLE_SSL         OFF CACHE BOOL "" FORCE)
+    set(ENABLE_HARU        OFF CACHE BOOL "" FORCE)
+    set(ENABLE_PANGO       OFF CACHE BOOL "" FORCE)
+    set(ENABLE_QT4         OFF CACHE BOOL "" FORCE)
+    set(ENABLE_QT5         OFF CACHE BOOL "" FORCE)
+    set(ENABLE_QT6         OFF CACHE BOOL "" FORCE)
+    set(CONNECTOR_HTTP     ON  CACHE BOOL "" FORCE)
+    set(CONNECTOR_FCGI     OFF CACHE BOOL "" FORCE)
+
+    # Build Wt itself as C++17. UILO needs C++20, but that only has to apply to
+    # UILO's own targets, and holding Wt at the standard it is tested against
+    # avoids inheriting our requirement onto 500 files of someone else's code.
+    set(_uilo_saved_cxx_standard "${CMAKE_CXX_STANDARD}")
+    set(CMAKE_CXX_STANDARD 17)
+    add_subdirectory("${UILO_WT_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/wt")
+    set(CMAKE_CXX_STANDARD "${_uilo_saved_cxx_standard}")
+
+    # Wt's headers live in src/; WConfig.h is generated into its binary dir.
+    set(UILO_WT_INCLUDE_DIRS
+        "${UILO_WT_DIR}/src"
+        "${CMAKE_CURRENT_BINARY_DIR}/wt")
+endif()
+
+if(NOT UILO_WT)
 
 # ---------------------------------------------------------------------------
 # SDL3 (vendored in ext/SDL3, cloned by build.sh at a pinned tag)
@@ -189,17 +270,31 @@ bgfx_compile_shaders(
 
 add_custom_target(uilo_shaders DEPENDS ${UILO_VS_HEADERS} ${UILO_FS_HEADERS})
 
+endif() # NOT UILO_WT
+
 # ---------------------------------------------------------------------------
 # UILO library
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cpp"
 )
+# include/wt/ holds the headless backend; it replaces the renderer rather than
+# adding to it, so it is only ever in the source list for a UILO_WT build.
+list(FILTER UILO_SRCS EXCLUDE REGEX "/include/wt/")
 
-# macOS: native scroll shim (Objective-C++) — gives us precise trackpad
-# deltas + OS momentum that SDL3's Cocoa backend drops.
-# (OBJCXX language already enabled in project() declaration above.)
-if(APPLE)
+if(UILO_WT)
+    # Drop everything that talks to the GPU or the OS and substitute no-ops.
+    # platform/ goes too: MacStubs.cpp is guarded on !__APPLE__, so the
+    # headless backend supplies those symbols on every platform instead.
+    list(FILTER UILO_SRCS EXCLUDE REGEX "/include/(renderer|platform)/")
+    list(APPEND UILO_SRCS
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/HeadlessBackend.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/Translator.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/UiloWt.cpp")
+elseif(APPLE)
+    # macOS: native scroll shim (Objective-C++) — gives us precise trackpad
+    # deltas + OS momentum that SDL3's Cocoa backend drops.
+    # (OBJCXX language already enabled in project() declaration above.)
     list(APPEND UILO_SRCS
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacScroll.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacWindow.mm"
@@ -212,7 +307,9 @@ else()
     set(_UILO_LIB_TYPE STATIC)
 endif()
 add_library(uilo ${_UILO_LIB_TYPE} ${UILO_SRCS})
-add_dependencies(uilo uilo_shaders)
+if(NOT UILO_WT)
+    add_dependencies(uilo uilo_shaders)
+endif()
 
 set_target_properties(uilo PROPERTIES
     # On Windows, export every symbol from the DLL so consumers don't need
@@ -242,6 +339,48 @@ endforeach()
 target_include_directories(uilo PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/elements"
+)
+
+if(UILO_WT)
+    # Both backends drop their library into lib/, so they must not share a file
+    # name: a desktop build would otherwise overwrite the web one (and vice
+    # versa) and a consumer would silently link the wrong archive -- the build
+    # directories are separate, but the output path is not.
+    #   libuilo.a     desktop (bgfx/SDL3)
+    #   libuilo_wt.a  web     (Wt)
+    set_target_properties(uilo PROPERTIES OUTPUT_NAME uilo_wt)
+
+    # The shim directory holds a single file, SDL3/SDL.h. Listing it here
+    # makes every `#include <SDL3/SDL.h>` in UILO's sources -- and in consumer
+    # code that includes UILO's headers -- resolve to the stand-in, so nothing
+    # else in the tree needed editing.
+    target_include_directories(uilo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/shim")
+
+    # PUBLIC: it gates the web API at the bottom of UILO.hpp, so consumer TUs
+    # need it defined too or including <UILO.hpp> gets them nothing.
+    target_compile_definitions(uilo PUBLIC UILO_WT)
+
+    # PUBLIC include dirs and libs so an application only has to link `uilo` --
+    # Wt comes with it, and stays available for anyone who wants to reach past
+    # the bridge via Session::application().
+    target_include_directories(uilo PUBLIC ${UILO_WT_INCLUDE_DIRS})
+    target_link_libraries(uilo PUBLIC wt wthttp Threads::Threads)
+
+    # UILO's headers need C++20 (Palette's heterogeneous map lookups, among
+    # others). PUBLIC so consumers don't have to know that.
+    target_compile_features(uilo PUBLIC cxx_std_20)
+
+    if(MSVC)
+        target_compile_options(uilo PUBLIC /utf-8)
+        target_compile_options(uilo PRIVATE /W3)
+    else()
+        target_compile_options(uilo PRIVATE -Wall -Wextra)
+    endif()
+
+    return()
+endif()
+
+target_include_directories(uilo PUBLIC
     "${UILO_EXT_DIR}/bgfx/include"
     "${UILO_EXT_DIR}/bimg/include"
     "${UILO_EXT_DIR}/bx/include"
