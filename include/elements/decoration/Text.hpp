@@ -62,6 +62,10 @@ public:
     void render() override;
 
     void setString(const std::string& content);
+    // The live string. setString() writes here rather than back into the
+    // options, so this -- not getOptions().getContent() -- is what an
+    // alternate renderer has to read to see runtime updates.
+    const std::string& getString() const { return m_content; }
 
     const TextOptions& getOptions() const      { return m_options; }
     TextOptions&       getOptions()            { return m_options; }

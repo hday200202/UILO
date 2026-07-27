@@ -11,6 +11,7 @@ Spacer::Spacer(
 ) : m_options(options) {
     m_modifier = modifier;
     m_name = name;
+    m_type = ElementType::Spacer;
 }
 
 void Spacer::update(Rectf& parentBounds, float dt) { resize(parentBounds); (void)dt; }

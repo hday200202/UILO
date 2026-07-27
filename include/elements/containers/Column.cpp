@@ -43,7 +43,9 @@ float normalizeGridStep(float step,
 
 Column::Column(Modifier modifier, ColumnOptions options, contains children, const std::string& name)
     : Container(modifier, children, name), m_options(options)
-{}
+{
+    m_type = ElementType::Column;
+}
 
 void Column::setScrollOffset(float offset) {
     const float contentMax = std::max(0.f, m_contentHeight - m_bounds.size.y);

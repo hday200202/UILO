@@ -45,7 +45,9 @@ float normalizeGridStep(float step,
 
 Row::Row(Modifier modifier, RowOptions options, contains children, const std::string& name)
     : Container(modifier, children, name), m_options(options)
-{}
+{
+    m_type = ElementType::Row;
+}
 
 void Row::update(Rectf& parentBounds, float dt) {
     pruneChildren();

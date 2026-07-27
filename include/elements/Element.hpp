@@ -92,6 +92,9 @@ public:
     virtual void collectResizers(std::vector<Element*>&) {}
 
     ElementType getType() const;
+    // The name passed to the factory ("" when unnamed). Alternate renderers
+    // (e.g. the Wt bridge) use it to give their own widgets stable ids.
+    const std::string& getName() const { return m_name; }
 
 protected:
     UILO* m_uiloRef             = nullptr;
