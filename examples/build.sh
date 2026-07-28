@@ -40,9 +40,14 @@ done
 "$ROOT/build.sh" "${FORWARD[@]}"
 
 if [[ -n "$RUN_TARGET" ]]; then
-    BIN="$HERE/bin/$RUN_TARGET"
-    if [[ ! -x "$BIN" ]]; then
-        echo "build.sh: binary not found at $BIN" >&2
+    # Find the built binary across generator layouts: single-config puts it at
+    # bin/<name>, multi-config (Visual Studio) at bin/<Config>/<name>, and it
+    # carries a .exe on Windows.
+    BIN="$(ls "$HERE/bin/$RUN_TARGET" "$HERE"/bin/*/"$RUN_TARGET" \
+              "$HERE/bin/$RUN_TARGET.exe" "$HERE"/bin/*/"$RUN_TARGET.exe" \
+              2>/dev/null | head -1 || true)"
+    if [[ -z "$BIN" || ! -x "$BIN" ]]; then
+        echo "build.sh: binary for '$RUN_TARGET' not found under $HERE/bin" >&2
         exit 1
     fi
     cd "$HERE"

@@ -1012,11 +1012,19 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
 
         // UILO clips children to the container's (rounded) bounds; a scrollable
         // one instead lets them overflow along its own axis.
-        if (bg.scrollable)
+        if (bg.scrollable) {
             css += isRowLike(el->getType()) ? "overflow-x:auto;overflow-y:hidden;"
                                             : "overflow-y:auto;overflow-x:hidden;";
-        else
+            // Hide the native scrollbar while keeping the container scrollable
+            // (wheel/touch/keys still work). UILO will grow its own scrollbar
+            // later; until then the web build shows none, for consistency.
+            //   Firefox: scrollbar-width      legacy Edge: -ms-overflow-style
+            //   WebKit/Chromium: ::-webkit-scrollbar { display:none }
+            css += "scrollbar-width:none;-ms-overflow-style:none;";
+            pseudo.emplace_back("::-webkit-scrollbar", "display:none;");
+        } else {
             css += "overflow:hidden;";
+        }
     }
 
     return css;

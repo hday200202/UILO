@@ -34,9 +34,12 @@ if(UILO_WT)
     message(STATUS "[UILO] UILO_WT: web build -- Wt instead of SDL3/bgfx/shaders")
 endif()
 
-if(MSVC)
+if(MSVC AND NOT UILO_WT)
     # bgfx's GENie build uses the static runtime (/MT) for Release; the whole
-    # project must match or the linker reports LNK2038 runtime mismatches.
+    # desktop project must match or the linker reports LNK2038 runtime
+    # mismatches. The web (UILO_WT) build has no bgfx, and its Boost is built
+    # with runtime-link=shared (/MD), so it stays on the default dynamic runtime
+    # instead — forcing /MT here would mismatch Boost and the consuming app.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
