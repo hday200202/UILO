@@ -328,6 +328,26 @@ void UILO::update() {
     m_pendingCursor         = CursorType::Arrow;
     m_pendingCursorPriority = 0;
 
+    // Averaged over a window rather than smoothing 1/dt: a single long frame
+    // (a stall, a resize) would otherwise drag the reported rate for a while.
+    ++m_avgFrameCount;
+    const float avgWindow = m_avgFrameTimer.elapsed();
+    if (avgWindow >= m_avgFrameWindow) {
+        m_avgFrameRate  = static_cast<float>(m_avgFrameCount) / avgWindow;
+        m_avgFrameCount = 0;
+        m_avgFrameTimer.restart();
+    }
+
+    // Action bindings run before layout so a handler that changes scale, swaps
+    // pages, or hides an element is reflected in this frame's tree walk.
+    // A widget consuming text input holds the keyboard: dispatch is suppressed
+    // but edge state still advances, so a key held while typing does not fire
+    // the moment focus is released.
+    const bool keyboardOwnedByWidget =
+        m_currInteractible && m_currInteractible->wantsTextInput();
+    m_keybinds.update(!keyboardOwnedByWidget);
+    m_mousebinds.update();
+
     if (!m_activePage) return;
 
     const Vec2u windowSize = m_renderer->getSize();
@@ -596,6 +616,14 @@ bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
                 UTF-8 text is decoded one codepoint at a time so batched or IME
                 input is not dropped.
 */
+void UILO::pollEvents() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_EVENT_QUIT) m_running = false;
+        handleEvent(event);
+    }
+}
+
 void UILO::handleEvent(const SDL_Event& event) {
     if (!m_activePage) return;
 
