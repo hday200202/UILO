@@ -349,7 +349,37 @@ Container* buildRootContainer(UILO& ui) {
                 Modifier(),
                 RowOptions(),
                 contains {
-                    // "Filebrowser"
+                    filebrowser(
+                        Modifier()
+                            .setOuterPadding(8.f)
+                            .setWidth(320_px),
+                        FileBrowserOptions()
+                            .setRootPath("../include")
+                            .setFont("assets/fonts/Montserrat.ttf")
+                            .setCharSize(16)
+                            .setRounding(ROUNDING)
+                            .setEntryRounding(4.f)
+                            .setEntryHeight(36.f)
+                            .setIndent(16.f)
+                            .setBackgroundColorRole("panel")
+                            .setDirectoryBackgroundColorRole("panelAlt")
+                            .setDirectoryTextColorRole("text")
+                            .setFileTextColorRole("textDim")
+                            // Selection keeps the normal directory look rather
+                            // than flipping to accent.
+                            .setSelectedColorRole("panelAlt")
+                            .setSelectedTextColorRole("text")
+                            .setOnFileClicked([](const std::filesystem::path& p) {
+                                std::cout << "File: " << p.string() << std::endl;
+                            })
+                            .setOnDirectoryExpanded([](const std::filesystem::path& p) {
+                                std::cout << "Expanded: " << p.string() << std::endl;
+                            }),
+                        "file_browser"
+                    ),
+
+#if 0
+                    // Original hand-rolled mock, kept for visual comparison.
                     column(
                         Modifier()
                             .setOuterPadding(8.f)
@@ -415,6 +445,7 @@ Container* buildRootContainer(UILO& ui) {
                             row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  UILO_NEW.md").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
                         }, "1"
                     ),
+#endif
 
                     resizer(
                         Modifier()

@@ -139,6 +139,11 @@ public:
     const DropdownOptions& getOptions() const { return m_options; }
     DropdownOptions&       getOptions()       { return m_options; }
 
+protected:
+    // Clicking the header opens the popup, so the press is always consumed
+    // regardless of any user-attached callback.
+    bool claimsPointerEvents() const override { return true; }
+
 private:
     Rectf computePopupBounds() const;
     void          openPopup();

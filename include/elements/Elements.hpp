@@ -18,5 +18,7 @@
 #include "interactible/Resizer.hpp"
 #include "interactible/Textbox.hpp"
 
+#include "widgets/Filebrowser.hpp"
+
 // Factory
 #include "Factory.hpp"

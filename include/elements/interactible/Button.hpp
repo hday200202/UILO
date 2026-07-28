@@ -51,6 +51,11 @@ public:
     // in the rendered look without an explicit `setOptions(...)` call.
     void render() override;
 
+protected:
+    // A button consumes a press over it even with no callback attached, so it
+    // never falls through to the panel behind it.
+    bool claimsPointerEvents() const override { return true; }
+
 private:
     ButtonOptions m_buttonOptions;
 };

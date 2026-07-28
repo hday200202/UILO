@@ -36,7 +36,7 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
-        return true;
+        return claimsPointerEvents();
     }
 
     return childClicked;
@@ -51,7 +51,7 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
-        return true;
+        return claimsPointerEvents();
     }
 
     return childClicked;
@@ -81,7 +81,9 @@ bool Container::checkHover(const Vec2f& mousePosition) {
 
     if (inside && m_uiloRef && m_modifier.getOnLeftClick())
         m_uiloRef->requestCursor(CursorType::Hand, 1);
-    return inside;
+    // Report upward when anything in this subtree took the hover, so an
+    // ancestor does not also claim it; a passive container reports nothing.
+    return childHovered || (inside && claimsPointerEvents());
 }
 
 bool Container::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {

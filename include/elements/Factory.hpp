@@ -116,9 +116,15 @@ inline Resizer* resizer(
 ) { return new Resizer(modifier, options, name); }
 
 inline Textbox* textbox(
-    Modifier modifier = {}, 
-    TextboxOptions options = {}, 
+    Modifier modifier = {},
+    TextboxOptions options = {},
     const std::string& name = ""
 ) { return new Textbox(modifier, options, name); }
+
+inline FileBrowser* filebrowser(
+    Modifier modifier = {},
+    FileBrowserOptions options = {},
+    const std::string& name = ""
+) { return new FileBrowser(modifier, options, name); }
 
 }
