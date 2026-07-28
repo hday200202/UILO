@@ -82,16 +82,21 @@ namespace uilo {
         else m_bounds.position.y = inner.position.y;
     }
 
+    bool Element::claimsPointerEvents() const {
+        return m_modifier.getOnLeftClick()  || m_modifier.getOnRightClick()
+            || m_modifier.getOnHoverEnter() || m_modifier.getOnHoverExit();
+    }
+
     bool Element::checkLeftClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
-        return true;
+        return claimsPointerEvents();
     }
 
     bool Element::checkRightClick(const Vec2f& mousePosition) {
         if (!m_bounds.contains(mousePosition)) return false;
         if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
-        return true;
+        return claimsPointerEvents();
     }
 
     bool Element::checkHover(const Vec2f& mousePosition) {
@@ -109,7 +114,9 @@ namespace uilo {
         }
         if (m_uiloRef && m_modifier.getOnLeftClick())
             m_uiloRef->requestCursor(CursorType::Hand, 1);
-        return true;
+        // Enter/exit bookkeeping above always runs, but only an element that
+        // actually wants pointer events masks its parent's hover state.
+        return claimsPointerEvents();
     }
 
     bool Element::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {

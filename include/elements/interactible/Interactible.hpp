@@ -31,6 +31,11 @@ public:
     // Override and return true in interactibles that consume IME / text-input
     // events (Textbox). UILO uses this to toggle SDL_StartTextInput on focus.
     virtual bool wantsTextInput() const { return false; }
+
+protected:
+    // Interactive by definition: a press over a slider/knob/textbox is
+    // consumed even when the user attached no Modifier callback of their own.
+    bool claimsPointerEvents() const override { return true; }
 };
 
 }

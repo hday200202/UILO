@@ -97,6 +97,16 @@ public:
     const std::string& getName() const { return m_name; }
 
 protected:
+    // Whether this element claims a pointer event that lands on it, stopping
+    // the search there. Elements with nothing attached are transparent, so a
+    // decorative child (the Text label of a clickable row, a Spacer used for
+    // indentation, a background Image) does not swallow the click or hover of
+    // the container it sits in. Widgets that are interactive by nature -- a
+    // Button, Slider, Dropdown -- override this to true so a press over them
+    // never falls through to whatever is behind them, even when the user
+    // attached no callback of their own.
+    virtual bool claimsPointerEvents() const;
+
     UILO* m_uiloRef             = nullptr;
     std::string m_name          = "";
 
