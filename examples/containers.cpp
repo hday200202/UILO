@@ -4,8 +4,6 @@
 #include <bgfx/bgfx.h>
 #include <iostream>
 #include <cstdio>
-#include <cmath>
-#include <vector>
 
 using namespace uilo;
 
@@ -35,7 +33,6 @@ static Palette makeDarkPalette() {
     p.set("textbox.placeholder",    {200, 200, 200, 255});
     p.set("textbox.cursor",         {255, 255, 255, 255});
     p.set("textbox.selection",      {151, 120, 206, 120});
-    p.set("waveform.bg",            {0,   0,   0,   0  });
     return p;
 }
 
@@ -61,7 +58,6 @@ static Palette makeLightPalette() {
     p.set("textbox.placeholder",    {130, 138, 165, 255});
     p.set("textbox.cursor",         {40,  46,  72,  255});
     p.set("textbox.selection",      {120, 90,  190, 110});
-    p.set("waveform.bg",            {0,   0,   0,   0  });
     return p;
 }
 
@@ -159,93 +155,31 @@ static void updateFpsHud(const FpsHud& hud, const Renderer& renderer, float fpsV
 }
 
 // ---------------------------------------------------------------------------
-// Waveform demo data + zoom binding
+// Keybinds
 // ---------------------------------------------------------------------------
-static void installWaveformDemo(UILO& ui) {
-    auto* wf = ui.getElement<Waveform>("main_waveform");
-    if (!wf) return;
+// Bound by semantic name and polled by UILO::update(). `true` at the end means
+// press-edge only, which is what the hand-rolled key latches used to do.
+// UILO suppresses these while a Textbox has focus, so typing "v" is just a "v".
+static void installKeybinds(UILO& ui, Renderer& renderer, Column* fpsHud) {
+    Keybinds& keys = ui.getKeybinds();
 
-    constexpr float    kSampleRate = 48000.f;
-    constexpr float    kDuration   = 4.0f; // seconds
-    const std::size_t  kFrames     = (std::size_t)(kSampleRate * kDuration);
-    std::vector<float> bufL(kFrames), bufR(kFrames);
-    for (std::size_t i = 0; i < kFrames; ++i) {
-        const float t  = (float)i / kSampleRate;
-        // Two sine partials + a slow tremolo envelope + a little drift
-        // between L/R so the channels look different in Stacked layout.
-        const float env  = 0.5f * (1.f + std::sin(2.f * 3.14159265f * 0.8f * t));
-        const float fade = std::min(1.f, t / 0.05f) *
-                           std::min(1.f, (kDuration - t) / 0.4f);
-        const float wL = std::sin(2.f * 3.14159265f * 220.f * t)
-                       + 0.5f * std::sin(2.f * 3.14159265f * 440.f * t);
-        const float wR = std::sin(2.f * 3.14159265f * 246.94f * t)
-                       + 0.4f * std::sin(2.f * 3.14159265f * 523.25f * t);
-        bufL[i] = 0.55f * fade * env * wL;
-        bufR[i] = 0.55f * fade * env * wR;
-    }
-    const float* channels[2] = { bufL.data(), bufR.data() };
-    wf->setSamples(channels, 2, kFrames);
+    keys.bindAction("ui.scaleUp", { SDL_SCANCODE_EQUALS, SDL_SCANCODE_KP_PLUS },
+        [&ui] { ui.setScale(ui.getScale() + 0.1f); }, true);
 
-    // Ctrl + scroll wheel zooms the waveform around the mouse x.
-    wf->getModifier().setOnScroll([&ui, wf, anchor = 0.f](Element* self, float delta) mutable {
-        const SDL_Keymod mods = SDL_GetModState();
-        if (!(mods & SDL_KMOD_CTRL)) return;
-        const Rectf b = self->getBounds();
-        if (b.size.x <= 0.f) return;
-        // Lock the zoom pivot to where the cursor was when the gesture
-        // started; reusing the live cursor during momentum coast would
-        // jitter the pivot by sub-pixel noise each tick.
-        if (!ui.isMomentumScrolling()) {
-            const float mx = ui.getMousePosition().x;
-            anchor = std::max(0.f, std::min(1.f, (mx - b.position.x) / b.size.x));
-        }
-        const float factor = std::pow(1.2f, delta);
-        wf->zoomAt(anchor, factor);
-    });
-}
+    keys.bindAction("ui.scaleDown", { SDL_SCANCODE_MINUS, SDL_SCANCODE_KP_MINUS },
+        [&ui] { ui.setScale(ui.getScale() - 0.1f); }, true);
 
-// ---------------------------------------------------------------------------
-// Input + main loop
-// ---------------------------------------------------------------------------
-struct InputLatch {
-    bool plus  = false;
-    bool minus = false;
-    bool f10   = false;
-    bool v     = false;
-};
+    keys.bindAction("ui.toggleFpsHud", SDL_SCANCODE_F10,
+        [fpsHud] {
+            if (!fpsHud) return;
+            Modifier& m = fpsHud->getModifier();
+            m.setVisible(!m.getVisible());
+        }, true);
 
-static void handleEvent(
-    SDL_Event&      event,
-    InputLatch&     latch,
-    bool&           showFps,
-    bool&           running,
-    UILO&           ui,
-    Renderer&       renderer
-) {
-    if (event.type == SDL_EVENT_QUIT) running = false;
-    if (event.type == SDL_EVENT_KEY_DOWN) {
-        SDL_Keycode k = event.key.key;
-        if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) {
-            if (!latch.plus) ui.setScale(ui.getScale() + 0.1f);
-            latch.plus = true;
-        } else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) {
-            if (!latch.minus) ui.setScale(ui.getScale() - 0.1f);
-            latch.minus = true;
-        } else if (k == SDLK_F10) {
-            if (!latch.f10) showFps = !showFps;
-            latch.f10 = true;
-        } else if (k == SDLK_V) {
-            if (!latch.v) renderer.setVsync(!renderer.getVsync());
-            latch.v = true;
-        }
-    } else if (event.type == SDL_EVENT_KEY_UP) {
-        SDL_Keycode k = event.key.key;
-        if (k == SDLK_EQUALS || k == SDLK_KP_PLUS)  latch.plus  = false;
-        if (k == SDLK_MINUS  || k == SDLK_KP_MINUS) latch.minus = false;
-        if (k == SDLK_F10)                          latch.f10   = false;
-        if (k == SDLK_V)                            latch.v     = false;
-    }
-    ui.handleEvent(event);
+    keys.bindAction("renderer.toggleVsync", SDL_SCANCODE_V,
+        [&renderer] { renderer.setVsync(!renderer.getVsync()); }, true);
+
+    keys.bindAction("app.quit", SDL_SCANCODE_ESCAPE, [&ui] { ui.quit(); }, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,49 +200,25 @@ int main() {
     applyTheme(ui, true);
 
     FpsHud hud = installFpsHud(ui);
-    installWaveformDemo(ui);
+    if (hud.root) hud.root->getModifier().setVisible(false);
+    installKeybinds(ui, renderer, hud.root);
 
     std::fprintf(
         stderr, "[UILO] bgfx renderer: %s\n",
         bgfx::getRendererName(bgfx::getCaps()->rendererType)
     );
 
-    InputLatch latch;
-    bool  showFps   = false;
-    bool  running   = true;
-    float fpsTimer  = 0.f;
-    int   fpsLoops  = 0;
-    float fpsValue  = 0.f;
+    while (ui.isRunning()) {
+        ui.pollEvents();
+        ui.update();
 
-    auto poll = [&]() {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-            handleEvent(event, latch, showFps, running, ui, renderer);
-    };
+        if (hud.root && hud.root->getModifier().getVisible())
+            updateFpsHud(hud, renderer, ui.getAvgFrameRate());
 
-    auto renderOnce = [&]() {
         renderer.beginFrame();
         renderer.clear(ui.getPalette().get("app.bg"));
         ui.render();
         renderer.endFrame();
-    };
-
-    while (running) {
-        const float dt = ui.getDeltaTime();
-        fpsTimer += dt;
-        fpsLoops++;
-        if (fpsTimer >= 0.25f) {
-            fpsValue = (float)fpsLoops / fpsTimer;
-            fpsLoops = 0;
-            fpsTimer = 0.f;
-            updateFpsHud(hud, renderer, fpsValue);
-        }
-        if (hud.root) hud.root->getModifier().setVisible(showFps);
-
-        poll();
-        ui.update();
-
-        renderOnce();
     }
     return 0;
 }
@@ -378,75 +288,6 @@ Container* buildRootContainer(UILO& ui) {
                         "file_browser"
                     ),
 
-#if 0
-                    // Original hand-rolled mock, kept for visual comparison.
-                    column(
-                        Modifier()
-                            .setOuterPadding(8.f)
-                            .setWidth(320_px),
-                        ColumnOptions()
-                            .setColorRole("panel")
-                            .setRounding(ROUNDING)
-                            .setScrollable(true)
-                            .setScrollSpeed(60.f),
-                        contains {
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  include/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    UILO.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    Page.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    Page.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    elements/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Element.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Element.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Elements.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Factory.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Modifier.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      Modifier.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      containers/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Container.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Container.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Column.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Column.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Row.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Row.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      decoration/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Image.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Image.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Spacer.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Spacer.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Text.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Text.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      interactible/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Button.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Button.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dropdown.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dropdown.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Knob.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Knob.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Slider.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Slider.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        TextBox.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        TextBox.cpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("      utils/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Alignment.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Dimension.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        RenderUtils.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Timer.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("        Utils.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions().setColorRole("panelAlt").setRounding(4.f), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  assets/").setCharSize(16).setColorRole("text").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedAssets.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedFont.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("    EmbeddedIcons.hpp").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  Makefile").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  build.sh").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  README.md").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  TODO.txt").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  License.txt").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                            row(Modifier().setHeight(36_px).setOuterPadding(4.f), RowOptions(), contains { text(Modifier(), TextOptions().setFont("assets/fonts/Montserrat.ttf").setContent("  UILO_NEW.md").setCharSize(16).setColorRole("textDim").setTextAlignY(Align::CenterY)) }),
-                        }, "1"
-                    ),
-#endif
-
                     resizer(
                         Modifier()
                             .setWidth(48_px)
@@ -469,7 +310,6 @@ Container* buildRootContainer(UILO& ui) {
                             .setResizeWidthMax(50_pct)
                     ),
 
-#if 1
                     column(
                         Modifier()
                             .setOuterPadding(8.f),
@@ -620,135 +460,6 @@ Container* buildRootContainer(UILO& ui) {
                             )
                         }, "2"
                     )
-#else
-                    [&]() -> Element* {
-                        auto* c = canvas(
-                            Modifier()
-                                .setOuterPadding(8.f),
-                            CanvasOptions()
-                                .setColorRole("panel")
-                                .setRounding(ROUNDING)
-                                .setGridSize(32.f, 32.f)
-                                .setGridLineStyle(GridLineStyle::Dots)
-                                .setGridLineColorRole("textDim")
-                                .setGridLineThickness(1.5f)
-                                .setGridLineSpacing(1)
-                                .setScrollSpeed(80.f)
-                                .setMinX(0.f)
-                                .setMinY(0.f)
-                                .setZoomAxes(true, true),
-                            contains{}, "canvas_panel"
-                        );
-
-                        c->addChild(
-                            button(
-                                Modifier()
-                                    .setWidth(192_px)
-                                    .setHeight(64_px)
-                                    .setOnLeftClick([&](Button* b){ std::cout << "Test button clicked!!!" << std::endl; })
-                                    .setOnHoverEnter([](Button* b){ b->getOptions().setColorRole("accentHover"); })
-                                    .setOnHoverExit([](Button* b){ b->getOptions().setColorRole("accent"); }),
-                                ButtonOptions()
-                                    .setColorRole("accent")
-                                    .setRounding(ROUNDING)
-                                    .setLabel(
-                                        text(
-                                            Modifier().setAlign(Align::CenterX | Align::CenterY),
-                                            TextOptions()
-                                                .setFont("assets/fonts/Montserrat.ttf")
-                                                .setContent("TEST")
-                                                .setColorRole("onAccent")
-                                                .setTextAlignX(Align::CenterX)
-                                                .setTextAlignY(Align::CenterY)
-                                        )
-                                    ),
-                                "test_button"
-                            ),
-                            32, 32
-                        );
-
-                        c->addChild(
-                            knob(
-                                Modifier().setWidth(96_px).setHeight(96_px),
-                                KnobOptions()
-                                    .setBodyColorRole("knob.body")
-                                    .setOutlineColorRole("outline")
-                                    .setOutlineThickness(1.f)
-                                    .setTrackColorRole("knob.track")
-                                    .setArcColorRole("accent")
-                                    .setIndicatorColorRole("knob.indicator")
-                                    .setArcThickness(8.f)
-                                    .setArcGap(4.f)
-                                    .setIndicatorThickness(4.f)
-                                    .setIndicatorInset(0.35f)
-                                    .setIndicatorLength(0.85f)
-                                    .setRange(0.f, 1.f)
-                                    .setDefaultValue(0.5f)
-                                    .setOnValueChanged([](float v){ std::cout << "Knob: " << v << std::endl; }),
-                                "knob_a"
-                            ),
-                            32, 128
-                        );
-
-                        c->addChild(
-                            knob(
-                                Modifier().setWidth(96_px).setHeight(96_px),
-                                KnobOptions()
-                                    .setBodyColorRole("knob.body")
-                                    .setOutlineColorRole("outline")
-                                    .setOutlineThickness(1.f)
-                                    .setTrackColorRole("knob.track")
-                                    .setArcColorRole("accent.green")
-                                    .setIndicatorColorRole("knob.indicator")
-                                    .setStartAngle(180.f)
-                                    .setEndAngle(0.f)
-                                    .setArcDirection(KnobArcDir::CounterClockwise)
-                                    .setRange(-1.f, 1.f)
-                                    .setDefaultValue(0.f),
-                                "knob_pan"
-                            ),
-                            160, 128
-                        );
-
-                        c->addChild(
-                            textbox(
-                                Modifier().setWidth(512_px).setHeight(48_px),
-                                TextboxOptions()
-                                    .setCharSize(32)
-                                    .setFont("assets/fonts/Montserrat.ttf")
-                                    .setRounding(ROUNDING)
-                                    .setPlaceholder("Type Something...")
-                                    .setBackgroundColorRole("textbox.bg")
-                                    .setTextColorRole("textbox.text")
-                                    .setPlaceholderColorRole("textbox.placeholder")
-                                    .setCursorColorRole("textbox.cursor")
-                                    .setSelectionColorRole("textbox.selection")
-                                    .setMultiline(true)
-                                    .setPaddingLeft(16.f)
-                                    .setPaddingRight(16.f)
-                                    .setOutlineColorRole("accent")
-                                    .setOutlineThickness(2.f)
-                                    .setMaxResizeLines(6)
-                                    .setOnEnterPressed([&](const std::string& s){ std::cout << "TextBox: " << s << std::endl;}),
-                                "main_textbox"
-                            ),
-                            32, 256
-                        );
-
-                        c->addChild(
-                            image(
-                                Modifier().setWidth(256_px).setHeight(256_px),
-                                ImageOptions()
-                                    .setClipEllipse(true)
-                                    .setPath("assets/images/stones.jpg")
-                                    .setLockAspectWidth(true)
-                            ),
-                            32, 352
-                        );
-
-                        return c;
-                    }()
-#endif
                 }
             ),
 
@@ -774,30 +485,13 @@ Container* buildRootContainer(UILO& ui) {
                     .setResizeHeightMax(50_pct)
             ),
 
+            // Empty bottom bar, resizable via the handle above it.
             row(
                 Modifier()
                     .setHeight(256_px)
                     .setOuterPadding(8.f),
                 panelRow,
-                contains {
-                    waveform(
-                        Modifier()
-                            .setWidth(100_pct)
-                            .setHeight(100_pct),
-                        WaveformOptions()
-                            .setColorRole("text")
-                            .setLeftChannelColorRole("accent.green")
-                            .setRightChannelColorRole("accent.red")
-                            .setBackgroundColorRole("waveform.bg")
-                            .setRounding(ROUNDING - 2.f)
-                            .setLineThickness(1.f)
-                            .setLayout(WaveformLayout::Stacked)
-                            .setGain(0.8f)
-                            .setStyle(WaveformStyle::Line)
-                            .setResolution(1.f),
-                        "main_waveform"
-                    ),
-                }
+                contains {}
             ),
         }, "root"
     );

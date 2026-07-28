@@ -35,11 +35,12 @@ Uint64      SDL_GetTicks()                  { return 0; }
 SDL_Keymod  SDL_GetModState()               { return SDL_KMOD_NONE; }
 
 const bool* SDL_GetKeyboardState(int* numkeys) {
-    // A single always-up key. UILO scans [0, numkeys) looking for any key
-    // held down, so one false entry answers that correctly without needing a
-    // full scancode table.
-    static const bool kNoKeysDown[1] = { false };
-    if (numkeys) *numkeys = 1;
+    // A full always-up scancode table. UILO scans [0, numkeys) looking for any
+    // key held down, and uilo::Keybinds indexes this directly by scancode, so
+    // the table has to span the whole range rather than a single entry.
+    static constexpr int kScancodeCount = 512; // SDL_SCANCODE_COUNT
+    static const bool kNoKeysDown[kScancodeCount] = { false };
+    if (numkeys) *numkeys = kScancodeCount;
     return kNoKeysDown;
 }
 
@@ -52,6 +53,22 @@ bool SDL_StopTextInput(SDL_Window*)   { return true; }
 bool SDL_TextInputActive(SDL_Window*) { return false; }
 
 bool SDL_AddEventWatch(SDL_EventFilter, void*) { return true; }
+
+// The browser is the input device on this backend, so the queue is always empty
+// and there is no cursor to capture or warp.
+bool SDL_PollEvent(SDL_Event*) { return false; }
+
+bool SDL_SetWindowRelativeMouseMode(SDL_Window*, bool) { return true; }
+bool SDL_GetWindowRelativeMouseMode(SDL_Window*)       { return false; }
+
+void SDL_GetRelativeMouseState(float* x, float* y) {
+    if (x) *x = 0.f;
+    if (y) *y = 0.f;
+}
+
+float SDL_GetWindowDisplayScale(SDL_Window*) { return 1.f; }
+
+const char* SDL_GetError() { return ""; }
 
 bool SDL_GetWindowSize(SDL_Window*, int* w, int* h) {
     if (w) *w = 0;

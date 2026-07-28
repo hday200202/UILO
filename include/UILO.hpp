@@ -8,6 +8,8 @@
 
 #include "Elements.hpp"
 #include "Palette.hpp"
+#include "input/Keybinds.hpp"
+#include "input/Mousebinds.hpp"
 #include "../include/renderer/Renderer.hpp"
 
 namespace uilo {
@@ -29,12 +31,24 @@ public:
     void update();
     void render();
 
+    // Drains the SDL queue, forwarding everything to handleEvent() and closing
+    // the app on SDL_EVENT_QUIT. Convenience for the common loop:
+    //     while (ui.isRunning()) { ui.pollEvents(); ui.update(); /* draw */ }
+    // Applications that own their own event loop can keep calling handleEvent()
+    // per event instead and never touch this.
+    void pollEvents();
+    bool isRunning() const { return m_running; }
+    void quit()            { m_running = false; }
+
     void handleEvent(const SDL_Event& event);
     void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
     void dispatchZoom(const Vec2f& pos, float magnification);
     bool isSDLScrollTarget(const Vec2f& pos) const;
 
-    void setRenderer(Renderer& renderer) { m_renderer = &renderer; }
+    void setRenderer(Renderer& renderer) {
+        m_renderer = &renderer;
+        m_mousebinds.setWindow(renderer.sdlWindow());
+    }
     void addPage(Page* page);
     void setPage(const std::string& pageName);
     void setActivePage(Page* page);
@@ -49,8 +63,24 @@ public:
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
     
+    // Action-based input, polled once per frame from update(). Keyboard actions
+    // are suppressed while a focused widget is consuming text input, so typing
+    // in a Textbox never fires application shortcuts.
+    Keybinds&         getKeybinds()         { return m_keybinds; }
+    const Keybinds&   getKeybinds()   const { return m_keybinds; }
+    Mousebinds&       getMousebinds()       { return m_mousebinds; }
+    const Mousebinds& getMousebinds() const { return m_mousebinds; }
+
     float getScale()                const { return m_scale; }
     float getDeltaTime()            const { return m_deltaTime; }
+    // Instantaneous rate for the frame just measured.
+    float getFrameRate()            const { return m_deltaTime > 0.f ? 1.f / m_deltaTime : 0.f; }
+    // Frames divided by elapsed time over a sampling window, refreshed every
+    // getFrameRateWindow() seconds. Steadier than 1/dt, which a single long
+    // frame throws off badly.
+    float getAvgFrameRate()         const { return m_avgFrameRate; }
+    void  setFrameRateWindow(float seconds) { m_avgFrameWindow = seconds > 0.f ? seconds : 0.25f; }
+    float getFrameRateWindow()      const { return m_avgFrameWindow; }
     Vec2u getWindowSize()           const { return m_renderer ? m_renderer->getSize() : Vec2u{}; }
     Vec2f getMousePosition()        const { return m_mousePos; }
     bool isMomentumScrolling()      const { return m_inMomentumScroll; }
@@ -105,8 +135,17 @@ private:
 
     float m_scale = 1.f;
     float m_deltaTime = 0.f;
+    bool  m_running = true;
 
     Timer m_timer;
+
+    Keybinds   m_keybinds;
+    Mousebinds m_mousebinds;
+
+    Timer m_avgFrameTimer;
+    int   m_avgFrameCount  = 0;
+    float m_avgFrameWindow = 0.25f;
+    float m_avgFrameRate   = 0.f;
 
     Renderer* m_renderer = nullptr;
     Vec2u     m_prevWindowSize = {0u, 0u};
