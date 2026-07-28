@@ -127,13 +127,64 @@ if [[ $WT_MODE -eq 1 ]]; then
                 --shallow-submodules https://github.com/boostorg/boost.git "$EXT/boost"
         fi
         echo "[UILO] building Boost (b2, $JOBS jobs) -- one time only, takes a while"
-        (
-            cd "$EXT/boost"
-            [[ -x ./b2 ]] || ./bootstrap.sh
-            ./b2 headers
-            ./b2 --with-thread --with-filesystem --with-program_options \
-                 variant=release link=static threading=multi -j"$JOBS" stage
-        )
+        case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*)
+                # Windows: build with MSVC. b2's Unix bootstrap.sh can't drive
+                # MSVC, so run bootstrap.bat + b2 inside a vcvars environment via
+                # PowerShell -> cmd. Several MSYS/cmd quirks are handled: the batch
+                # needs CRLF endings; NoDefaultCurrentDirectoryInExePath must be
+                # cleared (MSYS sets it, breaking bootstrap's internal calls);
+                # vcvars changes directory so we cd back; and /c is passed to cmd
+                # via PowerShell because `cmd //c` through Git Bash is unreliable.
+                VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+                [[ -f "$VSWHERE" ]] || { echo "[UILO] error: vswhere not found; install Visual Studio with the C++ workload" >&2; exit 1; }
+                VS_WIN="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)"
+                [[ -n "$VS_WIN" ]] || { echo "[UILO] error: no VS C++ x64 toolset found (install 'Desktop development with C++')" >&2; exit 1; }
+                VCVARS="$VS_WIN\\VC\\Auxiliary\\Build\\vcvars64.bat"
+                BOOST_ABS_BS="$(cd "$EXT/boost" && pwd -W | sed 's#/#\\#g')"
+                cat > "$EXT/boost/_build_boost.bat" <<BAT
+@echo off
+set "NoDefaultCurrentDirectoryInExePath="
+call "$VCVARS" || exit /b 1
+cd /d "$BOOST_ABS_BS" || exit /b 1
+if not exist b2.exe call bootstrap.bat
+if not exist b2.exe exit /b 1
+b2 headers || exit /b 1
+b2 --with-thread --with-filesystem --with-program_options toolset=msvc runtime-link=shared address-model=64 variant=release link=static threading=multi -j$JOBS stage || exit /b 1
+BAT
+                sed -i 's/$/\r/' "$EXT/boost/_build_boost.bat"
+                powershell -NoProfile -Command "cmd /c '${BOOST_ABS_BS}\\_build_boost.bat'"
+                ;;
+            *)
+                # Linux/macOS: bootstrap + b2 with an explicit toolset. b2's
+                # auto-guess fails with a cryptic dump when no compiler is on
+                # PATH, so detect one and give an actionable error instead.
+                if [[ "$(uname -s)" == "Darwin" ]]; then
+                    command -v clang++ >/dev/null 2>&1 && TS=clang || TS=""
+                elif command -v g++ >/dev/null 2>&1; then
+                    TS=gcc
+                elif command -v clang++ >/dev/null 2>&1; then
+                    TS=clang
+                else
+                    TS=""
+                fi
+                if [[ -z "$TS" ]]; then
+                    echo "[UILO] error: no C++ compiler found (need g++ or clang++)." >&2
+                    echo "       Linux (Debian/Ubuntu): sudo apt install build-essential" >&2
+                    echo "       Linux (Fedora): sudo dnf install gcc-c++   (Arch): sudo pacman -S base-devel" >&2
+                    echo "       macOS: xcode-select --install" >&2
+                    exit 1
+                fi
+                echo "[UILO] toolset: $TS"
+                (
+                    cd "$EXT/boost"
+                    [[ -x ./b2 ]] || ./bootstrap.sh --with-toolset="$TS"
+                    ./b2 headers
+                    ./b2 toolset="$TS" --with-thread --with-filesystem --with-program_options \
+                         variant=release link=static threading=multi -j"$JOBS" stage
+                )
+                ;;
+        esac
     fi
 
     # A host project that add_subdirectory()s UILO provisions the deps this way
@@ -143,20 +194,42 @@ if [[ $WT_MODE -eq 1 ]]; then
         exit 0
     fi
 
-    GENERATOR="Unix Makefiles"
-    command -v ninja >/dev/null 2>&1 && GENERATOR="Ninja"
-
-    echo "[UILO] configure ($MODE, $LINK_TAG, web, $GENERATOR)"
-    cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$GENERATOR" \
-        -DCMAKE_BUILD_TYPE="$MODE" \
-        -DUILO_SHARED="$UILO_SHARED" \
-        -DUILO_WT=ON
+    # Configure with a generator that fits the platform. On Windows the Visual
+    # Studio generator drives MSVC directly (no vcvars/nmake needed), so the same
+    # ./build.sh works there via Git Bash -- no .bat/.ps1. Elsewhere prefer Ninja,
+    # then Unix Makefiles.
+    CMAKE="cmake"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            # cmake may not be on PATH on Windows; fall back to the VS-bundled one.
+            if ! command -v cmake >/dev/null 2>&1; then
+                VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+                VS_WIN="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>/dev/null || true)"
+                [[ -n "$VS_WIN" ]] || { echo "[UILO] error: cmake not on PATH and no Visual Studio found" >&2; exit 1; }
+                CMAKE="$(cygpath -u "$VS_WIN")/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+            fi
+            echo "[UILO] configure ($MODE, $LINK_TAG, web, Visual Studio)"
+            "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -A x64 \
+                -DCMAKE_BUILD_TYPE="$MODE" \
+                -DUILO_SHARED="$UILO_SHARED" \
+                -DUILO_WT=ON
+            ;;
+        *)
+            GENERATOR="Unix Makefiles"
+            command -v ninja >/dev/null 2>&1 && GENERATOR="Ninja"
+            echo "[UILO] configure ($MODE, $LINK_TAG, web, $GENERATOR)"
+            "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$GENERATOR" \
+                -DCMAKE_BUILD_TYPE="$MODE" \
+                -DUILO_SHARED="$UILO_SHARED" \
+                -DUILO_WT=ON
+            ;;
+    esac
 
     echo "[UILO] build"
     if [[ ${#EXTRA_TARGETS[@]} -gt 0 ]]; then
-        cmake --build "$BUILD_DIR" --config "$MODE" --parallel --target "${EXTRA_TARGETS[@]}"
+        "$CMAKE" --build "$BUILD_DIR" --config "$MODE" --parallel --target "${EXTRA_TARGETS[@]}"
     else
-        cmake --build "$BUILD_DIR" --config "$MODE" --parallel
+        "$CMAKE" --build "$BUILD_DIR" --config "$MODE" --parallel
     fi
 
     echo "[UILO] done -> $BUILD_DIR"
@@ -172,6 +245,65 @@ clone_if_missing bimg "https://github.com/bkaradzic/bimg.git"
 clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git"
 
 case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # -------- Windows desktop: GENie + MSBuild for bgfx, VS gen for UILO --
+        # Same single-entrypoint story as Linux/macOS -- no .bat/.ps1 to run by
+        # hand. bgfx has no Unix-make target on Windows, so it's built from its
+        # generated VS solution; the Visual Studio CMake generator then drives
+        # MSVC for UILO itself (it finds the compiler on its own, no vcvars).
+        VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+        [[ -f "$VSWHERE" ]] || { echo "[UILO] error: vswhere not found; install Visual Studio with the C++ workload" >&2; exit 1; }
+        VS_WIN="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>/dev/null || true)"
+        [[ -n "$VS_WIN" ]] || { echo "[UILO] error: no VS C++ x64 toolset found (install 'Desktop development with C++')" >&2; exit 1; }
+        VS_DIR="$(cygpath -u "$VS_WIN")"
+        VCVARS="$VS_WIN\\VC\\Auxiliary\\Build\\vcvars64.bat"
+
+        CMAKE="cmake"
+        command -v cmake >/dev/null 2>&1 || CMAKE="$VS_DIR/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+
+        # Retarget bgfx's vs2022/v143 projects onto whatever MSVC toolset +
+        # Windows SDK this machine actually has (e.g. v145), so a machine without
+        # the exact vs2022 toolset still builds bgfx.
+        TOOLSET="$(ls -d "$VS_DIR"/MSBuild/Microsoft/VC/*/Platforms/x64/PlatformToolsets/v* 2>/dev/null | sed 's#.*/##' | grep -E '^v[0-9]+$' | sort -V | tail -1 || true)"
+        [[ -n "$TOOLSET" ]] || { echo "[UILO] error: no MSVC platform toolset found" >&2; exit 1; }
+        WINSDK="$(ls -d "/c/Program Files (x86)/Windows Kits/10/bin/10."* 2>/dev/null | sed 's#.*/##' | sort -V | tail -1 || true)"
+        WINSDK_ARG=""
+        [[ -n "$WINSDK" ]] && WINSDK_ARG="/p:WindowsTargetPlatformVersion=$WINSDK"
+        echo "[UILO] toolset=$TOOLSET winsdk=${WINSDK:-<default>}"
+
+        # One-time bgfx build (Release x64, +tools for shaderc), gated on the
+        # output lib. Driven through a generated .bat run via PowerShell -> cmd
+        # so genie/msbuild get a proper vcvars environment (same MSYS/cmd quirk
+        # handling as the Boost build).
+        if [[ ! -f "$EXT/bgfx/.build/win64_vs2022/bin/bgfxRelease.lib" ]]; then
+            echo "[UILO] building bgfx (win64_vs2022, Release) -- one time only"
+            BGFX_ABS_BS="$(cd "$EXT/bgfx" && pwd -W | sed 's#/#\\#g')"
+            cat > "$EXT/bgfx/_build_bgfx.bat" <<BAT
+@echo off
+set "NoDefaultCurrentDirectoryInExePath="
+call "$VCVARS" || exit /b 1
+cd /d "$BGFX_ABS_BS" || exit /b 1
+..\bx\tools\bin\windows\genie.exe --with-tools --file=scripts\genie.lua vs2022 || exit /b 1
+msbuild .build\projects\vs2022\bgfx.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=$TOOLSET $WINSDK_ARG /m || exit /b 1
+BAT
+            sed -i 's/$/\r/' "$EXT/bgfx/_build_bgfx.bat"
+            powershell -NoProfile -Command "cmd /c '${BGFX_ABS_BS}\\_build_bgfx.bat'"
+        fi
+
+        echo "[UILO] configure ($MODE, $LINK_TAG, desktop, Visual Studio)"
+        "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -A x64 \
+            -DCMAKE_BUILD_TYPE="$MODE" \
+            -DUILO_SHARED="$UILO_SHARED" \
+            -DUILO_WT=OFF
+        echo "[UILO] build"
+        if [[ ${#EXTRA_TARGETS[@]} -gt 0 ]]; then
+            "$CMAKE" --build "$BUILD_DIR" --config "$MODE" --parallel --target "${EXTRA_TARGETS[@]}"
+        else
+            "$CMAKE" --build "$BUILD_DIR" --config "$MODE" --parallel
+        fi
+        echo "[UILO] done -> $BUILD_DIR"
+        exit 0
+        ;;
     Darwin)
         if [[ "$(uname -m)" == "arm64" ]]; then
             BGFX_TARGET="osx-arm64-release"
@@ -187,10 +319,11 @@ case "$(uname -s)" in
         ;;
     *)
         echo "[UILO] unsupported platform: $(uname -s)" >&2
-        echo "[UILO] on Windows use build.bat / build.ps1" >&2
         exit 1
         ;;
 esac
+
+# ---- Linux/macOS: make for bgfx, Ninja/Unix Makefiles for UILO ------------
 BGFX_BIN_DIR="$EXT/bgfx/.build/$BGFX_PLATFORM_DIR/bin"
 
 # One-time build (release libs + shaderc via --with-tools), gated on the

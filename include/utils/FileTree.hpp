@@ -20,8 +20,12 @@ namespace fs = std::filesystem;
     - convert a filesystem clock timestamp to a time_t
 */
 inline std::time_t getFileTime_t(fs::file_time_type ftime) {
-    auto generic_sys_time = std::chrono::file_clock::to_sys(ftime);
-    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(generic_sys_time);
+    // Rebase the file-clock time point onto the system clock via their now()s.
+    // This avoids std::chrono::file_clock::to_sys, which is C++20-only and not
+    // exposed by every standard library (notably some MSVC STL versions), so it
+    // stays portable across MSVC / libstdc++ / libc++ and C++17 / C++20.
+    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
     return std::chrono::system_clock::to_time_t(sctp);
 }
 
