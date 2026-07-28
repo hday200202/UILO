@@ -144,14 +144,18 @@ public:
     KnobOptions&       getOptions()       { return m_options; }
     void setOptions(const KnobOptions& o) { m_options = o; m_dirty = true; }
 
+    // Arc geometry. Both are pure functions of the options and the current
+    // value, and an alternate renderer needs them to lay the knob out the same
+    // way render() does.
+    //
+    // Total signed sweep from start to end along the chosen direction, always
+    // in (0, 360]. 0 collapses to 360 to give a full ring.
+    float sweepDegrees() const;
+    // The angle (degrees, cartesian) of a value along the configured arc.
+    float angleForValue(float v) const;
+
 private:
     void  applyValue(float raw);
-    // Total signed sweep from start to end along the chosen direction,
-    // always in (0, 360]. 0 collapses to 360 to give a full ring.
-    float sweepDegrees() const;
-    // Returns the angle (degrees, cartesian) of the current value along
-    // the configured arc.
-    float angleForValue(float v) const;
 
     KnobOptions m_options;
     float m_value         = 0.f;

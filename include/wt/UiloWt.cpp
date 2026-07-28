@@ -9,6 +9,10 @@
 #include <Wt/WEnvironment.h>
 #include <Wt/WTimer.h>
 
+#include <algorithm>
+#include <map>
+#include <vector>
+
 #include "../renderer/Renderer.hpp"
 
 namespace uilo::wt {
@@ -33,19 +37,55 @@ public:
         m_ui.setRenderer(m_renderer);
         m_ui.setPalette(config.palette);
 
-        Page* page = build(*this);
-        if (!page) return;
+        m_host = root()->addWidget(std::make_unique<Wt::WContainerWidget>());
+        m_host->setStyleClass("uilo-root");
+
+        // Anything the builder registers with addPage() lands in m_pages; the
+        // page it returns is simply the one to open on.
+        Page* initial = build(*this);
+        if (initial) addPage(initial);
+        if (m_pages.empty()) return;
+
+        // A deep link wins over the builder's choice, so a bookmarked page
+        // opens where it was bookmarked.
+        const std::string fromUrl = pageFromPath(internalPath());
+        const std::string first   = initial ? initial->getName() : m_order.front();
+        show(m_pages.count(fromUrl) ? fromUrl : first, false);
+
+        internalPathChanged().connect([this](const std::string& path) {
+            // Back/forward and typed URLs arrive here. Don't write the path
+            // back out: the browser already moved it, and doing so would push
+            // a duplicate history entry.
+            const std::string name = pageFromPath(path);
+            if (m_pages.count(name)) show(name, false);
+        });
+    }
+
+    void addPage(Page* page) override {
+        if (!page || m_pages.count(page->getName())) return;
 
         // Hands the page (and, through it, every element) to UILO, which owns
-        // them for the rest of the session. Must happen before translating:
-        // it is what binds elements to this UILO, and colour roles resolve
-        // through that binding.
+        // it for the rest of the session. Must happen before translating: it is
+        // what binds elements to this UILO, and colour roles resolve through
+        // that binding.
         m_ui.addPage(page);
         m_ui.setPage(page->getName());
 
-        auto* host = root()->addWidget(std::make_unique<Wt::WContainerWidget>());
-        host->setStyleClass("uilo-root");
+        auto* host = m_host->addWidget(std::make_unique<Wt::WContainerWidget>());
+        host->setStyleClass("uilo-page");
+        host->setHidden(true);
         m_translator.build(*page, host);
+
+        m_pages.emplace(page->getName(), host);
+        m_order.push_back(page->getName());
+    }
+
+    void showPage(const std::string& name) override { show(name, true); }
+
+    std::string currentPage() const override { return m_current; }
+
+    void onPageChanged(std::function<void(const std::string&)> fn) override {
+        m_onPageChanged.push_back(std::move(fn));
     }
 
     UILO& ui() override { return m_ui; }
@@ -68,11 +108,41 @@ public:
     }
 
 private:
+    // Pages are addressed as "/name". The leading slash is all that separates
+    // the two forms, so the conversion is a trim in each direction.
+    static std::string pageFromPath(const std::string& path) {
+        std::string name = path;
+        while (!name.empty() && name.front() == '/') name.erase(name.begin());
+        while (!name.empty() && name.back()  == '/') name.pop_back();
+        return name;
+    }
+
+    void show(const std::string& name, bool pushUrl) {
+        auto it = m_pages.find(name);
+        if (it == m_pages.end() || name == m_current) return;
+
+        if (auto prev = m_pages.find(m_current); prev != m_pages.end())
+            prev->second->setHidden(true);
+        it->second->setHidden(false);
+        m_current = name;
+
+        // Keeps UILO's own notion of the active page in step, so getElement()
+        // and anything else reading it agree with what is on screen.
+        m_ui.setPage(name);
+
+        if (pushUrl) setInternalPath("/" + name, false);
+        for (const auto& fn : m_onPageChanged) fn(name);
+
+        m_translator.sync();
+    }
+
     void addBaseRules() {
         auto& sheet = styleSheet();
         sheet.addRule("html, body",
                       "margin:0;padding:0;width:100%;height:100%;overflow:hidden;");
         sheet.addRule(".uilo-root", "position:absolute;inset:0;overflow:hidden;");
+        // Every page fills the same box; only one is ever un-hidden.
+        sheet.addRule(".uilo-page", "position:absolute;inset:0;overflow:hidden;");
         // A flex item defaults to a content-based minimum size, which would
         // stop children shrinking to the size UILO gives them. UILO has no
         // such floor, so it is removed here for every translated element.
@@ -86,6 +156,12 @@ private:
     Renderer           m_renderer;
     UILO               m_ui;
     detail::Translator m_translator;
+
+    Wt::WContainerWidget*                             m_host = nullptr;
+    std::map<std::string, Wt::WContainerWidget*>      m_pages;   // name -> host
+    std::vector<std::string>                          m_order;   // registration order
+    std::string                                       m_current;
+    std::vector<std::function<void(const std::string&)>> m_onPageChanged;
 };
 
 } // namespace
