@@ -28,6 +28,8 @@ enum class Axis { Row, Column };
 // because they share the class, and so share its identity.
 using PseudoRules = std::vector<std::pair<std::string, std::string>>;
 
+class KnobWidget;
+
 class Translator {
 public:
     Translator(Wt::WApplication& app, const Config& config);
@@ -83,12 +85,26 @@ private:
     // Any pseudo-selector rules the element needs are appended to `pseudo`.
     std::string styleFor(const Node& node, PseudoRules& pseudo);
 
+    // Injects a rule through the browser's ordinary CSS parser rather than
+    // insertRule, so an unrecognised vendor selector is dropped instead of
+    // throwing and taking the rest of the stylesheet with it.
+    void addVendorRule(const std::string& rule);
+
     // Interns a style as a class name, so identical styling costs one rule.
     std::string classFor(const std::string& css, const PseudoRules& pseudo);
 
     // Maps a UILO font path to a CSS family, registering an @font-face for it
     // the first time it is seen. Empty path -> the configured default stack.
     std::string fontFamilyFor(const std::string& path);
+
+    // Reproduces Image::init()'s aspect write-back: reads the file's real
+    // dimensions and pins the derived axis to a fixed size, which is what
+    // keeps the element out of its container's percent pool.
+    void applyImageAspect(Image* image);
+
+    // Builds the ring, body and pointer that make up a Knob, and wires up the
+    // client-side drag.
+    void buildKnob(Knob* knob, KnobWidget* widget);
 
     // Builds the drag strip inside a Resizer's (zero-width) wrapper and wires
     // up the client-side drag.
@@ -106,6 +122,8 @@ private:
     int                                          m_nextClass = 0;
     bool                                         m_resizerJs  = false;
     bool                                         m_autoGrowJs = false;
+    bool                                         m_knobJs     = false;
+    bool                                         m_sliderJs   = false;
 };
 
 } // namespace uilo::wt::detail

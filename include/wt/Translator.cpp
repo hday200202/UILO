@@ -5,11 +5,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
+#include <cstdlib>
+#include <fstream>
 
 #include <Wt/WApplication.h>
 #include <Wt/WComboBox.h>
 #include <Wt/WCssStyleSheet.h>
 #include <Wt/WImage.h>
+#include <Wt/WJavaScript.h>
 #include <Wt/WLineEdit.h>
 #include <Wt/WLink.h>
 #include <Wt/WSlider.h>
@@ -23,11 +27,26 @@
 #include "../elements/decoration/Text.hpp"
 #include "../elements/interactible/Button.hpp"
 #include "../elements/interactible/Dropdown.hpp"
+#include "../elements/interactible/Knob.hpp"
 #include "../elements/interactible/Resizer.hpp"
 #include "../elements/interactible/Slider.hpp"
 #include "../elements/interactible/Textbox.hpp"
 
 namespace uilo::wt::detail {
+
+/*
+    KnobWidget:
+    - Desc: A plain box that also owns the JSignal the drag script hands the
+            settled value to. A knob is drawn entirely in CSS, so the only
+            reason this is a subclass at all is that a JSignal has to live on
+            a WObject.
+*/
+class KnobWidget : public Wt::WContainerWidget {
+public:
+    KnobWidget() : valueChanged(this, "knobValue") {}
+    Wt::JSignal<double> valueChanged;
+};
+
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -177,6 +196,113 @@ bool aspectLocked(const ImageOptions& o) {
     return o.getLockAspectWidth() || o.getLockAspectHeight();
 }
 
+/*
+    KnobGeometry:
+    - Desc: The knob's arc laid out the way CSS wants it. UILO measures angles
+            from +x with y running down; a conic-gradient starts at 12 o'clock
+            and sweeps clockwise, which is the same direction -- just rotated a
+            quarter turn, hence the +90 everywhere. `span` is always positive
+            because a gradient's stops must ascend, so a clockwise knob starts
+            from the far end and fills backwards (`rev`).
+*/
+struct KnobGeometry {
+    float from  = 0.f;   // gradient origin, CSS degrees
+    float span  = 0.f;   // total sweep, always positive
+    float fill  = 0.f;   // boundary between arc and track, from `from`
+    float rot   = 0.f;   // indicator rotation, CSS degrees
+    float t     = 0.f;   // normalised value
+    bool  rev   = false;
+};
+
+KnobGeometry knobGeometry(Knob* k) {
+    const KnobOptions& o = k->getOptions();
+    const float sweep = k->sweepDegrees();
+    const float range = o.getMax() - o.getMin();
+
+    KnobGeometry g;
+    g.rev  = sweep < 0.f;
+    g.span = std::fabs(sweep);
+    g.t    = range > 0.f
+           ? std::clamp((k->getValue() - o.getMin()) / range, 0.f, 1.f)
+           : 0.f;
+    g.from = o.getStartAngle() + 90.f + (g.rev ? sweep : 0.f);
+    g.fill = (g.rev ? 1.f - g.t : g.t) * g.span;
+    g.rot  = o.getStartAngle() + g.t * sweep + 90.f;   // == angleForValue + 90
+    return g;
+}
+
+// Reads just the dimensions out of an image file's header. Image::init() gets
+// these from the decoded texture; the web backend has no decoder, but the
+// header is all that's needed and every one of these formats puts it up front.
+bool imageSize(const std::string& path, uint32_t& w, uint32_t& h) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+
+    unsigned char b[32] = {};
+    in.read(reinterpret_cast<char*>(b), sizeof b);
+    const std::streamsize got = in.gcount();
+    auto be16 = [](const unsigned char* p) { return uint32_t(p[0]) << 8 | p[1]; };
+    auto be32 = [](const unsigned char* p) {
+        return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3];
+    };
+    auto le16 = [](const unsigned char* p) { return uint32_t(p[1]) << 8 | p[0]; };
+    auto le32 = [](const unsigned char* p) {
+        return uint32_t(p[3]) << 24 | uint32_t(p[2]) << 16 | uint32_t(p[1]) << 8 | p[0];
+    };
+
+    // PNG: 8-byte signature, then an IHDR whose first two fields are the size.
+    if (got >= 24 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+        w = be32(b + 16);
+        h = be32(b + 20);
+        return w && h;
+    }
+    // GIF: "GIF87a"/"GIF89a" then the logical screen size, little-endian.
+    if (got >= 10 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F') {
+        w = le16(b + 6);
+        h = le16(b + 8);
+        return w && h;
+    }
+    // BMP: DIB header carries a signed 32-bit size; height may be negative for
+    // a top-down bitmap, so take the magnitude.
+    if (got >= 26 && b[0] == 'B' && b[1] == 'M') {
+        w = le32(b + 18);
+        h = static_cast<uint32_t>(std::abs(static_cast<int32_t>(le32(b + 22))));
+        return w && h;
+    }
+    // JPEG: no fixed offset -- walk the segment chain to the frame header.
+    if (got >= 2 && b[0] == 0xFF && b[1] == 0xD8) {
+        in.clear();
+        in.seekg(2);
+        while (in) {
+            int marker = in.get();
+            if (marker != 0xFF) continue;             // resync on the next 0xFF
+            while (in && (marker = in.get()) == 0xFF) {}
+            if (marker < 0) return false;
+            // Standalone markers carry no length payload.
+            if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+                continue;
+
+            unsigned char len[2];
+            if (!in.read(reinterpret_cast<char*>(len), 2)) return false;
+            const uint32_t segment = be16(len);
+            if (segment < 2) return false;
+
+            // SOF0..SOF15, minus the two that aren't frame headers.
+            const bool isFrame = marker >= 0xC0 && marker <= 0xCF &&
+                                 marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
+            if (isFrame) {
+                unsigned char sof[5];
+                if (!in.read(reinterpret_cast<char*>(sof), 5)) return false;
+                h = be16(sof + 1);
+                w = be16(sof + 3);
+                return w && h;
+            }
+            in.seekg(segment - 2, std::ios::cur);
+        }
+    }
+    return false;
+}
+
 // Mirror-image transform for a flipped Image, or empty.
 std::string flipCss(const ImageOptions& o) {
     if (!o.getFlipH() && !o.getFlipV()) return {};
@@ -289,6 +415,28 @@ std::string styleKey(const std::string& css, const PseudoRules& pseudo) {
     return key;
 }
 
+// Wt adds rules with CSSStyleSheet.insertRule, which *throws* on a selector the
+// browser does not recognise -- and each engine only recognises its own
+// vendor-prefixed pseudo-elements. One `::-moz-range-track` is therefore enough
+// to abort the whole stylesheet in Chrome and leave the page blank. Appending
+// text to a <style> element goes through the ordinary CSS parser instead, which
+// drops rules it cannot parse and keeps the rest, which is the behaviour these
+// rules were written expecting.
+void Translator::addVendorRule(const std::string& rule) {
+    std::string js;
+    js.reserve(rule.size() + 16);
+    for (char c : rule) {
+        if (c == '\\' || c == '\'') js += '\\';
+        if (c == '\n') { js += "\\n"; continue; }
+        js += c;
+    }
+    m_app.doJavaScript(
+        "(function(){var s=document.getElementById('uilo-vendor');"
+        "if(!s){s=document.createElement('style');s.id='uilo-vendor';"
+        "document.head.appendChild(s);}"
+        "s.appendChild(document.createTextNode('" + js + "'));})();");
+}
+
 std::string Translator::classFor(const std::string& css, const PseudoRules& pseudo) {
     const std::string key = styleKey(css, pseudo);
 
@@ -297,8 +445,13 @@ std::string Translator::classFor(const std::string& css, const PseudoRules& pseu
 
     const std::string name = "u" + std::to_string(m_nextClass++);
     m_app.styleSheet().addRule("." + name, css);
-    for (const auto& [suffix, decls] : pseudo)
-        m_app.styleSheet().addRule("." + name + suffix, decls);
+    for (const auto& [suffix, decls] : pseudo) {
+        const std::string selector = "." + name + suffix;
+        // ::placeholder, ::selection and :focus are standard and safe to insert;
+        // anything vendor-prefixed has to take the lenient route.
+        if (suffix.rfind("::-", 0) == 0) addVendorRule(selector + "{" + decls + "}");
+        else                             m_app.styleSheet().addRule(selector, decls);
+    }
 
     m_classes.emplace(key, name);
     return name;
@@ -415,6 +568,98 @@ window.uiloAutoGrow = function(id, o) {
 };
 )JS";
 
+// Knob drag. UILO turns vertical mouse travel into value (up = increase, a full
+// range per dragPixelsPerRange), and the same reasoning as the resizer applies:
+// the readout has to follow the cursor, so the arc and pointer are repainted
+// locally by writing the two CSS angles the stylesheet reads. Only the settled
+// value goes back to C++, on release.
+const char kKnobJs[] = R"JS(
+window.uiloKnob = function(id, o) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var value = o.value;
+
+  function paint(v) {
+    var t = o.max > o.min ? (v - o.min) / (o.max - o.min) : 0;
+    t = Math.max(0, Math.min(1, t));
+    el.style.setProperty('--k-fill', (o.rev ? 1 - t : t) * o.span + 'deg');
+    el.style.setProperty('--k-rot', (o.start + t * o.sweep + 90) + 'deg');
+  }
+
+  var dragging = false, originY = 0, startValue = 0;
+
+  el.addEventListener('mousedown', function(e) {
+    dragging = true;
+    originY = e.clientY;
+    startValue = value;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var dy = originY - e.clientY;                  // up is positive, as in UILO
+    var v = startValue + (dy / o.pxPerRange) * (o.max - o.min);
+    if (o.step > 0) v = o.min + Math.round((v - o.min) / o.step) * o.step;
+    value = Math.max(o.min, Math.min(o.max, v));
+    paint(value);
+  });
+
+  window.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    // A click that never moved leaves the value alone, so there is nothing to
+    // report -- UILO's knob only arms the drag on press, it does not jump.
+    if (value !== startValue) Wt.emit(el.id, 'knobValue', value);
+  });
+
+  // Double-click snaps back to the default, matching Knob::checkLeftClick --
+  // and, like it, only when one was actually set.
+  el.addEventListener('dblclick', function() {
+    if (!o.hasDefault) return;
+    value = o.defaultValue;
+    paint(value);
+    Wt.emit(el.id, 'knobValue', value);
+  });
+
+  // Server-side changes arrive as new class rules; dropping the inline
+  // overrides lets them through again.
+  window.uiloKnobRelease = function(elId) {
+    var e = document.getElementById(elId);
+    if (!e) return;
+    e.style.removeProperty('--k-fill');
+    e.style.removeProperty('--k-rot');
+  };
+
+  paint(value);
+};
+)JS";
+
+// The filled part of a slider track is a gradient stop, so it only moves when
+// --s-t does. Wt reports a drag to the server on release, which would leave the
+// fill lagging the thumb for the whole gesture; this keeps them together and
+// lets the authoritative value still arrive the normal way.
+const char kSliderJs[] = R"JS(
+window.uiloSlider = function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  function paint() {
+    var lo = parseFloat(el.min), hi = parseFloat(el.max);
+    var t = hi > lo ? (parseFloat(el.value) - lo) / (hi - lo) : 0;
+    el.style.setProperty('--s-t', t);
+  }
+  el.addEventListener('input', paint);
+  paint();
+};
+window.uiloSliderRelease = function(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.removeProperty('--s-t');
+};
+)JS";
+
 // A Dimension as the {v, pct} pair the script above expects.
 std::string jsDimension(Dimension d) {
     return "{v:" + num(d.value) + ",pct:" + (d.percent ? "true" : "false") + "}";
@@ -447,6 +692,13 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
     Modifier& mod = el->getModifier();
     std::string css;
 
+    // Hidden elements need nothing else, and this has to be the *only* display
+    // declaration in the rule: the container and text branches below both emit
+    // `display:flex`, and a later declaration would quietly win. UILO drops
+    // invisible children from its layout pass outright, which is exactly what
+    // display:none does to a flex item.
+    if (!mod.getVisible()) return "display:none;";
+
     // A Resizer is invisible to layout in UILO -- its siblings are placed as if
     // it were not there, and it draws on top at the boundary between them. A
     // zero-size flex item reproduces both halves of that: it consumes no space,
@@ -456,7 +708,6 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
 
     const float op = mod.getOuterPadding();
 
-    if (!mod.getVisible()) css += "display:none;";
 
     // ---- Box: size, spacing and placement within the parent ---------------
     if (n.isRoot) {
@@ -491,8 +742,11 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         }
 
         // UILO shrinks an element by 2*outerPadding and insets it by one
-        // padding on every side, which is exactly a margin.
-        if (op > 0.f) css += "margin:" + px(op) + ";";
+        // padding on every side, which is exactly a margin. Always emitted,
+        // even at zero: form controls carry a UA margin that would otherwise
+        // survive, and a per-type reset further down would clobber a real
+        // outerPadding set here.
+        css += "margin:" + px(op) + ";";
 
         css += std::string("align-self:") + crossAlign(mod.getAlign(), n.axis) + ";";
         css += n.autoMargin;
@@ -627,12 +881,82 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         }
 
         case ElementType::Slider: {
-            const auto& o = static_cast<Slider*>(el)->getOptions();
-            // A native range input is styled almost entirely through
-            // accent-color, which drives both the filled track and the thumb.
-            css += "accent-color:" + rgba(el->resolveColor(o.getFillColorRole(),
-                                                           o.getFillColor())) + ";";
-            css += "padding:0;margin-block:0;";
+            auto* sl = static_cast<Slider*>(el);
+            const auto& o = sl->getOptions();
+            const bool horiz = o.getOrientation() == SliderOrientation::Horizontal;
+
+            // accent-color would colour a stock range input, but it cannot
+            // resize the thumb -- and UILO's thumb is an arbitrary rectangle
+            // (16x48 in the containers example) rather than the browser's small
+            // circle. Opting out of the native appearance is the only way to
+            // reach it, which means the track and its fill have to be drawn
+            // here too.
+            css += "-webkit-appearance:none;appearance:none;";
+            css += "background:transparent;padding:0;border:none;";
+            css += "overflow:visible;";   // a tall thumb overhangs the box
+
+            // Slider::render(): thickness <= 1 is a fraction of the box's cross
+            // axis, > 1 is pixels. The fraction needs the box size, which the
+            // node knows when the tree pins it down.
+            const float thickness = o.getTrackThickness();
+            std::string track;
+            if (thickness > 1.f)              track = px(thickness);
+            else if (horiz && !n.heightExpr.empty())
+                                              track = "calc(" + n.heightExpr + " * " + num(thickness) + ")";
+            else                              track = pct(thickness * 100.f);
+
+            // Half the thumb, which is both the fill's end-cap and the inset
+            // the value maps into -- resolveThumbHalfWidth/Height().
+            const bool circle = o.getThumbShape() == ThumbShape::Circle;
+            std::string halfW, thumbW, thumbH, radius;
+            if (circle) {
+                const float d = o.getThumbSize().x;
+                const std::string r = d > 0.f
+                    ? px(d * 0.5f)
+                    : (!n.heightExpr.empty() ? "calc(" + n.heightExpr + " * 0.4)" : "50%");
+                halfW  = r;
+                thumbW = "calc(" + r + " * 2)";
+                thumbH = thumbW;
+                radius = "50%";
+            } else {
+                halfW  = px(o.getThumbSize().x * 0.5f);
+                thumbW = px(o.getThumbSize().x);
+                thumbH = px(o.getThumbSize().y);
+                radius = px(o.getThumbRounding());
+            }
+            if (!horiz) std::swap(thumbW, thumbH);
+
+            const std::string fill  = rgba(el->resolveColor(o.getFillColorRole(),  o.getFillColor()));
+            const std::string bed   = rgba(el->resolveColor(o.getTrackColorRole(), o.getTrackColor()));
+            const std::string knobC = rgba(el->resolveColor(o.getThumbColorRole(), o.getThumbColor()));
+
+            // fillW = hw + t * (trackW - 2*hw), straight from render(). --s-t is
+            // the normalised value, updated locally while dragging.
+            const std::string stop = "calc(" + halfW + " + var(--s-t) * (100% - "
+                                   + halfW + " * 2))";
+            const std::string bar  = std::string("linear-gradient(to ")
+                                   + (horiz ? "right" : "top") + "," + fill + " 0 " + stop
+                                   + "," + bed + " " + stop + " 100%)";
+
+            const float t0 = (o.getMax() > o.getMin())
+                ? std::clamp((sl->getValue() - o.getMin()) / (o.getMax() - o.getMin()), 0.f, 1.f)
+                : 0.f;
+            css += "--s-t:" + num(t0) + ";";
+
+            std::string trackCss = (horiz ? "height:" : "width:") + track + ";";
+            trackCss += "border-radius:" + px(o.getTrackRounding()) + ";background:" + bar + ";";
+
+            std::string thumbCss = "-webkit-appearance:none;appearance:none;";
+            thumbCss += "width:" + thumbW + ";height:" + thumbH + ";";
+            thumbCss += "border:none;border-radius:" + radius + ";background:" + knobC + ";";
+            // Centre the thumb across the track it straddles.
+            thumbCss += (horiz ? "margin-top:calc((" : "margin-left:calc((")
+                      + track + " - " + (horiz ? thumbH : thumbW) + ") / 2);";
+
+            pseudo.emplace_back("::-webkit-slider-runnable-track", trackCss);
+            pseudo.emplace_back("::-webkit-slider-thumb", thumbCss);
+            pseudo.emplace_back("::-moz-range-track", trackCss);
+            pseudo.emplace_back("::-moz-range-thumb", thumbCss);
             break;
         }
 
@@ -663,6 +987,19 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
             css += "cursor:pointer;user-select:none;";
             break;
 
+        case ElementType::Knob: {
+            // The children are positioned against this box, and they read the
+            // two angles from here -- so a server-side setValue() flows out
+            // through the ordinary class swap, with no extra plumbing.
+            const KnobGeometry g = knobGeometry(static_cast<Knob*>(el));
+            css += "position:relative;cursor:ns-resize;user-select:none;";
+            css += "--k-from:" + num(g.from) + "deg;";
+            css += "--k-span:" + num(g.span) + "deg;";
+            css += "--k-fill:" + num(g.fill) + "deg;";
+            css += "--k-rot:"  + num(g.rot)  + "deg;";
+            break;
+        }
+
         default:
             break;
     }
@@ -683,6 +1020,143 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
     }
 
     return css;
+}
+
+void Translator::applyImageAspect(Image* img) {
+    const ImageOptions& o = img->getOptions();
+    if (!aspectLocked(o) || o.getPath().empty()) return;
+
+    Modifier& mod = img->getModifier();
+    const Dimension w = mod.getWidth();
+    const Dimension h = mod.getHeight();
+
+    // Same guards as Image::init(): the driving axis has to be a concrete
+    // pixel size for a derived one to mean anything.
+    const bool byWidth  = o.getLockAspectWidth()  && !w.percent;
+    const bool byHeight = o.getLockAspectHeight() && !h.percent;
+    if (!byWidth && !byHeight) return;
+
+    // The path is a URL to the browser, so it is relative to the server's
+    // docroot; a desktop build reads the same relative path from its working
+    // directory, which is the fallback.
+    uint32_t iw = 0, ih = 0;
+    const std::string docRoot = m_app.docRoot();
+    if (!(!docRoot.empty() && imageSize(docRoot + "/" + o.getPath(), iw, ih)) &&
+        !imageSize(o.getPath(), iw, ih))
+        return;                       // unreadable: leave the modifier alone
+
+    const float aspect = static_cast<float>(iw) / static_cast<float>(ih);
+    if (!(aspect > 0.f)) return;
+
+    // This is Image::init() verbatim, and it matters for far more than the
+    // image itself: writing a fixed size back into the Modifier takes the
+    // element out of the percent pool, so its Row/Column stops handing it all
+    // the leftover space and the *siblings* get centred instead. Skipping it
+    // silently pins the whole group to one edge.
+    if (byWidth)  mod.setHeight(Dimension{ w.value / aspect, false });
+    else          mod.setWidth (Dimension{ h.value * aspect, false });
+}
+
+void Translator::buildKnob(Knob* k, KnobWidget* w) {
+    if (!m_knobJs) {
+        m_app.doJavaScript(kKnobJs);
+        m_knobJs = true;
+    }
+
+    const KnobOptions& o = k->getOptions();
+    const KnobGeometry g = knobGeometry(k);
+
+    // Knob::render() takes the outer radius from the box, then reserves the arc
+    // and its gap so the ring sits *around* the body rather than over it.
+    const float arcThick = std::max(0.f, o.getArcThickness());
+    const float arcGap   = std::max(0.f, o.getArcGap());
+    const float reserve  = arcThick + arcGap;      // outerR - bodyR
+
+    auto colour = [&](const std::string& role, Color literal) {
+        return rgba(k->resolveColor(role, literal));
+    };
+
+    // ---- ring: track and filled arc in one conic sweep ---------------------
+    // The stops run in gradient order, so a reversed knob lists the track
+    // first and the arc after it.
+    const std::string arcCol   = colour(o.getArcColorRole(),   o.getArcColor());
+    const std::string trackCol = colour(o.getTrackColorRole(), o.getTrackColor());
+    const std::string stops = g.rev
+        ? trackCol + " 0deg var(--k-fill)," + arcCol   + " var(--k-fill) var(--k-span)"
+        : arcCol   + " 0deg var(--k-fill)," + trackCol + " var(--k-fill) var(--k-span)";
+
+    // Masked to an annulus arcThickness wide at the outer edge; closest-side
+    // makes 100% mean the radius.
+    const std::string ring = "radial-gradient(closest-side,transparent calc(100% - "
+                           + px(arcThick) + "),#000 calc(100% - " + px(arcThick) + "))";
+
+    std::string ringCss = "position:absolute;inset:0;border-radius:50%;pointer-events:none;";
+    ringCss += "background:conic-gradient(from var(--k-from)," + stops
+             + ",transparent var(--k-span) 360deg);";
+    ringCss += "-webkit-mask:" + ring + ";mask:" + ring + ";";
+
+    // ---- body: the disc inside the ring ------------------------------------
+    std::string bodyCss = "position:absolute;left:50%;top:50%;"
+                          "transform:translate(-50%,-50%);border-radius:50%;"
+                          "pointer-events:none;";
+    bodyCss += "width:calc(100% - " + px(reserve * 2.f) + ");";
+    bodyCss += "height:calc(100% - " + px(reserve * 2.f) + ");";
+    bodyCss += "background:" + colour(o.getBodyColorRole(), o.getBodyColor()) + ";";
+    if (o.getOutlineThickness() > 0.f) {
+        // Drawn outside the body radius, matching the outline circle in render().
+        bodyCss += "box-shadow:0 0 0 " + px(o.getOutlineThickness()) + " "
+                 + colour(o.getOutlineColorRole(), o.getOutlineColor()) + ";";
+    }
+
+    // ---- indicator: a pointer from inset*bodyR out to length*bodyR ---------
+    const float inset = std::clamp(o.getIndicatorInset(),  0.f, 1.f);
+    const float len   = std::clamp(o.getIndicatorLength(), 0.f, 1.f);
+    const float thick = o.getIndicatorThickness();
+    // bodyR is `50% - reserve`, so the two radii fall out of that directly.
+    const std::string bodyR = "(50% - " + px(reserve) + ")";
+
+    std::string rotCss = "position:absolute;inset:0;pointer-events:none;"
+                         "transform:rotate(var(--k-rot));";
+    std::string indCss = "position:absolute;left:50%;transform:translateX(-50%);";
+    indCss += "width:" + px(thick) + ";border-radius:" + px(thick * 0.5f) + ";";
+    indCss += "top:calc(50% - " + bodyR + " * " + num(len) + ");";
+    indCss += "height:calc(" + bodyR + " * " + num(len - inset) + ");";
+    indCss += "background:" + colour(o.getIndicatorColorRole(), o.getIndicatorColor()) + ";";
+
+    if (arcThick > 0.f)
+        w->addWidget(std::make_unique<Wt::WContainerWidget>())
+         ->addStyleClass(classFor(ringCss, {}));
+    w->addWidget(std::make_unique<Wt::WContainerWidget>())
+     ->addStyleClass(classFor(bodyCss, {}));
+    if (thick > 0.f) {
+        auto* rot = w->addWidget(std::make_unique<Wt::WContainerWidget>());
+        rot->addStyleClass(classFor(rotCss, {}));
+        rot->addWidget(std::make_unique<Wt::WContainerWidget>())
+           ->addStyleClass(classFor(indCss, {}));
+    }
+
+    // setValue() re-applies the step and range clamp and fires onValueChanged,
+    // exactly as a native drag would; sync() then repaints from the class and
+    // the inline overrides are dropped in the same response, so there is no
+    // frame where the two disagree.
+    w->valueChanged.connect([this, k, w](double v) {
+        k->setValue(static_cast<float>(v));
+        m_app.doJavaScript("uiloKnobRelease('" + w->id() + "');");
+        sync();
+    });
+
+    m_app.doJavaScript(
+        "uiloKnob('" + w->id() + "',{"
+        "value:" + num(k->getValue()) +
+        ",min:"  + num(o.getMin()) + ",max:" + num(o.getMax()) +
+        ",step:" + num(o.getStep()) +
+        ",start:" + num(o.getStartAngle()) +
+        ",sweep:" + num(k->sweepDegrees()) +
+        ",span:"  + num(g.span) +
+        ",rev:"   + (g.rev ? "true" : "false") +
+        ",pxPerRange:" + num(o.getDragPixelsPerRange()) +
+        ",hasDefault:" + (o.hasDefault() ? "true" : "false") +
+        ",defaultValue:" + num(o.getDefaultValue()) + "});");
 }
 
 void Translator::buildResizer(Resizer* r, Wt::WContainerWidget* wrapper, Axis axis) {
@@ -816,6 +1290,8 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
         }
 
         case ElementType::Image: {
+            applyImageAspect(static_cast<Image*>(el));
+
             const auto& o = static_cast<Image*>(el)->getOptions();
             if (!aspectLocked(o)) {
                 node.widget = parent->addWidget(
@@ -856,13 +1332,36 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
             w->setOrientation(o.getOrientation() == SliderOrientation::Vertical
                               ? Wt::Orientation::Vertical : Wt::Orientation::Horizontal);
             w->setRange(0, sliderSteps(o));
-            w->valueChanged().connect([this, sl](int step) {
+
+            // Double-click snaps back to the default, as Slider::checkLeftClick
+            // does -- and, like it, only when one was actually set. A reset is
+            // a discrete event, so this can go through the server rather than
+            // needing the local handling a drag does. The browser's own
+            // double-click threshold stands in for UILO's fixed 350 ms.
+            w->doubleClicked().connect([this, sl] {
+                const SliderOptions& opts = sl->getOptions();
+                if (!opts.hasDefault()) return;
+                sl->setValue(opts.getDefaultValue());
+                sync();
+            });
+
+            if (!m_sliderJs) {
+                m_app.doJavaScript(kSliderJs);
+                m_sliderJs = true;
+            }
+            m_app.doJavaScript("uiloSlider('" + w->id() + "');");
+
+            w->valueChanged().connect([this, sl, w](int step) {
                 const auto& opts = sl->getOptions();
                 // setValue() re-applies SliderOptions::step and the range clamp,
                 // so the value a handler sees is the same one it would see
                 // natively -- and it fires onValueChanged for us.
                 sl->setValue(opts.getMin() + static_cast<float>(step) / sliderSteps(opts)
                                              * (opts.getMax() - opts.getMin()));
+                // Hand the fill back to the class rule now that the server has
+                // the value; both land in this same response, so they never
+                // disagree on screen.
+                m_app.doJavaScript("uiloSliderRelease('" + w->id() + "');");
                 sync();
             });
             node.widget = w;
@@ -942,6 +1441,13 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
                     + std::to_string(o.getMaxResizeLines())
                     + ",lineHeight:" + num(textboxLineHeight(o)) + "});");
             }
+            break;
+        }
+
+        case ElementType::Knob: {
+            auto* w = parent->addWidget(std::make_unique<KnobWidget>());
+            node.widget = w;
+            buildKnob(static_cast<Knob*>(el), w);
             break;
         }
 

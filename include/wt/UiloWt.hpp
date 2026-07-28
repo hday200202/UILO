@@ -80,6 +80,27 @@ public:
     // and for getElement<T>("name") lookups.
     virtual UILO& ui() = 0;
 
+    // Registers another page and translates it, hidden. Call it from the
+    // builder for every page beyond the one you return; the returned page is
+    // simply the one shown first.
+    //
+    // Every page is translated up front and kept in the document, so switching
+    // is a visibility change rather than a rebuild -- a page kept its scroll
+    // position and its half-typed text while you were away, which is what a
+    // desktop UILO app does when you setPage() back and forth.
+    virtual void addPage(Page* page) = 0;
+
+    // Shows a registered page by name, and puts it in the address bar, so the
+    // browser's back button and a pasted link both land where you expect.
+    virtual void showPage(const std::string& name) = 0;
+
+    // The page currently on screen.
+    virtual std::string currentPage() const = 0;
+
+    // Runs `fn` whenever the shown page changes, including navigation the user
+    // drove from the address bar or the back button.
+    virtual void onPageChanged(std::function<void(const std::string&)> fn) = 0;
+
     // Re-read the UILO tree and push anything that changed to the browser.
     // Called automatically after every UI event (clicks, edits, slider drags)
     // and after every every() tick, so you only need it when you mutate the
