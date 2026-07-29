@@ -359,6 +359,12 @@ if(UILO_WT)
     # else in the tree needed editing.
     target_include_directories(uilo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/shim")
 
+    # Icon.cpp lives under include/elements/, so it is part of this build too and
+    # still needs NanoSVG's headers to compile. Rasterizing is inert here (the
+    # headless backend hands back an invalid texture and Icon bails), but the
+    # element's markup accessor is exactly what a web translator consumes.
+    target_include_directories(uilo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ext/nanosvg")
+
     # PUBLIC: it gates the web API at the bottom of UILO.hpp, so consumer TUs
     # need it defined too or including <UILO.hpp> gets them nothing.
     target_compile_definitions(uilo PUBLIC UILO_WT)
@@ -404,6 +410,7 @@ target_compile_definitions(uilo PUBLIC "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,0
 
 target_include_directories(uilo PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/ext/stb"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ext/nanosvg"
     "${_SHADER_OUT_DIR}"
 )
 

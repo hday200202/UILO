@@ -3,9 +3,56 @@
 #ifdef __APPLE__
 
 #import <AppKit/AppKit.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/CAMetalLayer.h>
 
 namespace uilo {
+
+bool getNativeDisplayPixelSize(uint32_t& outWidth, uint32_t& outHeight) {
+    const CGDirectDisplayID display = CGMainDisplayID();
+
+    // kCGDisplayShowDuplicateLowResolutionModes is required or the 1:1 modes are
+    // hidden and only the HiDPI ones come back.
+    NSDictionary* options = @{ (id)kCGDisplayShowDuplicateLowResolutionModes : @YES };
+    CFArrayRef modes = CGDisplayCopyAllDisplayModes(display, (CFDictionaryRef)options);
+    if (!modes) return false;
+
+    size_t bestW = 0;
+    size_t bestH = 0;
+    for (CFIndex i = 0; i < CFArrayGetCount(modes); ++i) {
+        CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(modes, i);
+        const size_t pixelW = CGDisplayModeGetPixelWidth(mode);
+        const size_t pixelH = CGDisplayModeGetPixelHeight(mode);
+
+        // Keep only modes that drive the panel 1:1. A HiDPI mode reports more
+        // pixels than points because it is rendered large and downscaled, so
+        // including those would report 3420x2224 as the "panel".
+        if (pixelW != CGDisplayModeGetWidth(mode)) continue;
+        if (pixelH != CGDisplayModeGetHeight(mode)) continue;
+
+        // Compare by area, not width: 2560x1600 and 2560x1664 are both offered
+        // and only the taller one is the actual panel.
+        if (pixelW * pixelH > bestW * bestH) { bestW = pixelW; bestH = pixelH; }
+    }
+    CFRelease(modes);
+
+    if (bestW == 0 || bestH == 0) return false;
+    outWidth  = static_cast<uint32_t>(bestW);
+    outHeight = static_cast<uint32_t>(bestH);
+    return true;
+}
+
+bool getVirtualDisplaySize(uint32_t& outWidth, uint32_t& outHeight) {
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
+    if (!mode) return false;
+    const size_t w = CGDisplayModeGetWidth(mode);
+    const size_t h = CGDisplayModeGetHeight(mode);
+    CGDisplayModeRelease(mode);
+    if (w == 0 || h == 0) return false;
+    outWidth  = static_cast<uint32_t>(w);
+    outHeight = static_cast<uint32_t>(h);
+    return true;
+}
 
 bool configureMacWindowForLiveResize(void* nsWindowPtr) {
     if (!nsWindowPtr) return false;
@@ -37,6 +84,8 @@ bool configureMacWindowForLiveResize(void* nsWindowPtr) {
 
 namespace uilo {
 bool configureMacWindowForLiveResize(void*) { return false; }
+bool getNativeDisplayPixelSize(uint32_t&, uint32_t&) { return false; }
+bool getVirtualDisplaySize(uint32_t&, uint32_t&)     { return false; }
 } // namespace uilo
 
 #endif

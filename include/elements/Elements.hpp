@@ -7,6 +7,7 @@
 
 #include "decoration/Spacer.hpp"
 #include "decoration/Image.hpp"
+#include "decoration/Icon.hpp"
 #include "decoration/Text.hpp"
 #include "decoration/Waveform.hpp"
 

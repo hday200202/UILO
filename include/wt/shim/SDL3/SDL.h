@@ -33,6 +33,8 @@ using SDL_Keycode     = Uint32;
 using SDL_Keymod      = Uint16;
 using SDL_PropertiesID = Uint32;
 using SDL_MouseButtonFlags = Uint32;
+using SDL_DisplayID   = Uint32;
+using SDL_InitFlags   = Uint32;
 
 // Physical key positions, used by uilo::Keybinds. Real SDL3 declares this as an
 // enum; a plain integer alias is enough here and still lets application code
@@ -212,6 +214,30 @@ union SDL_Event {
 
 using SDL_EventFilter = bool (*)(void* userdata, SDL_Event* event);
 
+// ---- Display / system (used by uilo::OS) ---------------------------------
+#define SDL_INIT_VIDEO 0x00000020u
+
+struct SDL_Rect {
+    int x, y, w, h;
+};
+
+struct SDL_DisplayMode {
+    SDL_DisplayID displayID;
+    Uint32        format;
+    int           w;
+    int           h;
+    float         pixel_density;
+    float         refresh_rate;
+    int           refresh_rate_numerator;
+    int           refresh_rate_denominator;
+};
+
+enum SDL_SystemTheme {
+    SDL_SYSTEM_THEME_UNKNOWN = 0,
+    SDL_SYSTEM_THEME_LIGHT   = 1,
+    SDL_SYSTEM_THEME_DARK    = 2,
+};
+
 // ---- Window properties ---------------------------------------------------
 #define SDL_PROP_WINDOW_COCOA_WINDOW_POINTER "SDL.window.cocoa.window"
 
@@ -239,6 +265,20 @@ bool  SDL_GetWindowRelativeMouseMode(SDL_Window* window);
 void  SDL_GetRelativeMouseState(float* x, float* y);
 float SDL_GetWindowDisplayScale(SDL_Window* window);
 const char* SDL_GetError();
+
+// Display / system queries behind uilo::OS. A web server has no local display,
+// so these report "unknown" and OS falls back to its documented defaults.
+SDL_InitFlags SDL_WasInit(SDL_InitFlags flags);
+SDL_DisplayID SDL_GetPrimaryDisplay();
+float         SDL_GetDisplayContentScale(SDL_DisplayID displayID);
+bool          SDL_GetDisplayBounds(SDL_DisplayID displayID, SDL_Rect* rect);
+const SDL_DisplayMode* SDL_GetCurrentDisplayMode(SDL_DisplayID displayID);
+SDL_DisplayID* SDL_GetDisplays(int* count);
+SDL_SystemTheme SDL_GetSystemTheme();
+int   SDL_GetNumLogicalCPUCores();
+int   SDL_GetSystemRAM();
+const char* SDL_GetBasePath();
+char* SDL_GetPrefPath(const char* org, const char* app);
 
 bool SDL_GetWindowSize(SDL_Window* window, int* w, int* h);
 bool SDL_GetWindowSizeInPixels(SDL_Window* window, int* w, int* h);

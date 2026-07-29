@@ -67,6 +67,12 @@ inline Image* image(
     const std::string& name = ""
 ) { return new Image(modifier, options, name); }
 
+inline Icon* icon(
+    Modifier modifier = {},
+    IconOptions options = {},
+    const std::string& name = ""
+) { return new Icon(modifier, options, name); }
+
 inline Text* text(
     Modifier modifier = {}, 
     TextOptions options = {}, 
