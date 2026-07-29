@@ -26,6 +26,7 @@ enum class ElementType {
     Spacer,
     Text,
     Image,
+    Icon,
     Waveform,
 
     Button,

@@ -549,16 +549,43 @@ void Row::render() {
 
     if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
 
+    // True when pinned children have reserved space, so the scrolling area is
+    // narrower than the container.
+    const bool viewportInset = m_options.getScrollable()
+        && m_scrollViewportWidth > 0.f
+        && (m_scrollViewportX > m_bounds.position.x
+            || m_scrollViewportWidth < m_bounds.size.x);
+
     auto renderPass = [&](bool ignoreScrollChildren) {
         for (auto* child : m_children) {
             if (child->getType() == ElementType::Resizer) continue;
             if (child->getModifier().getIgnoreScroll() != ignoreScrollChildren) continue;
+
+            bool clippedToViewport = false;
             if (m_uiloRef) {
                 const float rr = m_options.getRounding() * (m_uiloRef->getScale());
                 m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+
+                // Same reasoning as Column: scrolling content must stay inside
+                // the scroll viewport so it cannot bleed into the strip a pinned
+                // child owns and get sliced by that child's background.
+                if (!ignoreScrollChildren && viewportInset) {
+                    Rectf viewport = m_bounds;
+                    viewport.position.x = m_scrollViewportX;
+                    viewport.size.x     = m_scrollViewportWidth;
+                    // Radius 0 keeps the panel's rounded mask and adds only the
+                    // straight left/right cut.
+                    m_uiloRef->getRenderer().pushRoundClip(viewport, 0.f);
+                    clippedToViewport = true;
+                }
             }
+
             child->render();
-            if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
+
+            if (m_uiloRef) {
+                if (clippedToViewport) m_uiloRef->getRenderer().popRoundClip();
+                m_uiloRef->getRenderer().popRoundClip();
+            }
         }
     };
 

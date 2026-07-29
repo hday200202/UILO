@@ -8,6 +8,8 @@
 
 #include "Elements.hpp"
 #include "Palette.hpp"
+#include "utils/OS.hpp"
+#include "utils/Resources.hpp"
 #include "input/Keybinds.hpp"
 #include "input/Mousebinds.hpp"
 #include "../include/renderer/Renderer.hpp"

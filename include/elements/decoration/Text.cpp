@@ -1,6 +1,7 @@
 #include "Text.hpp"
 #include "../../UILO.hpp"
 #include "../../utils/Alignment.hpp"
+#include "../../utils/Resources.hpp"
 #include "../../renderer/Renderer.hpp"
 
 #include <sstream>
@@ -21,7 +22,13 @@ Text::Text(
 void Text::init() {
     if (m_loaded || !m_uiloRef) return;
 
-    Font f = m_uiloRef->getRenderer().loadFont(m_options.getFontPath());
+    // A registered font name (Resources::fonts::default_, or anything the
+    // application added) resolves to its path here; a plain path is handed back
+    // unchanged, so setFont("assets/fonts/X.ttf") is unaffected.
+    const std::string_view resolved =
+        Resources::get().fontRegistry().resolve(m_options.getFontPath());
+
+    Font f = m_uiloRef->getRenderer().loadFont(std::string(resolved));
     if (f.valid()) {
         m_fontId = f.id;
         m_loaded = true;

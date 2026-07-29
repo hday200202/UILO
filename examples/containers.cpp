@@ -96,7 +96,6 @@ static FpsHud installFpsHud(UILO& ui) {
                     .setContent(" FPS:")
                     .setColorRole("text")
                     .setCharSize(18)
-                    .setTextAlignX(Align::Left)
                     .setTextAlignY(Align::CenterY),
                 "fps_text"
             ),
@@ -107,7 +106,6 @@ static FpsHud installFpsHud(UILO& ui) {
                     .setContent(" draws:")
                     .setColorRole("textDim")
                     .setCharSize(14)
-                    .setTextAlignX(Align::Left)
                     .setTextAlignY(Align::CenterY),
                 "fps_draws"
             ),
@@ -118,7 +116,6 @@ static FpsHud installFpsHud(UILO& ui) {
                     .setContent(" cpu:")
                     .setColorRole("textDim")
                     .setCharSize(14)
-                    .setTextAlignX(Align::Left)
                     .setTextAlignY(Align::CenterY),
                 "fps_cpu"
             ),
@@ -129,7 +126,6 @@ static FpsHud installFpsHud(UILO& ui) {
                     .setContent(" gpu:")
                     .setColorRole("textDim")
                     .setCharSize(14)
-                    .setTextAlignX(Align::Left)
                     .setTextAlignY(Align::CenterY),
                 "fps_gpu"
             )
@@ -196,7 +192,7 @@ int main() {
     ui.setRenderer(renderer);
     ui.addPage(page(buildRootContainer(ui), "main_page"));
     ui.setPage("main_page");
-    ui.setScale(1.f);
+    ui.setScale(OS::scale());
     applyTheme(ui, true);
 
     FpsHud hud = installFpsHud(ui);
@@ -264,21 +260,8 @@ Container* buildRootContainer(UILO& ui) {
                             .setOuterPadding(8.f)
                             .setWidth(320_px),
                         FileBrowserOptions()
-                            .setRootPath("../include")
+                            .setRootPath("../")
                             .setFont("assets/fonts/Montserrat.ttf")
-                            .setCharSize(16)
-                            .setRounding(ROUNDING)
-                            .setEntryRounding(4.f)
-                            .setEntryHeight(36.f)
-                            .setIndent(16.f)
-                            .setBackgroundColorRole("panel")
-                            .setDirectoryBackgroundColorRole("panelAlt")
-                            .setDirectoryTextColorRole("text")
-                            .setFileTextColorRole("textDim")
-                            // Selection keeps the normal directory look rather
-                            // than flipping to accent.
-                            .setSelectedColorRole("panelAlt")
-                            .setSelectedTextColorRole("text")
                             .setOnFileClicked([](const std::filesystem::path& p) {
                                 std::cout << "File: " << p.string() << std::endl;
                             })
@@ -364,7 +347,6 @@ Container* buildRootContainer(UILO& ui) {
                                             .setIndicatorThickness(4.f)
                                             .setIndicatorInset(0.35f)
                                             .setIndicatorLength(0.85f)
-                                            .setRange(0.f, 1.f)
                                             .setDefaultValue(0.5f)
                                             .setOnValueChanged([](float v){
                                                 std::cout << "Knob: " << v << std::endl;
@@ -386,7 +368,6 @@ Container* buildRootContainer(UILO& ui) {
                                             .setIndicatorColorRole("knob.indicator")
                                             .setStartAngle(180.f)
                                             .setEndAngle(0.f)
-                                            .setArcDirection(KnobArcDir::CounterClockwise)
                                             .setRange(-1.f, 1.f)
                                             .setDefaultValue(0.f),
                                         "knob_pan"
@@ -405,9 +386,7 @@ Container* buildRootContainer(UILO& ui) {
                                     .setHeaderRounding(ROUNDING)
                                     .setPlaceholder("Theme: Dark")
                                     .setSpacer(4.f)
-                                    .setHeaderTextAlignment(Align::CenterX, Align::CenterY)
                                     .setPopupTextAlignment(Align::CenterX, Align::CenterY)
-                                    .setMaxItems(6)
                                     .setHeaderColorRole("panelAlt")
                                     .setHeaderTextColorRole("text")
                                     .setPopupColorRole("panel")
@@ -485,13 +464,71 @@ Container* buildRootContainer(UILO& ui) {
                     .setResizeHeightMax(50_pct)
             ),
 
-            // Empty bottom bar, resizable via the handle above it.
+            // Bottom bar: an icon strip. Names come from the generated
+            // constants, so a typo is a compile error rather than a blank slot.
             row(
                 Modifier()
                     .setHeight(256_px)
                     .setOuterPadding(8.f),
                 panelRow,
-                contains {}
+                contains {
+                    row(
+                        Modifier().setHeight(48_px).setAlign(Align::CenterX | Align::CenterY),
+                        RowOptions(),
+                        contains {
+                            // Palette-driven tint: one setter, no shader work.
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::folder_plus)
+                                              .setColorRole("text")),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::settings)
+                                              .setColorRole("textDim")),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::search)
+                                              .setColorRole("accent")),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::heart)
+                                              .setColorRole("accent.red")),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::check_circle)
+                                              .setColorRole("accent.green")),
+                            spacer(Modifier().setWidth(32_px)),
+                            // Same icon, three stroke weights. Stroke width is in
+                            // the icon's own 24-unit authoring space (stock = 1.5),
+                            // so it stays proportional at any size.
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::zap)
+                                              .setColorRole("text")
+                                              .setStrokeWidth(0.75f)),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::zap)
+                                              .setColorRole("text")
+                                              .setStrokeWidth(1.5f)),
+                            icon(Modifier().setWidth(48_px).setAlign(Align::CenterY),
+                                 IconOptions().setIcon(Resources::icons::zap)
+                                              .setColorRole("text")
+                                              .setStrokeWidth(3.f)),
+                            spacer(Modifier().setWidth(32_px)),
+                            // Clickable: the icon is decoration, so the row's
+                            // handler is what fires (pointer-transparent child).
+                            row(Modifier()
+                                    .setWidth(64_px)
+                                    .setOnLeftClick([](Element*) {
+                                        std::cout << "Icon button clicked" << std::endl;
+                                    })
+                                    .setOnHoverEnter([](Row* r) { r->getOptions().setColorRole("panelAlt"); })
+                                    .setOnHoverExit([](Row* r) { r->getOptions().setColorRole("none"); }),
+                                RowOptions().setRounding(ROUNDING),
+                                contains {
+                                    icon(Modifier().setWidth(32_px)
+                                             .setAlign(Align::CenterX | Align::CenterY),
+                                         IconOptions().setIcon(Resources::icons::download)
+                                                      .setColorRole("text"))
+                                }
+                            )
+                        }
+                    )
+                }
             ),
         }, "root"
     );

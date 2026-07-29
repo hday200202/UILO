@@ -578,16 +578,46 @@ void Column::render() {
 
     if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
 
+    // True when pinned children have reserved space, so the scrolling area is
+    // shorter than the container.
+    const bool viewportInset = m_options.getScrollable()
+        && m_scrollViewportHeight > 0.f
+        && (m_scrollViewportY > m_bounds.position.y
+            || m_scrollViewportHeight < m_bounds.size.y);
+
     auto renderPass = [&](bool ignoreScrollChildren) {
         for (auto* child : m_children) {
             if (child->getType() == ElementType::Resizer) continue;
             if (child->getModifier().getIgnoreScroll() != ignoreScrollChildren) continue;
+
+            bool clippedToViewport = false;
             if (m_uiloRef) {
                 const float rr = m_options.getRounding() * (m_uiloRef->getScale());
                 m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+
+                // Scrolling content is confined to the scroll viewport, not the
+                // whole container. Clipping to the container instead lets a
+                // half-scrolled child draw into the strip a pinned child owns:
+                // the pinned background then covers only part of it and slices
+                // the child's text horizontally along its edge.
+                if (!ignoreScrollChildren && viewportInset) {
+                    Rectf viewport = m_bounds;
+                    viewport.position.y = m_scrollViewportY;
+                    viewport.size.y     = m_scrollViewportHeight;
+                    // Radius 0 inherits the panel's rounded mask and only adds
+                    // the straight top/bottom cut, so the corners stay round
+                    // instead of being notched at the viewport edge.
+                    m_uiloRef->getRenderer().pushRoundClip(viewport, 0.f);
+                    clippedToViewport = true;
+                }
             }
+
             child->render();
-            if (m_uiloRef) m_uiloRef->getRenderer().popRoundClip();
+
+            if (m_uiloRef) {
+                if (clippedToViewport) m_uiloRef->getRenderer().popRoundClip();
+                m_uiloRef->getRenderer().popRoundClip();
+            }
         }
     };
 

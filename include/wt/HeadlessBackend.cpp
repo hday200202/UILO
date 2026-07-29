@@ -70,6 +70,27 @@ float SDL_GetWindowDisplayScale(SDL_Window*) { return 1.f; }
 
 const char* SDL_GetError() { return ""; }
 
+// uilo::OS queries. There is no local display on this backend, so every one
+// reports "not initialised / unknown" and OS returns its documented fallbacks
+// (scale 1.0, zero sizes) rather than inventing values.
+SDL_InitFlags SDL_WasInit(SDL_InitFlags)                  { return 0; }
+SDL_DisplayID SDL_GetPrimaryDisplay()                     { return 0; }
+float         SDL_GetDisplayContentScale(SDL_DisplayID)   { return 1.f; }
+bool          SDL_GetDisplayBounds(SDL_DisplayID, SDL_Rect* rect) {
+    if (rect) *rect = SDL_Rect{0, 0, 0, 0};
+    return false;
+}
+const SDL_DisplayMode* SDL_GetCurrentDisplayMode(SDL_DisplayID) { return nullptr; }
+SDL_DisplayID* SDL_GetDisplays(int* count) {
+    if (count) *count = 0;
+    return nullptr;
+}
+SDL_SystemTheme SDL_GetSystemTheme()      { return SDL_SYSTEM_THEME_UNKNOWN; }
+int SDL_GetNumLogicalCPUCores()           { return 0; }
+int SDL_GetSystemRAM()                    { return 0; }
+const char* SDL_GetBasePath()             { return ""; }
+char* SDL_GetPrefPath(const char*, const char*) { return nullptr; }
+
 bool SDL_GetWindowSize(SDL_Window*, int* w, int* h) {
     if (w) *w = 0;
     if (h) *h = 0;

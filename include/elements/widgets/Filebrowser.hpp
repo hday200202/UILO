@@ -8,6 +8,7 @@
 
 #include "../containers/Column.hpp"
 #include "../containers/Row.hpp"
+#include "../decoration/Icon.hpp"
 #include "../decoration/Image.hpp"
 #include "../decoration/Spacer.hpp"
 #include "../decoration/Text.hpp"
@@ -45,8 +46,22 @@ public:
     FileBrowserOptions& setScrollSpeed(float s)                     { m_scrollSpeed = s; return *this; }
 
     // Entry metrics -----------------------------------------------------
+    // THE control for how tightly entries pack: one entry occupies exactly this
+    // much vertical space, so the distance between two labels is this value and
+    // nothing else. Lower it to tighten the list (36 -> 24 is noticeably
+    // denser). Keep it above setIconSize(), or the icon overflows its row.
     FileBrowserOptions& setEntryHeight(float px)        { m_entryHeight = px; return *this; }
+    // Uniform inset on all four sides of the row *within* its slot. This does
+    // NOT move entries closer together or further apart -- the slot is still
+    // entryHeight tall and the label stays centred in it. What it changes is the
+    // horizontal inset of the icon and label, and how far the hover/selection
+    // fill stops short of the slot edges. With a transparent entry background
+    // (the default) it has no visible vertical effect at all.
     FileBrowserOptions& setEntryPadding(float px)       { m_entryPadding = px; return *this; }
+    // Extra dead space between consecutive rows, added on top of entryHeight.
+    // Only useful for spreading entries further apart than their slot height;
+    // to pack them tighter, lower setEntryHeight() instead.
+    FileBrowserOptions& setEntrySpacing(float px)       { m_entrySpacing = px; return *this; }
     FileBrowserOptions& setEntryRounding(float r)       { m_entryRounding = r; return *this; }
     FileBrowserOptions& setIndent(float px)             { m_indent = px; return *this; }
     FileBrowserOptions& setTextPaddingLeft(float px)    { m_textPaddingLeft = px; return *this; }
@@ -56,6 +71,32 @@ public:
     FileBrowserOptions& setCharSize(unsigned int n)     { m_charSize = n; return *this; }
     FileBrowserOptions& setTextAlignY(Align a)          { m_textAlignY = a; return *this; }
     FileBrowserOptions& setBoldDirectories(bool v)      { m_boldDirectories = v; return *this; }
+
+    // Entry icons -------------------------------------------------------
+    // An icon ahead of each name is what separates a folder from a file, so
+    // neither has to be tinted differently to be recognisable.
+    FileBrowserOptions& setShowIcons(bool v)        { m_showIcons = v; return *this; }
+    FileBrowserOptions& setIconSize(float px)       { m_iconSize = px; return *this; }
+    FileBrowserOptions& setIconSpacing(float px)    { m_iconSpacing = px; return *this; }
+    FileBrowserOptions& setIconStrokeWidth(float w) { m_iconStrokeWidth = w; m_hasIconStroke = true; return *this; }
+    // Any name the Resources icon registry knows.
+    FileBrowserOptions& setDirectoryIcon(std::string_view n) { m_dirIcon = std::string(n); return *this; }
+    // Shown for a directory that is currently open, when set; otherwise an
+    // open directory keeps setDirectoryIcon().
+    FileBrowserOptions& setDirectoryOpenIcon(std::string_view n) { m_dirOpenIcon = std::string(n); return *this; }
+    FileBrowserOptions& setFileIcon(std::string_view n)      { m_fileIcon = std::string(n); return *this; }
+    // With this on (the default) a file's icon comes from its FileKind, so an
+    // image reads as an image and a zip as an archive. Off, every file uses
+    // setFileIcon().
+    FileBrowserOptions& setUseFileKindIcons(bool v)          { m_useKindIcons = v; return *this; }
+    // Overrides the icon for one FileKind.
+    FileBrowserOptions& setIconForKind(FileKind kind, std::string_view n) {
+        m_kindIcons[static_cast<std::size_t>(kind)] = std::string(n);
+        return *this;
+    }
+    // Icons follow the entry's text colour unless given one of their own.
+    FileBrowserOptions& setIconColor(const Color& c)           { m_iconColor = c; m_hasIconColor = true; return *this; }
+    FileBrowserOptions& setIconColorRole(const std::string& r) { m_iconColorRole = r; m_hasIconColor = true; return *this; }
 
     // Entry backgrounds -------------------------------------------------
     FileBrowserOptions& setEntryBackgroundColor(const Color& c)           { m_entryColor = c; return *this; }
@@ -84,8 +125,26 @@ public:
     FileBrowserOptions& setDirectorySuffix(const std::string& s) { m_directorySuffix = s; return *this; }
     FileBrowserOptions& setShowExtensions(bool v)                { m_showExtensions = v; return *this; }
 
+    // Header ------------------------------------------------------------
+    // The root is a title strip pinned to the top of the panel, not a row in
+    // the list: it is where you already are, so there is nothing to expand or
+    // collapse. The list below it is the root's children.
+    FileBrowserOptions& setShowHeader(bool v)        { m_showHeader = v; return *this; }
+    // Defaults to the root directory's own name.
+    FileBrowserOptions& setHeaderText(const std::string& s) { m_headerText = s; return *this; }
+    FileBrowserOptions& setHeaderHeight(float px)    { m_headerHeight = px; return *this; }
+    FileBrowserOptions& setHeaderPadding(float px)   { m_headerPadding = px; return *this; }
+    FileBrowserOptions& setHeaderRounding(float r)   { m_headerRounding = r; return *this; }
+    FileBrowserOptions& setHeaderCharSize(unsigned int n) { m_headerCharSize = n; m_hasHeaderCharSize = true; return *this; }
+    FileBrowserOptions& setHeaderBold(bool v)        { m_headerBold = v; return *this; }
+    // Empty hides the header icon.
+    FileBrowserOptions& setHeaderIcon(std::string_view n)  { m_headerIcon = std::string(n); return *this; }
+    FileBrowserOptions& setHeaderColor(const Color& c)           { m_headerColor = c; return *this; }
+    FileBrowserOptions& setHeaderColorRole(const std::string& r) { m_headerColorRole = r; return *this; }
+    FileBrowserOptions& setHeaderTextColor(const Color& c)           { m_headerTextColor = c; return *this; }
+    FileBrowserOptions& setHeaderTextColorRole(const std::string& r) { m_headerTextColorRole = r; return *this; }
+
     // Contents ----------------------------------------------------------
-    FileBrowserOptions& setShowRoot(bool v)         { m_showRoot = v; return *this; }
     FileBrowserOptions& setShowHidden(bool v)       { m_showHidden = v; return *this; }
     FileBrowserOptions& setShowFiles(bool v)        { m_showFiles = v; return *this; }
     FileBrowserOptions& setShowDirectories(bool v)  { m_showDirectories = v; return *this; }
@@ -123,6 +182,7 @@ public:
 
     float getEntryHeight()      const { return m_entryHeight; }
     float getEntryPadding()     const { return m_entryPadding; }
+    float getEntrySpacing()     const { return m_entrySpacing; }
     float getEntryRounding()    const { return m_entryRounding; }
     float getIndent()           const { return m_indent; }
     float getTextPaddingLeft()  const { return m_textPaddingLeft; }
@@ -131,6 +191,22 @@ public:
     unsigned int getCharSize()          const { return m_charSize; }
     Align getTextAlignY()               const { return m_textAlignY; }
     bool  getBoldDirectories()          const { return m_boldDirectories; }
+
+    bool  getShowIcons()        const { return m_showIcons; }
+    float getIconSize()         const { return m_iconSize; }
+    float getIconSpacing()      const { return m_iconSpacing; }
+    float getIconStrokeWidth()  const { return m_iconStrokeWidth; }
+    bool  hasIconStrokeWidth()  const { return m_hasIconStroke; }
+    const std::string& getDirectoryIcon()     const { return m_dirIcon; }
+    const std::string& getDirectoryOpenIcon() const { return m_dirOpenIcon; }
+    const std::string& getFileIcon()          const { return m_fileIcon; }
+    bool  getUseFileKindIcons() const { return m_useKindIcons; }
+    const std::string& getIconForKind(FileKind kind) const {
+        return m_kindIcons[static_cast<std::size_t>(kind)];
+    }
+    Color              getIconColor()     const { return m_iconColor; }
+    const std::string& getIconColorRole() const { return m_iconColorRole; }
+    bool               hasIconColor()     const { return m_hasIconColor; }
 
     Color              getEntryBackgroundColor()     const { return m_entryColor; }
     const std::string& getEntryBackgroundColorRole() const { return m_entryColorRole; }
@@ -154,7 +230,19 @@ public:
     const std::string& getDirectorySuffix() const { return m_directorySuffix; }
     bool  getShowExtensions()               const { return m_showExtensions; }
 
-    bool getShowRoot()          const { return m_showRoot; }
+    bool getShowHeader()        const { return m_showHeader; }
+    const std::string& getHeaderText() const { return m_headerText; }
+    float getHeaderHeight()     const { return m_headerHeight; }
+    float getHeaderPadding()    const { return m_headerPadding; }
+    float getHeaderRounding()   const { return m_headerRounding; }
+    unsigned int getHeaderCharSize() const { return m_headerCharSize; }
+    bool  hasHeaderCharSize()   const { return m_hasHeaderCharSize; }
+    bool  getHeaderBold()       const { return m_headerBold; }
+    const std::string& getHeaderIcon()          const { return m_headerIcon; }
+    Color              getHeaderColor()         const { return m_headerColor; }
+    const std::string& getHeaderColorRole()     const { return m_headerColorRole; }
+    Color              getHeaderTextColor()     const { return m_headerTextColor; }
+    const std::string& getHeaderTextColorRole() const { return m_headerTextColorRole; }
     bool getShowHidden()        const { return m_showHidden; }
     bool getShowFiles()         const { return m_showFiles; }
     bool getShowDirectories()   const { return m_showDirectories; }
@@ -183,8 +271,10 @@ private:
     bool        m_scrollable    = true;
     float       m_scrollSpeed   = 60.f;
 
-    float m_entryHeight     = 36.f;
-    float m_entryPadding    = 4.f;
+    // Dense by default: a file list is usually scanned, not read.
+    float m_entryHeight     = 24.f;
+    float m_entryPadding    = 0.f;
+    float m_entrySpacing    = 2.f;
     float m_entryRounding   = 4.f;
     float m_indent          = 16.f;
     float m_textPaddingLeft = 8.f;
@@ -194,21 +284,52 @@ private:
     Align        m_textAlignY      = Align::CenterY;
     bool         m_boldDirectories = false;
 
+    bool  m_showIcons       = true;
+    float m_iconSize        = 16.f;
+    float m_iconSpacing     = 8.f;
+    float m_iconStrokeWidth = 0.f;
+    bool  m_hasIconStroke   = false;
+    std::string m_dirIcon     = "folder";
+    std::string m_dirOpenIcon;
+    std::string m_fileIcon    = "file";
+    bool        m_useKindIcons = true;
+    // Indexed by FileKind. Feather has no dedicated binary/executable glyph, so
+    // that maps to the generic box.
+    std::string m_kindIcons[static_cast<std::size_t>(FileKind::Unknown) + 1] = {
+        /* Image   */ "image",
+        /* Code    */ "code",
+        /* Doc     */ "file-text",
+        /* Text    */ "file-text",
+        /* Binary  */ "box",
+        /* Audio   */ "music",
+        /* Video   */ "film",
+        /* Archive */ "archive",
+        /* Unknown */ "file",
+    };
+    Color       m_iconColor     = Color::White;
+    std::string m_iconColorRole;
+    bool        m_hasIconColor  = false;
+
+    // Entries are told apart by their icon, so directories and files share one
+    // background and one text colour by default. Set the directory-specific
+    // roles to bring the old two-tone look back.
     Color       m_entryColor        = Color{0, 0, 0, 0};
     std::string m_entryColorRole;
     Color       m_dirColor          = Color{0, 0, 0, 0};
-    std::string m_dirColorRole      = "panelAlt";
+    std::string m_dirColorRole;
     Color       m_hoverColor        = Color{255, 255, 255, 18};
     std::string m_hoverColorRole;
+    // A subdued fill rather than the accent: selection should mark a row, not
+    // shout over the icon and label.
     Color       m_selectedColor     = Color{255, 255, 255, 40};
-    std::string m_selectedColorRole = "accent";
+    std::string m_selectedColorRole = "panelAlt";
 
     Color       m_fileTextColor         = Color::White;
-    std::string m_fileTextColorRole     = "textDim";
+    std::string m_fileTextColorRole     = "text";
     Color       m_dirTextColor          = Color::White;
     std::string m_dirTextColorRole      = "text";
     Color       m_selectedTextColor     = Color::White;
-    std::string m_selectedTextColorRole = "onAccent";
+    std::string m_selectedTextColorRole = "text";
 
     std::string m_expandedPrefix;
     std::string m_collapsedPrefix;
@@ -216,7 +337,19 @@ private:
     std::string m_directorySuffix;
     bool        m_showExtensions  = true;
 
-    bool m_showRoot         = true;
+    bool         m_showHeader        = true;
+    std::string  m_headerText;                    // empty = the root's own name
+    float        m_headerHeight       = 28.f;
+    float        m_headerPadding      = 0.f;
+    float        m_headerRounding     = 0.f;
+    unsigned int m_headerCharSize     = 16;
+    bool         m_hasHeaderCharSize  = false;    // unset = follow setCharSize()
+    bool         m_headerBold         = true;
+    std::string  m_headerIcon         = "folder";
+    Color        m_headerColor        = Color{0, 0, 0, 0};
+    std::string  m_headerColorRole    = "panelAlt";
+    Color        m_headerTextColor    = Color::White;
+    std::string  m_headerTextColorRole = "text";
     bool m_showHidden       = false;
     bool m_showFiles        = true;
     bool m_showDirectories  = true;
@@ -291,6 +424,18 @@ private:
     void clearRows();
     void appendDirectory(Directory* dir, int depth);
     Element* buildRow(FSEntry* entry, int depth);
+    // The pinned title strip naming the root directory.
+    Element* buildHeader();
+    // Display name for the root: its own directory name, resolved through an
+    // absolute path so a relative root like "../" reads as the folder it
+    // actually points at instead of "..".
+    std::string rootDisplayName() const;
+    // Appends a row, preceded by the entry-spacing gap when one is configured
+    // and this is not the first row.
+    void addEntryRow(Element* row);
+    // Which registry icon represents this entry: folder (open or closed) for a
+    // directory, otherwise the FileKind mapping or the plain file icon.
+    const std::string& iconNameFor(const FSEntry* entry) const;
     bool passesFilter(const FSEntry* entry) const;
     void sortEntries(std::vector<FSEntry*>& entries) const;
     void handleEntryClicked(const fs::path& path, bool isDirectory);
