@@ -1331,6 +1331,39 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
             break;
         }
 
+        case ElementType::Icon: {
+            // Feather-style icons are monochrome SVG authored with
+            // stroke/fill="currentColor", so tinting is just a CSS `color` on
+            // the inline markup -- the same palette role the desktop backend
+            // rasterizes with. Emit the SVG inline (UnsafeXHTML, so Wt does not
+            // strip it) and let the element's own box (sized from the Modifier)
+            // drive the size; the <svg>'s viewBox/preserveAspectRatio keeps the
+            // square art centered when the box is not square.
+            auto* ic = static_cast<Icon*>(el);
+            const auto& o = ic->getOptions();
+
+            auto* w = parent->addWidget(std::make_unique<Wt::WText>());
+            w->setInline(false);
+            w->setTextFormat(Wt::TextFormat::UnsafeXHTML);
+            w->setText(Wt::WString::fromUTF8(std::string(ic->getMarkup())));
+
+            std::string css = "overflow:hidden;";
+            if (!o.getPreserveOriginalColors())
+                css += "color:" + rgba(el->resolveColor(o.getColorRole(), o.getColor())) + ";";
+            if (o.getOpacity() < 1.f)
+                css += "opacity:" + num(o.getOpacity()) + ";";
+
+            std::string svgRule = "width:100%;height:100%;display:block;";
+            std::string tf;
+            if (o.getFlipH()) tf += "scaleX(-1) ";
+            if (o.getFlipV()) tf += "scaleY(-1) ";
+            if (!tf.empty()) svgRule += "transform:" + tf + ";";
+
+            w->addStyleClass(classFor(css, { {" svg", svgRule} }));
+            node.widget = w;
+            break;
+        }
+
         case ElementType::Slider: {
             auto* sl = static_cast<Slider*>(el);
             const auto& o = sl->getOptions();
