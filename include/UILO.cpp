@@ -411,6 +411,12 @@ void UILO::update() {
             break;
         }
     }
+    // Dispatch through the element, not through the entry: a handler is allowed
+    // to call removeFloating() (a popup dismissing itself on click does exactly
+    // that), which erases the entry hoveredFloating points at. The element
+    // itself stays alive -- the element pool owns it -- so this stays valid
+    // where the entry pointer would not.
+    Element* hoveredFloatingElement = hoveredFloating ? hoveredFloating->element : nullptr;
 
     bool floatingConsumedClick = false;
     if (leftDown) {
@@ -444,7 +450,7 @@ void UILO::update() {
     for (auto& ov : m_overlays)
         if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
     if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
-    else if (hoveredFloating) hoveredFloating->element->checkHover(mouse);
+    else if (hoveredFloatingElement) hoveredFloatingElement->checkHover(mouse);
     else                     root->checkHover(mouse);
 
     if (m_pendingCursor != m_activeCursor) {
@@ -478,9 +484,9 @@ void UILO::update() {
                 if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
             }
         }
-    } else if (leftDown && !m_prevLeftMouse && hoveredFloating) {
+    } else if (leftDown && !m_prevLeftMouse && hoveredFloatingElement) {
         m_interactibleActivatedThisFrame = false;
-        hoveredFloating->element->checkLeftClick(mouse);
+        hoveredFloatingElement->checkLeftClick(mouse);
     }
     if (rightDown && !m_prevRightMouse) {
         m_interactibleActivatedThisFrame = false;
@@ -489,8 +495,8 @@ void UILO::update() {
             m_overlays.clear();
             for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
         }
-        if (hoveredFloating) hoveredFloating->element->checkRightClick(mouse);
-        else                 root->checkRightClick(mouse);
+        if (hoveredFloatingElement) hoveredFloatingElement->checkRightClick(mouse);
+        else                        root->checkRightClick(mouse);
         if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
     }
 

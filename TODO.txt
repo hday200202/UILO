@@ -3,10 +3,15 @@ UILO TODO & Roadmap
 
 ## High-Priority Widgets
 
-- [ ] Calendar / Date Picker
-      - Range selection mode
-      - Month/year navigation
-      - Keyboard shortcuts
+- [~] Calendar / Date Picker  (uilo::DatePicker, built on uilo::DateAndTime)
+      - [x] Month grid, embedded or as a centred popup over the whole window
+      - [x] Range selection mode, with the span previewed under the cursor
+      - [x] Month/year navigation
+      - [x] Min/max bounds and a per-date enabled predicate
+      - [ ] Keyboard shortcuts (arrows to move, enter to pick, esc to dismiss)
+      - [ ] Month/year jump: clicking the title could open a year picker
+            instead of only going back to today
+      - [ ] Time-of-day selection, to make it a full DateTime picker
 
 - [ ] File Browser
       - Floating window mode (for dialogs)

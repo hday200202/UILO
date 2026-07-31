@@ -133,4 +133,10 @@ inline FileBrowser* filebrowser(
     const std::string& name = ""
 ) { return new FileBrowser(modifier, options, name); }
 
+inline DatePicker* datepicker(
+    Modifier modifier = {},
+    DatePickerOptions options = {},
+    const std::string& name = ""
+) { return new DatePicker(modifier, options, name); }
+
 }
