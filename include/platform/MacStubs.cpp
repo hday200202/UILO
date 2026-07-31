@@ -21,6 +21,7 @@ bool getVirtualDisplaySize(uint32_t&, uint32_t&)     { return false; }
 bool installMacScrollMonitor(std::function<bool(float, float, bool)>) { return false; }
 bool installMacZoomMonitor  (std::function<bool(float)>)              { return false; }
 void tickMacScrollMomentum  (float)                                    {}
+void cancelMacScrollMomentum()                                         {}
 
 } // namespace uilo
 

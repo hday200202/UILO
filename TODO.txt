@@ -223,6 +223,20 @@ UILO TODO & Roadmap
 
 ## Bug Fixes & Polish
 
+- [x] BUG: momentum scroll leaked into whatever the cursor moved over
+      Scrolling a container and then flicking the cursor onto a slider/knob while
+      it was still coasting let the leftover momentum drive that widget instead.
+
+      Cause: momentum ticks were dispatched at the CURRENT cursor position, so a
+      coast followed the mouse rather than staying with the element the gesture
+      started on.
+
+      Fixed by latching the gesture origin: UILO now records the position of each
+      real (momentum == false) scroll event in m_scrollOrigin and replays momentum
+      ticks there, so a coast keeps scrolling whatever was flicked no matter where
+      the pointer goes -- which is what macOS itself does. A fresh gesture
+      overwrites the latch; a page switch cancels the coast outright.
+
 - [ ] Input Handling
       - Touch/pointer support
       - IME support for international text
