@@ -49,6 +49,9 @@ void UILO::setPage(const std::string& pageName) {
         m_resizers.clear();
         m_floating.clear();
         setCurrInteractible(nullptr);
+        // The container a coast belongs to is not on screen any more.
+        cancelMacScrollMomentum();
+        m_hasScrollOrigin = false;
         m_activePage = it->second.get();
     }
 }
@@ -69,6 +72,9 @@ void UILO::setActivePage(Page* page) {
     m_resizers.clear();
     m_floating.clear();
     setCurrInteractible(nullptr);
+    // The container a coast belongs to is not on screen any more.
+    cancelMacScrollMomentum();
+    m_hasScrollOrigin = false;
     m_activePage = page;
 }
 
@@ -295,30 +301,23 @@ void UILO::update() {
             return true;
         }, this);
         installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
-            float mx = m_mousePos.x, my = m_mousePos.y;
-            SDL_GetMouseState(&mx, &my);
-            if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
-                int lw = 1, lh = 1, pw = 1, ph = 1;
-                SDL_GetWindowSize(w, &lw, &lh);
-                SDL_GetWindowSizeInPixels(w, &pw, &ph);
-                if (lw > 0) mx *= (float)pw / (float)lw;
-                if (lh > 0) my *= (float)ph / (float)lh;
+            // A coast belongs to whatever the gesture was flicked on, so momentum
+            // ticks replay at the position the gesture started from. Tracking the
+            // live cursor instead would hand the leftover velocity to whatever it
+            // happened to land on -- a slider, a knob, a neighbouring panel.
+            Vec2f pos;
+            if (momentum && m_hasScrollOrigin) {
+                pos = m_scrollOrigin;
+            } else {
+                pos               = queryMousePixelPosition();
+                m_scrollOrigin    = pos;
+                m_hasScrollOrigin = true;
             }
-            const Vec2f pos { mx, my };
             dispatchScroll(pos, Vec2f{dxLines, dyLines}, true, momentum);
             return !isSDLScrollTarget(pos);
         });
         installMacZoomMonitor([this](float mag) -> bool {
-            float mx = m_mousePos.x, my = m_mousePos.y;
-            SDL_GetMouseState(&mx, &my);
-            if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
-                int lw = 1, lh = 1, pw = 1, ph = 1;
-                SDL_GetWindowSize(w, &lw, &lh);
-                SDL_GetWindowSizeInPixels(w, &pw, &ph);
-                if (lw > 0) mx *= (float)pw / (float)lw;
-                if (lh > 0) my *= (float)ph / (float)lh;
-            }
-            dispatchZoom(Vec2f{mx, my}, mag);
+            dispatchZoom(queryMousePixelPosition(), mag);
             return true;
         });
     }
@@ -394,16 +393,7 @@ void UILO::update() {
         ), m_elementPool.end()
     );
 
-    float mx, my;
-    SDL_GetMouseState(&mx, &my);
-    if (SDL_Window* w = m_renderer->sdlWindow()) {
-        int lw = 1, lh = 1, pw = 1, ph = 1;
-        SDL_GetWindowSize(w, &lw, &lh);
-        SDL_GetWindowSizeInPixels(w, &pw, &ph);
-        if (lw > 0) mx *= (float)pw / (float)lw;
-        if (lh > 0) my *= (float)ph / (float)lh;
-    }
-    m_mousePos = { mx, my };
+    m_mousePos = queryMousePixelPosition();
     const Vec2f mouse = m_mousePos;
 
     if (m_renderer) m_renderer->setMouseState(mouse);
@@ -529,17 +519,41 @@ void UILO::render() {
 
 
 /*
+    queryMousePixelPosition():
+    - Params:   none
+    - Returns:  Vec2f
+    - Desc:     The cursor in render pixels. SDL reports it in window points, so
+                the ratio between the window's point and pixel size converts it;
+                on a retina display those differ by the backing scale.
+*/
+Vec2f UILO::queryMousePixelPosition() const {
+    float mx = 0.f, my = 0.f;
+    SDL_GetMouseState(&mx, &my);
+    if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
+        int lw = 1, lh = 1, pw = 1, ph = 1;
+        SDL_GetWindowSize(w, &lw, &lh);
+        SDL_GetWindowSizeInPixels(w, &pw, &ph);
+        if (lw > 0) mx *= (float)pw / (float)lw;
+        if (lh > 0) my *= (float)ph / (float)lh;
+    }
+    return { mx, my };
+}
+
+
+/*
     dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum):
     - Params:   const Vec2f& pos, Vec2f delta, bool precise, bool momentum
     - Returns:  void
     - Desc:     Routes a scroll delta at a position to the topmost overlay
-                under it, or the active page's root otherwise. Refreshes the
-                cached cursor first so callbacks reading getMousePosition() see
-                the position that triggered the scroll.
+                under it, or the active page's root otherwise. For a real
+                gesture the cached cursor is refreshed first, so callbacks
+                reading getMousePosition() see the position that triggered the
+                scroll. Momentum ticks leave it alone: they replay at the
+                gesture's origin, which is no longer where the pointer is.
 */
 void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum) {
     if (!m_activePage || (delta.x == 0.f && delta.y == 0.f)) return;
-    m_mousePos = pos;
+    if (!momentum) m_mousePos = pos;
     m_inMomentumScroll = momentum;
     Element* scrollOverlay = nullptr;
     for (auto& ov : m_overlays)

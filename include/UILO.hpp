@@ -46,6 +46,10 @@ public:
     void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
     void dispatchZoom(const Vec2f& pos, float magnification);
     bool isSDLScrollTarget(const Vec2f& pos) const;
+    // Cursor position in render pixels, read live from SDL rather than from the
+    // once-per-frame cache, so event callbacks that fire mid-frame see where the
+    // pointer actually is.
+    Vec2f queryMousePixelPosition() const;
 
     void setRenderer(Renderer& renderer) {
         m_renderer = &renderer;
@@ -153,6 +157,11 @@ private:
     Vec2u     m_prevWindowSize = {0u, 0u};
     Vec2f     m_mousePos       = {};
     bool      m_inMomentumScroll = false;
+    // Where the in-progress scroll gesture started. Momentum ticks are dispatched
+    // here instead of at the live cursor, so a coast keeps scrolling whatever was
+    // flicked even if the pointer has since moved off it.
+    Vec2f     m_scrollOrigin     = {};
+    bool      m_hasScrollOrigin  = false;
     bool      m_forceTreeUpdate = false;
 
     std::function<void()> m_onLiveResize;
