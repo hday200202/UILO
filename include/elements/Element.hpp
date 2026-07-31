@@ -49,6 +49,12 @@ public:
     virtual bool isDirty() const;
     bool isHovered() const { return m_hovered; }
     UILO* getUILO() const { return m_uiloRef; }
+    // Public read of claimsPointerEvents() for the web bridge. Native
+    // hit-testing stops at the first element that claims a click, so ancestors
+    // never see it; DOM clicks bubble to every ancestor, so the bridge stops
+    // propagation on exactly the elements that claim -- otherwise a click on a
+    // popup's arrow would also reach the scrim behind it and dismiss it.
+    bool takesPointerEvents() const { return claimsPointerEvents(); }
     float getDeltaTime() const; // defined in Element.cpp (needs UILO complete type)
     // Resolves a per-widget color through the owning UILO's Palette.
     // Returns `literal` unchanged when there's no UILO or the role is

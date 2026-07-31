@@ -27,7 +27,7 @@ namespace {
 class UiloApplication : public Wt::WApplication, public Session {
 public:
     UiloApplication(const Wt::WEnvironment& env, const Builder& build, const Config& config)
-        : Wt::WApplication(env), m_translator(*this, config) {
+        : Wt::WApplication(env), m_translator(*this, m_ui, config) {
         setTitle(Wt::WString::fromUTF8(config.title));
         addBaseRules();
 
@@ -143,6 +143,10 @@ private:
         sheet.addRule(".uilo-root", "position:absolute;inset:0;overflow:hidden;");
         // Every page fills the same box; only one is ever un-hidden.
         sheet.addRule(".uilo-page", "position:absolute;inset:0;overflow:hidden;");
+        // A floating layer (a popup and its backdrop) sits above the page,
+        // filling the window the same way. Only shown while its element is in
+        // UILO's floating list.
+        sheet.addRule(".uilo-overlay", "position:absolute;inset:0;overflow:hidden;z-index:1000;");
         // A flex item defaults to a content-based minimum size, which would
         // stop children shrinking to the size UILO gives them. UILO has no
         // such floor, so it is removed here for every translated element.

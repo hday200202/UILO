@@ -187,8 +187,69 @@ void DatePicker::showMonth(int year, unsigned month) {
 
     m_displayYear  = year;
     m_displayMonth = month;
-    m_needsRebuild = true;
+
+    // Prefer refreshing the existing cells in place over a structural rebuild.
+    // It allocates nothing, and -- unlike a rebuild, which replaces the cell
+    // elements -- it is visible to the Wt bridge, whose sync only re-applies
+    // properties to the elements translated once at build time. A rebuild is
+    // only needed when a month can lay out to a different grid shape (variable
+    // week rows, or adjacent days drawn as gaps), which updateGridInPlace()
+    // rejects; the queued rebuild then runs from update() as before.
+    if (!updateGridInPlace(m_displayYear, m_displayMonth))
+        m_needsRebuild = true;
+
     notifyMonthChanged();
+}
+
+
+/*
+    updateGridInPlace(int year, unsigned month):
+    - Params:   int year, unsigned month
+    - Returns:  bool -- true if the grid was paged in place, false if the shape
+                differs between months and a rebuild is required instead.
+    - Desc:     Rewrites each existing day cell to the day it now shows -- its
+                number, whether it belongs to the month, and the date its click
+                and hover handlers carry -- then refreshes the title and
+                recolours. No element is created or destroyed, so the Wt bridge
+                picks the changes up through its ordinary property sync.
+*/
+bool DatePicker::updateGridInPlace(int year, unsigned month) {
+    const DatePickerOptions& o = m_dpOptions;
+
+    // The in-place path holds only when every month draws the same grid: six
+    // fixed rows, and neighbour-month days as real cells rather than gaps.
+    // Otherwise the cell count or the cells' positions shift between months and
+    // only a rebuild can express it.
+    if (!o.getFixedWeekRows() || !o.getShowAdjacentMonths()) return false;
+    if (m_cells.size() != static_cast<std::size_t>(6u * 7u)) return false;
+
+    Date cursor = DT::gridStart(year, month, o.getFirstDayOfWeek());
+
+    for (std::size_t i = 0; i < m_cells.size(); ++i) {
+        const bool adjacent = (cursor.month != month || cursor.year != year);
+
+        m_cellDates[i]    = cursor;
+        m_cellAdjacent[i] = adjacent;
+        m_cellTexts[i]->setString(std::to_string(cursor.day));
+
+        // The cell's handlers captured its old date by value, so rebind them to
+        // the day it now shows. The bridge reads handlers at click time, so
+        // swapping the modifier's callbacks is enough -- no re-translation.
+        m_cells[i]->getModifier()
+            .setOnLeftClick([this, cursor, adjacent](Element*) { handleDayClicked(cursor, adjacent); })
+            .setOnHoverEnter([this, cursor](Element*) { setHoverDate(cursor); })
+            .setOnHoverExit([this, cursor](Element*) {
+                if (m_hoverDate && *m_hoverDate == cursor) setHoverDate(std::nullopt);
+            });
+
+        cursor = DT::addDays(cursor, 1);
+    }
+
+    if (m_titleText)
+        m_titleText->setString(DT::format(Date{year, month, 1u}, o.getTitleFormat()));
+
+    applyCellColors();
+    return true;
 }
 
 
