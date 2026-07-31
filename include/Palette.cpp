@@ -153,6 +153,15 @@ void Palette::clear() {
     - Desc:     Returns a pre-populated dark palette covering every role UILO's
                 built-in widgets read. Intended as a starting point that
                 consumers override per role as needed.
+
+                bg
+                panel
+                panelAlt
+                accent
+                accentHover
+                text
+                textDim
+                outline
 */
 Palette Palette::defaultDark() {
     Palette p;

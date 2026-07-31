@@ -66,6 +66,17 @@ public:
     Element* addFloating(FreeElement f);
     void removeFloating(Element* e);
 
+    // The elements currently in the floating layer, in insertion order. Native
+    // rendering walks m_floating directly; the web bridge has no access to it,
+    // so this is what it reads each sync to mirror popups -- which add their
+    // backdrop here at open() -- into an on-top overlay.
+    std::vector<Element*> getFloatingElements() const {
+        std::vector<Element*> out;
+        out.reserve(m_floating.size());
+        for (const FloatingEntry& f : m_floating) out.push_back(f.element);
+        return out;
+    }
+
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
     

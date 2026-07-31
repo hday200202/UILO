@@ -16,6 +16,8 @@
 
 #include "UiloWt.hpp"
 
+namespace uilo { class UILO; }
+
 namespace uilo::wt::detail {
 
 // The direction a container stacks its children. UILO's Row and Column differ
@@ -32,12 +34,14 @@ class KnobWidget;
 
 class Translator {
 public:
-    Translator(Wt::WApplication& app, const Config& config);
+    Translator(Wt::WApplication& app, UILO& uilo, const Config& config);
 
     // Builds the widgets for `page`'s root container as children of `into`.
     void build(Page& page, Wt::WContainerWidget* into);
 
-    // Re-reads every translated element and applies whatever changed.
+    // Re-reads every translated element and applies whatever changed. Also
+    // reconciles UILO's floating layer first, so opening or closing a popup is
+    // reflected by the same call every event already makes.
     void sync();
 
 private:
@@ -113,10 +117,36 @@ private:
     // Applies a node's current style, and its content when it has any.
     void apply(Node& node);
 
+    // Shows the overlays whose backdrop is still floating and hides the rest,
+    // translating any backdrop not seen before. Runs at the top of sync().
+    void syncFloating(const std::vector<Element*>& floating);
+
+    // Translates one floating backdrop into a fresh full-window overlay widget,
+    // recording it so later syncFloating() calls can toggle it. Backdrops are
+    // reused across open/close, so this runs once per distinct popup.
+    void buildOverlay(Element* backdrop);
+
+    /*
+        FloatingLayer:
+        - Desc: One popup mirrored on top of the page. Its nodes are kept apart
+                from the page's so the layer applies (and stays styled while
+                paged) independently, and its widget is only ever shown or
+                hidden -- never deleted from under an event that is still
+                dispatching inside it, which a click that closes its own popup
+                would otherwise do.
+    */
+    struct FloatingLayer {
+        Element*              backdrop = nullptr;
+        Wt::WContainerWidget* widget   = nullptr;
+        std::vector<Node>     nodes;
+    };
+
     Wt::WApplication& m_app;
+    UILO&             m_uilo;
     Config            m_config;
 
     std::vector<Node>                            m_nodes;
+    std::vector<FloatingLayer>                   m_floatingLayers;
     std::unordered_map<std::string, std::string> m_classes;  // css text -> class
     std::unordered_map<std::string, std::string> m_fonts;    // ttf path -> family
     int                                          m_nextClass = 0;

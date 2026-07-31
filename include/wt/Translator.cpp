@@ -20,6 +20,7 @@
 #include <Wt/WText.h>
 #include <Wt/WTextArea.h>
 
+#include "../UILO.hpp"
 #include "../elements/containers/Column.hpp"
 #include "../elements/containers/Row.hpp"
 #include "../elements/decoration/Image.hpp"
@@ -399,8 +400,8 @@ void appendMaterial(std::string& css, const Material& mat, Color elementColor) {
 // Translator
 // ---------------------------------------------------------------------------
 
-Translator::Translator(Wt::WApplication& app, const Config& config)
-    : m_app(app), m_config(config) {}
+Translator::Translator(Wt::WApplication& app, UILO& uilo, const Config& config)
+    : m_app(app), m_uilo(uilo), m_config(config) {}
 
 // Identity of a style: the declarations plus every pseudo rule hanging off it,
 // so two elements share a class only when both match.
@@ -1280,7 +1281,58 @@ void Translator::apply(Node& n) {
 }
 
 void Translator::sync() {
+    // Reflect any popup opened or closed since the last sync before restyling,
+    // so the overlay's widgets exist to receive it.
+    syncFloating(m_uilo.getFloatingElements());
+
     for (Node& n : m_nodes) apply(n);
+    for (FloatingLayer& layer : m_floatingLayers)
+        for (Node& n : layer.nodes) apply(n);
+}
+
+void Translator::syncFloating(const std::vector<Element*>& floating) {
+    // Toggle the overlays we already have: up if their backdrop is still
+    // floating, hidden otherwise. This is what closes a popup -- open() adds
+    // the backdrop, close() removes it, and the state falls out of the list.
+    for (FloatingLayer& layer : m_floatingLayers) {
+        const bool active =
+            std::find(floating.begin(), floating.end(), layer.backdrop) != floating.end();
+        layer.widget->setHidden(!active);
+    }
+    // Translate any backdrop we have not seen before. A reused backdrop
+    // (a DatePicker keeps one across open/close) is translated only the first
+    // time and thereafter just re-shown above.
+    for (Element* backdrop : floating) {
+        const bool known = std::any_of(
+            m_floatingLayers.begin(), m_floatingLayers.end(),
+            [backdrop](const FloatingLayer& l) { return l.backdrop == backdrop; });
+        if (!known) buildOverlay(backdrop);
+    }
+}
+
+void Translator::buildOverlay(Element* backdrop) {
+    auto* overlay = m_app.root()->addWidget(std::make_unique<Wt::WContainerWidget>());
+    overlay->setStyleClass("uilo-overlay");
+
+    // Translate the backdrop as its own root, collecting its nodes into a
+    // scratch list so they can live on the layer rather than mixed into the
+    // page's. build() sets up a page root exactly this way.
+    std::vector<Node> pageNodes = std::move(m_nodes);
+    m_nodes.clear();
+
+    Node node;
+    node.isRoot     = true;
+    node.axis       = axisOf(backdrop);
+    node.heightExpr = "100vh";
+    translate(backdrop, overlay, node);
+
+    FloatingLayer layer;
+    layer.backdrop = backdrop;
+    layer.widget   = overlay;
+    layer.nodes    = std::move(m_nodes);
+
+    m_nodes = std::move(pageNodes);
+    m_floatingLayers.push_back(std::move(layer));
 }
 
 void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node) {
@@ -1537,6 +1589,14 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
                 sync();
             });
         }
+        // Reproduce UILO's hit-testing on the web. Native, a click stops at the
+        // first element that claims it, so ancestors never see it; a DOM click
+        // bubbles to every ancestor's handler. Stopping propagation on exactly
+        // the elements UILO would let swallow the click keeps, for instance, a
+        // popup's month arrows from also reaching the scrim behind them and
+        // dismissing it.
+        if (el->takesPointerEvents())
+            interactive->clicked().preventPropagation();
     }
 
     m_nodes.push_back(node);
