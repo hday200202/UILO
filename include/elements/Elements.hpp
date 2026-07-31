@@ -20,6 +20,7 @@
 #include "interactible/Textbox.hpp"
 
 #include "widgets/Filebrowser.hpp"
+#include "widgets/DatePicker.hpp"
 
 // Factory
 #include "Factory.hpp"
