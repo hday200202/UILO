@@ -4,8 +4,25 @@
 
 namespace uilo {
 
+/*
+    ResizerDir:
+    - Desc: Which neighbour a Resizer drags, and so which axis it works on. Left
+            and Top resize the previous sibling, Right and Bottom the next one;
+            Left/Right drag horizontally, Top/Bottom vertically.
+*/
 enum class ResizerDir { Left, Right, Top, Bottom };
 
+/*
+    ResizerOptions:
+    - Desc:     Which neighbour the handle resizes, how wide its hit strip is,
+                what it
+            draws as, and the limits the drag is held within. The min, max and
+            step limits are Dimensions, so they can be given in pixels or as a
+            percent of the container -- a percent minimum keeps a panel usable at
+            any window size. A step above 0 quantises the drag to that increment.
+    - The fill is transparent by default, so a resizer stays invisible until a
+      hover handler colours it in.
+*/
 class ResizerOptions {
 public:
     ResizerOptions& setDirection(ResizerDir d)      { m_direction       = d; return *this; }
@@ -44,19 +61,27 @@ private:
 };
 
 /*
-    A Resizer is placed inside a Row or Column alongside the element it should resize.
-    It occupies a physical strip (for hit detection) but is invisible to siblings —
-    they are laid out as if the Resizer isn't there. The Resizer renders on top of
-    everything via UILO's post-render pass.
-
-    Direction tells which adjacent sibling to resize:
-      Left / Top   → resizes the previous sibling
-      Right / Bottom → resizes the next sibling
-    The drag axis and cursor match the direction (Left/Right = horizontal, Top/Bottom = vertical).
+    Resizer:
+    - Desc: A drag handle placed inside a Row or Column beside the element it
+            resizes. It occupies a strip for hit detection but is invisible to
+            layout -- its siblings are placed as though it were not there, and it
+            sits at the boundary between them -- so adding one never shifts the
+            arrangement. It draws through UILO's post-render pass, which puts it
+            on top of everything including the neighbours it straddles.
+    - The target and the container bounds are pushed in by Row and Column during
+      layout rather than looked up here, because only the parent knows which
+      sibling is adjacent once invisible children have been skipped.
+    - Double-clicking restores the target to the size it had when the handle first
+      attached, which is why the original dimension is captured on the first
+      setTarget rather than at construction -- there is no target yet then.
 */
 class Resizer : public Interactible {
 public:
-    explicit Resizer(Modifier modifier = {}, ResizerOptions options = {}, const std::string& name = "");
+    explicit Resizer(
+        Modifier modifier = {},
+        ResizerOptions options = {},
+        const std::string& name = ""
+    );
 
     void update(Rectf& parentBounds, float dt) override;
     void render() override;
@@ -65,18 +90,9 @@ public:
     bool checkLeftClick(const Vec2f& mousePosition) override;
     void onDeactivate() override;
 
-    // Called by Row/Column during layout
-    void          setTarget(Element* t) {
-        // Capture the target's original width/height the first time a real
-        // target is attached, so double-click can restore it.
-        if (t && t != m_target && !m_haveOriginalSize) {
-            m_originalWidth    = t->getModifier().getWidth();
-            m_originalHeight   = t->getModifier().getHeight();
-            m_haveOriginalSize = true;
-        }
-        m_target = t;
-    }
-    void          setContainerBounds(Rectf b) { m_containerBounds = b; }
+    // Both are pushed in by Row and Column during layout.
+    void setTarget(Element* t);
+    void setContainerBounds(Rectf b) { m_containerBounds = b; }
 
     Element*   getTarget()    const { return m_target; }
     ResizerDir getDirection() const { return m_options.getDirection(); }
@@ -101,8 +117,28 @@ private:
     Dimension m_originalHeight       = {};
     bool      m_haveOriginalSize     = false;
 
-    // Last left-click timestamp (SDL ticks, ms) for double-click detection.
-    uint64_t  m_lastClickMs          = 0;
+    // Last left-click timestamp in SDL ticks, for double-click detection.
+    uint64_t m_lastClickMs = 0;
 };
+
+
+/*
+    setTarget(Element* t):
+    - Params:   Element* t
+    - Returns:  void
+    - Desc:     Attaches the element this handle drags. The target's declared
+                size is captured the first time a real one arrives, so a double-
+                click can restore it later; the capture is guarded because
+                layout calls this every frame, and re-reading the size after a
+                drag would make "restore" mean "whatever it was last frame".
+*/
+inline void Resizer::setTarget(Element* t) {
+    if (t && t != m_target && !m_haveOriginalSize) {
+        m_originalWidth    = t->getModifier().getWidth();
+        m_originalHeight   = t->getModifier().getHeight();
+        m_haveOriginalSize = true;
+    }
+    m_target = t;
+}
 
 }

@@ -8,6 +8,9 @@ UILO TODO & Roadmap
       - [x] Range selection mode, with the span previewed under the cursor
       - [x] Month/year navigation
       - [x] Min/max bounds and a per-date enabled predicate
+      - [x] uilo::DateField -- the whole thing as one element: a dropdown-shaped
+            field that opens the popup and shows what was picked. Sizes itself
+            down to just the calendar icon when the box gets square.
       - [ ] Keyboard shortcuts (arrows to move, enter to pick, esc to dismiss)
       - [ ] Month/year jump: clicking the title could open a year picker
             instead of only going back to today
@@ -119,16 +122,59 @@ UILO TODO & Roadmap
 
 ## Features & Infrastructure
 
-- [ ] Palette System (for application-defined theming)
-      - Centralized color palette definitions
-      - Palette switching at runtime
-      - NO built-in themes; apps define their own palettes
-      - Palette serialization/deserialization
+- [~] Palette System (for application-defined theming)
+      - [x] Centralized color palette definitions
+      - [x] Palette switching at runtime -- uilo::Theme holds the palette and is
+            read where colours resolve, so swapping it restyles live with no
+            rebuild. A UILO may still override it per instance, which is what
+            gives Wt sessions their own look.
+      - [x] NO built-in themes; apps define their own palettes
+      - [x] Every widget follows the palette with nothing named at the call
+            site. Widgets used to carry hardcoded literal colours and no role --
+            a Dropdown was entirely palette-blind, and Text/Icon defaulted to
+            white -- so a theme could not reach them. They now default to roles
+            from the vocabulary Palette::defaultDark() defines (bg, panel,
+            panelAlt, accent, accentHover, onAccent, text, textDim, outline).
+            An undefined role still resolves to the literal, so a palette that
+            stays silent changes nothing.
+      - [ ] Still literal-only, deliberately: transparent-by-default container
+            fills and outlines (a role would paint every container), Image tint
+            (a role would tint photographs), Waveform channel colours, and the
+            translucent overlays whose alpha carries the effect -- DatePicker's
+            scrim and range fill, Textbox's selection. Roles cannot express
+            alpha-over-unknown-background.
+      - [ ] Palette serialization/deserialization
 
-- [ ] Style System
-      - CSS-like selectors or style sheets
-      - Reusable style objects
-      - Cascading properties
+- [~] Style System  (uilo::Theme)
+      - [x] Application-wide defaults: palette, rounding, outer padding, char
+            size, font, icon stroke width. Deliberately NOT outline -- a border
+            on everything reads as noise, not as a style.
+      - [x] Cascading properties -- element setting, then theme, then the type's
+            own default, so a theme only fills in what was left alone and adding
+            one cannot change how existing code looks
+      - [x] Composite widgets keep following the theme after construction. They
+            used to resolve a themed value once and copy the number into the
+            Row/Column/Button they are built from, which froze it -- a theme
+            change never reached a Dropdown, DatePicker, DateField or
+            FileBrowser. inheritRounding() hands the child the unset-ness plus
+            the widget's own default as a fallback, so the child resolves the
+            theme itself. Works on the web too, where nothing ticks and a
+            per-frame re-sync would not have.
+      - [ ] Font and char size still resolve once into widget label options, the
+            same way rounding did. Only matters for a theme changed at runtime;
+            the same inherit* treatment would fix it.
+      - [x] setOutline{Color,ColorRole,Thickness} on every surface Options
+            (Row, Column, Canvas, Button, Spacer, Textbox, Dropdown header and
+            popup, FileBrowser panel, DatePicker card, DateField). Per-element
+            only, never themed. Drawn inside the bounds, so a border never
+            changes an element's footprint, and emitted as a CSS border on the
+            web. Not on Slider/Knob/Waveform, whose visuals are several
+            sub-shapes with no single "the outline".
+      - [ ] More themed properties as they earn it (scroll speed, spacing
+            scale, hover/pressed tints)
+      - [ ] Reusable style objects: a named bundle of Options to apply to many
+            elements, which is the piece Theme deliberately does not cover
+      - [ ] CSS-like selectors or style sheets
 
 - [ ] Animation System
       - Lerp between two or more Modifiers over time
@@ -228,6 +274,16 @@ UILO TODO & Roadmap
 
 ## Bug Fixes & Polish
 
+- [x] Dropdown arrow -- a chevron in the header, swapping to chevron-up while
+      open. Native only by nature: on the web a Dropdown is a <select>, which
+      the browser draws its own arrow on.
+
+- [x] Dropdown label insets (setHeaderPadding / setItemPadding, 10px default)
+      so the header text and the popup items are not flush against the edge.
+
+- [x] setVisible(false) was only honoured by Row/Column/Canvas; every leaf
+      render() ignored it and kept drawing at its last bounds.
+
 - [x] BUG: momentum scroll leaked into whatever the cursor moved over
       Scrolling a container and then flicking the cursor onto a slider/knob while
       it was still coasting let the leftover momentum drive that widget instead.
@@ -261,3 +317,67 @@ UILO TODO & Roadmap
       - Reduce allocations
       - Cache layout calculations
       - Optimize draw calls
+
+
+================================================================================
+PHASE 2 -- fold Row and Column onto one axis-generic implementation
+================================================================================
+Phase 1 is done: both update() and render() are now split into named phase
+functions, so the two classes line up function-for-function and the duplicated
+resizer block inside each file is gone. What remains is the duplication BETWEEN
+Row.cpp and Column.cpp.
+
+Why it is worth doing
+  63 of 67 accessor names are already identical between RowOptions and
+  ColumnOptions -- the only genuine differences are the zoom axis
+  (getZoomableX vs getZoomableY). So a template over the Options type works by
+  duck typing: no common base class, no virtuals, no change to the public API
+  or to the Wt bridge.
+
+Shape to aim for
+  A detail-namespace axis policy in a shared header, e.g.
+  containers/AxisLayout.hpp, holding main/cross accessors:
+
+      struct RowAxis {
+          static float  main(Vec2f v)            { return v.x; }
+          static float  cross(Vec2f v)           { return v.y; }
+          static Dimension mainDim(Element* e)   { return e->getModifier().getWidth(); }
+          static bool   isEnd(Align a)           { return hasAlign(a, Align::Right); }
+          static bool   isMid(Align a)           { return hasAlign(a, Align::CenterX); }
+          ...
+      };
+
+  Then one templated implementation of each phase -- updateScrollable,
+  updateFlow, layoutResizers, renderSubdivisions, renderChildPass -- taking
+  <Axis, Options>. Row.cpp and Column.cpp shrink to the axis policy plus the
+  handful of genuinely per-class members (m_zoomX vs m_zoomY, and the two
+  divergences below).
+
+TWO REAL DIVERGENCES -- decide these before merging, they are not cosmetic
+  1. Resizer cross-axis sizing.
+     Column::layoutResizers computes spanW, clamps the Modifier width into it,
+     and honours Align::Right / Align::CenterX to place the handle within that
+     span. Row::layoutResizers does none of this -- it stretches the handle
+     across the whole cross span. Column was improved at some point and Row
+     never was.
+     Recommendation: unify upward, so Row gains it. That CHANGES Row's resizer
+     bounds, which is a behaviour change, not a refactor.
+
+  2. Zero-delta scroll guard.
+     Row::checkScroll(float) has `if (delta == 0.f) return false;` so a purely
+     vertical wheel bubbles to a parent. Column::checkScroll(float) has no such
+     guard, so it consumes a zero-delta event and stops it bubbling.
+     Recommendation: unify upward, so Column gains the guard.
+
+How to verify the merge
+  The 18-case layout probe from this session is the tool for this. It drives
+  Row/Column update() directly with no UILO bound -- no window, no GPU -- and
+  dumps every child's resolved bounds. It covers the scrollable path, pinned
+  left/mid/right and top/mid/bottom groups, resizers in BOTH paths, explicit
+  scroll bounds, hidden children, outer padding, nesting, and degenerate slots.
+  Diff its output before and after: it must be byte-identical EXCEPT for the
+  cases that exercise divergence 1, where Row's resizer bounds should change.
+  Case 12 ("column flow: resizers, cross-axis align") is the one to read
+  carefully when accepting the new golden output.
+  Probe source: tools/layout_probe.cpp (checked in, not wired into CMake --
+  build instructions are in its header comment).

@@ -12,6 +12,13 @@ namespace {
 constexpr float kPi      = 3.14159265358979323846f;
 constexpr float kDeg2Rad = kPi / 180.f;
 
+/*
+    wrap360(float a):
+    - Params:   float a
+    - Returns:  float -- the angle in [0, 360)
+    - Desc:     Normalises an angle in degrees, keeping the result positive so a
+                negative input still lands in range.
+*/
 inline float wrap360(float a) {
     a = std::fmod(a, 360.f);
     if (a < 0.f) a += 360.f;
@@ -19,9 +26,18 @@ inline float wrap360(float a) {
 }
 } // namespace
 
-Knob::Knob(Modifier modifier, KnobOptions options, const std::string& name)
-    : m_options(options)
-{
+/*
+    Knob(Modifier modifier, KnobOptions options, const std::string& name):
+    - Params:   Modifier modifier, KnobOptions options, const std::string& name
+    - Returns:  Knob
+    - Desc:     Constructs a knob and seats it at its configured default,
+                clamped into range, or at the minimum when no default was given.
+*/
+Knob::Knob(
+    Modifier modifier,
+    KnobOptions options,
+    const std::string& name
+) : m_options(options) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Knob;
@@ -30,6 +46,17 @@ Knob::Knob(Modifier modifier, KnobOptions options, const std::string& name)
         : m_options.getMin();
 }
 
+/*
+    sweepDegrees():
+    - Params:   none
+    - Returns:  float -- signed total sweep, positive counter-clockwise
+    - Desc:     How far the arc travels from the start angle to the end angle
+                along the configured direction. The sign carries the direction,
+                so callers can interpolate without branching on it. A start and
+                end that coincide would otherwise give a zero-length arc and
+                draw nothing, so that case is taken as a full revolution instead
+                -- which is what someone asking for 0 to 0 means.
+*/
 float Knob::sweepDegrees() const {
     float diff = m_options.getEndAngle() - m_options.getStartAngle();
     if (m_options.getArcDirection() == KnobArcDir::CounterClockwise) {
@@ -37,14 +64,21 @@ float Knob::sweepDegrees() const {
     } else {
         diff = -wrap360(-diff);
     }
-    // Treat a zero/degenerate sweep as a full revolution so users get a
-    // full ring instead of nothing when start == end.
+    /* A degenerate sweep becomes a full revolution, so start == end draws a
+       ring rather than nothing. */
     if (std::abs(diff) < 0.001f) {
         diff = (m_options.getArcDirection() == KnobArcDir::CounterClockwise) ? 360.f : -360.f;
     }
     return diff;
 }
 
+/*
+    angleForValue(float v):
+    - Params:   float v
+    - Returns:  float -- cartesian angle in degrees
+    - Desc:     Where a value sits along the arc. A degenerate range pins to the
+                start angle rather than dividing by zero.
+*/
 float Knob::angleForValue(float v) const {
     const float range = m_options.getMax() - m_options.getMin();
     const float t = (range > 0.f)
@@ -53,6 +87,18 @@ float Knob::angleForValue(float v) const {
     return m_options.getStartAngle() + t * sweepDegrees();
 }
 
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Resolves the knob's bounds and tracks a vertical drag while one
+                is running. Dragging up always turns the indicator clockwise,
+                which means the value delta is flipped when the arc itself
+                sweeps clockwise -- otherwise the same gesture would move the
+                pointer in opposite directions on two knobs configured
+                differently. The button state is polled so a release outside the
+                window still ends the drag.
+*/
 void Knob::update(Rectf& parentBounds, float /*dt*/) {
     resize(parentBounds);
 
@@ -65,21 +111,32 @@ void Knob::update(Rectf& parentBounds, float /*dt*/) {
             if (m_uiloRef) m_uiloRef->requestCursor(CursorType::SizeVertical, 2);
             const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
             const float curY  = m_uiloRef ? m_uiloRef->getMousePosition().y : my;
-            const float dy    = m_dragStartY - curY; // up = positive
+            const float dy    = m_dragStartY - curY;   /* up = positive */
             const float range = m_options.getMax() - m_options.getMin();
             const float pxPerRange = std::max(1.f, m_options.getDragPixelsPerRange() * scale);
-            // Drag up = visually clockwise rotation, drag down = CCW.
-            // In screen coords (+y down) "visually clockwise" means the
-            // cartesian angle increases. Flip the value delta when the
-            // arc sweeps clockwise (sweep<0) so the indicator still
-            // rotates clockwise for an upward drag.
+            /* Flip the delta when the arc sweeps clockwise, so dragging up
+               always turns the indicator the same way. */
             const float sign = (sweepDegrees() >= 0.f) ? 1.f : -1.f;
             applyValue(m_dragStartVal + sign * (dy / pxPerRange) * range);
         }
     }
 }
 
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the body and its rim, the arc track with the filled
+                portion over it, and the indicator. The body radius is half the
+                smaller side less the room the arc and its gap need, so the ring
+                sits around the body rather than spilling outside the element.
+                Tessellation is adaptive -- roughly a segment per pixel of
+                circumference, and no coarser than about half a degree on the
+                arc -- so a large knob stays smooth without making a small one
+                expensive, with the configured segment count acting as a floor.
+*/
 void Knob::render() {
+    if (!m_modifier.getVisible()) { m_dirty = false; return; }
     if (!m_uiloRef) { m_dirty = false; return; }
     auto& renderer = m_uiloRef->getRenderer();
     const float scale = m_uiloRef->getScale();
@@ -87,17 +144,16 @@ void Knob::render() {
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
 
-    // Outer radius = half the smaller side; reserve room for arc + gap so
-    // the ring sits *around* the knob body without spilling out.
+    /* Half the smaller side, less the arc and its gap, so the ring sits around
+       the body instead of outside the element. */
     const float arcThick = std::max(0.f, m_options.getArcThickness()) * scale;
     const float arcGap   = std::max(0.f, m_options.getArcGap())       * scale;
     const float outerR   = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
     const float bodyR    = std::max(1.f, outerR - arcThick - arcGap);
     const float arcR     = bodyR + arcGap + arcThick * 0.5f;
 
-    // Adaptive tessellation so larger knobs don't show polygon edges.
-    // ~1 segment per pixel of circumference keeps the silhouette smooth
-    // up to large sizes while staying cheap on small ones.
+    /* Roughly one segment per pixel of circumference: smooth when large,
+       cheap when small. */
     auto circleSegs = [](float r) {
         int s = (int)std::ceil(r * 1.2f);
         if (s < 64)  s = 64;
@@ -105,7 +161,7 @@ void Knob::render() {
         return s;
     };
 
-    // ---- Body fill + optional outline -----------------------------------
+    /* Body fill and rim. */
     const Color bodyColor      = resolveColor(m_options.getBodyColorRole(),      m_options.getBodyColor());
     const Color outlineColor   = resolveColor(m_options.getOutlineColorRole(),   m_options.getOutlineColor());
     const Color trackColor     = resolveColor(m_options.getTrackColorRole(),     m_options.getTrackColor());
@@ -118,13 +174,13 @@ void Knob::render() {
     }
     renderer.draw(Circle{{cx, cy}, bodyR, circleSegs(bodyR), bodyColor});
 
-    // ---- Arc track + filled portion -------------------------------------
+    /* Arc track, with the filled portion over it. */
     if (arcThick > 0.f) {
         const float sweep = sweepDegrees();
         const float sweepAbs = std::abs(sweep);
 
-        // Aim for <= ~0.5 degrees per segment so the strip stays smooth at
-        // any size; honour the user's requested segments as a floor.
+        /* At most about half a degree per segment, with the configured count
+           as a floor. */
         const int userSegs    = std::max(8, m_options.getSegments());
         const int adaptive    = std::max(720, (int)std::ceil(arcR * 3.f));
         const int segsPerRev  = std::max(userSegs, adaptive);
@@ -151,7 +207,7 @@ void Knob::render() {
         }
     }
 
-    // ---- Indicator (pointer from body interior out toward rim) ----------
+    /* Indicator, running from inside the body out toward the rim. */
     if (m_options.getIndicatorThickness() > 0.f && indicatorColor.a > 0) {
         const float a = angleForValue(m_value) * kDeg2Rad;
         const float inset = std::clamp(m_options.getIndicatorInset(),  0.f, 1.f);
@@ -169,6 +225,13 @@ void Knob::render() {
     m_dirty = false;
 }
 
+/*
+    checkHover(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when the pointer is over the knob
+    - Desc:     Asks for the vertical resize cursor while the pointer is inside,
+                which is the axis a drag actually works on.
+*/
 bool Knob::checkHover(const Vec2f& mousePosition) {
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
@@ -181,6 +244,15 @@ bool Knob::checkHover(const Vec2f& mousePosition) {
     return inside;
 }
 
+/*
+    checkLeftClick(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when the knob took the click
+    - Desc:     Begins a drag from the current value, or restores the configured
+                default on a double click. Unlike a Slider the value does not
+                jump to the press: a knob has no position under the pointer to
+                jump to.
+*/
 bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
@@ -189,7 +261,7 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     const float dy = mousePosition.y - cy;
     if ((dx*dx + dy*dy) > r * r) return false;
 
-    // Double-click within 350 ms snaps the knob back to its default.
+    /* Double click within the usual window restores the default. */
     const uint64_t now = SDL_GetTicks();
     const bool isDouble = (now - m_lastClickMs) < 350;
     m_lastClickMs = now;
@@ -209,7 +281,22 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
-bool Knob::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {
+/*
+    checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
+    - Params:   const Vec2f& mousePosition, float delta, bool precise,
+                bool momentum
+    - Returns:  bool -- true when the knob consumed the event
+    - Desc:     Adjusts the value by the wheel, accumulating the delta so a
+                stepped knob still responds to deltas too small to cross an
+                increment. Overscroll at either end is discarded rather than
+                banked, so reversing direction moves the value immediately.
+*/
+bool Knob::checkScroll(
+    const Vec2f& mousePosition,
+    float delta,
+    bool /*precise*/,
+    bool /*momentum*/
+) {
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
     const float r  = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
@@ -232,7 +319,7 @@ bool Knob::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/
     const float applied = m_value - before;
     m_scrollAccum += rawDelta - applied;
 
-    // Clamp away hidden overscroll at boundaries.
+    /* Drop overscroll at the boundaries rather than banking it. */
     if ((m_value <= minV && m_scrollAccum < 0.f) ||
         (m_value >= maxV && m_scrollAccum > 0.f)) {
         m_scrollAccum = 0.f;
@@ -245,10 +332,31 @@ bool Knob::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/
     return true;
 }
 
+/*
+    onDeactivate():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Ends any drag when focus moves elsewhere.
+*/
 void Knob::onDeactivate() { m_dragging = false; }
 
+/*
+    setValue(float v):
+    - Params:   float v
+    - Returns:  void
+    - Desc:     Sets the value programmatically, through the same clamping,
+                snapping and change-callback path a drag uses.
+*/
 void Knob::setValue(float v) { applyValue(v); }
 
+/*
+    applyValue(float raw):
+    - Params:   float raw
+    - Returns:  void
+    - Desc:     The single place the value changes: clamps into range, snaps to
+                the step when one is set, and fires onValueChanged only when the
+                result actually differs.
+*/
 void Knob::applyValue(float raw) {
     float v = std::clamp(raw, m_options.getMin(), m_options.getMax());
     if (m_options.getStep() > 0.f) {

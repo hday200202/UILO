@@ -2,19 +2,13 @@
 
 #include <SDL3/SDL.h>
 
-// Disable embedded-shader references to backends we don't compile for.
-// Must come before <bgfx/embedded_shader.h>. bx/platform.h defines the
-// BX_PLATFORM_* macros the guards below test -- it must be included first, or
-// BX_PLATFORM_WINDOWS reads as undefined and DXBC (the Direct3D11 shaders) gets
-// disabled on Windows, leaving the embedded-shader table with no D3D11 entry.
+/* Disable embedded-shader references to backends we don't compile for. */
 #include <bx/platform.h>
 #if !defined(BX_PLATFORM_WINDOWS) || !BX_PLATFORM_WINDOWS
 #  define BGFX_PLATFORM_SUPPORTS_DXBC 0
 #endif
-// D3D12 (DXIL) shaders need Microsoft's DXC compiler at build time, which isn't
-// shipped with a stock VS install. We only compile/embed DXBC (D3D11) shaders,
-// so force DXIL off everywhere; bgfx defaults to the Direct3D11 backend on
-// Windows regardless.
+/* D3D12 (DXIL) shaders need Microsoft's DXC compiler at build time, which
+   isn't shipped with a stock VS install. */
 #define BGFX_PLATFORM_SUPPORTS_DXIL 0
 #define BGFX_PLATFORM_SUPPORTS_WGSL 0
 #define BGFX_PLATFORM_SUPPORTS_PSSL 0
@@ -32,9 +26,8 @@
 #  include <X11/Xlib.h>
 #endif
 
-// ============================================================================
-//  Embedded shaders (compiled per-backend by bgfx-shaderc at build time)
-// ============================================================================
+/* ============================================================================
+   Embedded shaders (compiled per-backend by bgfx-shaderc at build time). */
 
 #include "spirv/vs_solid.sc.bin.h"
 #include "spirv/vs_tex.sc.bin.h"
@@ -95,10 +88,14 @@ namespace {
     };
 }
 
-// ============================================================================
-//  Impl
-// ============================================================================
-
+/*
+    ensureLayouts():
+    - Params:   none
+    - Returns:  none
+    - Desc:     ============================================================
+                ================ Impl ======================================
+                ======================================
+*/
 void Renderer::Impl::ensureLayouts() {
     if (layoutsInit) return;
     solidLayout.begin()
@@ -113,6 +110,15 @@ void Renderer::Impl::ensureLayouts() {
     layoutsInit = true;
 }
 
+/*
+    initShaders():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Compiles the embedded shader programs and creates the uniform
+                handles the renderer draws through. Shaders are embedded rather
+                than loaded, so a built application needs no shader files beside
+                it.
+*/
 bool Renderer::Impl::initShaders() {
     const bgfx::RendererType::Enum type = bgfx::getRendererType();
 
@@ -163,6 +169,14 @@ bool Renderer::Impl::initShaders() {
     }
     return true;
 }
+/*
+    shutdownResources():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Destroys every GPU resource the renderer created -- programs,
+                uniforms, framebuffers, textures and font atlases -- in an order
+                that leaves nothing referencing a destroyed handle.
+*/
 void Renderer::Impl::shutdownResources() {
     for (auto& kv : textureCache) {
         if (kv.second.handle != UINT16_MAX) {
@@ -221,10 +235,15 @@ void Renderer::Impl::shutdownResources() {
     u_glassMouse = BGFX_INVALID_HANDLE;
 }
 
-// ============================================================================
-//  Offscreen scene + blur ladder (Material::Glass)
-// ============================================================================
-
+/*
+    destroySceneFramebuffers():
+    - Params:   none
+    - Returns:  none
+    - Desc:     ============================================================
+                ================ Offscreen scene + blur ladder
+                (Material::Glass) ==========================================
+                ==================================
+*/
 void Renderer::Impl::destroySceneFramebuffers() {
     if (bgfx::isValid(sceneFB))  bgfx::destroy(sceneFB);
     if (bgfx::isValid(blurFB_A)) bgfx::destroy(blurFB_A);
@@ -238,6 +257,14 @@ void Renderer::Impl::destroySceneFramebuffers() {
     fbWidth = fbHeight = 0;
 }
 
+/*
+    ensureSceneFramebuffers(uint32_t width, uint32_t height):
+    - Params:   uint32_t width, uint32_t height
+    - Returns:  none
+    - Desc:     Creates or resizes the offscreen targets the scene is composited
+                through. Recreated only when the size actually changes, since
+                reallocating a framebuffer every frame would stall the GPU.
+*/
 void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
     if (width == 0 || height == 0) return;
     if (bgfx::isValid(sceneFB) && fbWidth == width && fbHeight == height) return;
@@ -248,13 +275,13 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
                            | BGFX_SAMPLER_U_CLAMP
                            | BGFX_SAMPLER_V_CLAMP;
 
-    // Full-res scene target.
+    /* Full-res scene target. */
     sceneFB = bgfx::createFrameBuffer(
         (uint16_t)width, (uint16_t)height,
         bgfx::TextureFormat::BGRA8, fbFlags);
     sceneColorTex = bgfx::getTexture(sceneFB, 0);
 
-    // Half-res ping/pong blur targets. Min 1px to avoid 0-sized FBs.
+    /* Half-res ping/pong blur targets. Min 1px to avoid 0-sized FBs. */
     const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
     const uint16_t halfH = (uint16_t)std::max(1u, height / 2u);
 
@@ -268,8 +295,8 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
     fbWidth  = width;
     fbHeight = height;
 
-    // Bind FBs to their reserved view IDs. View 0 (scene) clears, blur views
-    // overwrite, composite writes backbuffer (FB = invalid).
+    /* Bind FBs to their reserved view IDs. View 0 (scene) clears, blur views
+       overwrite, composite writes backbuffer (FB = invalid). */
     bgfx::setViewFrameBuffer(kSceneViewId,        sceneFB);
     bgfx::setViewFrameBuffer(kBlurHViewId,        blurFB_A);
     bgfx::setViewFrameBuffer(kBlurVViewId,        blurFB_B);
@@ -277,7 +304,7 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
     bgfx::setViewFrameBuffer(kGlassChildViewId,   sceneFB);
     bgfx::setViewFrameBuffer(kCompositeViewId,    BGFX_INVALID_HANDLE);
 
-    // Static view rects (they don't change between frames at this size).
+    /* Static view rects (they don't change between frames at this size). */
     bgfx::setViewRect(kSceneViewId,      0, 0, (uint16_t)width, (uint16_t)height);
     bgfx::setViewRect(kBlurHViewId,      0, 0, halfW, halfH);
     bgfx::setViewRect(kBlurVViewId,      0, 0, halfW, halfH);
@@ -285,7 +312,8 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
     bgfx::setViewRect(kGlassChildViewId, 0, 0, (uint16_t)width, (uint16_t)height);
     bgfx::setViewRect(kCompositeViewId,  0, 0, (uint16_t)width, (uint16_t)height);
 
-    // Composite + blur + glass views always go straight through (no depth, no clear).
+    /* Composite + blur + glass views always go straight through (no depth, no
+       clear). */
     bgfx::setViewClear(kBlurHViewId,        BGFX_CLEAR_NONE);
     bgfx::setViewClear(kBlurVViewId,        BGFX_CLEAR_NONE);
     bgfx::setViewClear(kGlassBgViewId,      BGFX_CLEAR_NONE);
@@ -297,7 +325,7 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
     bgfx::setViewMode(kGlassChildViewId,    bgfx::ViewMode::Sequential);
     bgfx::setViewMode(kCompositeViewId,     bgfx::ViewMode::Sequential);
 
-    // Ortho transforms for glass views (full-window pixel space).
+    /* Ortho transforms for glass views (full-window pixel space). */
     const float W = (float)width, H = (float)height;
     const bool  hd = bgfx::getCaps()->homogeneousDepth;
     const float zScale = hd ? 2.f : 1.f;
@@ -313,9 +341,8 @@ void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
 }
 
 namespace {
-    // Submit a full-screen textured quad covering [0,0]-[w,h] in pixels with
-    // UVs [0,0]-[1,1]. Vertex color is white. Caller is responsible for
-    // setting texture, uniforms, state, and view.
+    /* Submit a full-screen textured quad covering [0,0]-[w,h] in pixels with
+       UVs [0,0]-[1,1]. */
     void submitFullscreenQuad(const bgfx::VertexLayout& layout,
                               uint16_t viewId,
                               float dstW, float dstH,
@@ -332,23 +359,32 @@ namespace {
         const float v0 = flipV ? 1.f : 0.f;
         const float v1 = flipV ? 0.f : 1.f;
 
-        // Triangle 1
+        /* Triangle 1 */
         v[0] = { 0.f,  0.f,  white, 0.f, v0 };
         v[1] = { dstW, 0.f,  white, 1.f, v0 };
         v[2] = { dstW, dstH, white, 1.f, v1 };
-        // Triangle 2
+        /* Triangle 2 */
         v[3] = { 0.f,  0.f,  white, 0.f, v0 };
         v[4] = { dstW, dstH, white, 1.f, v1 };
         v[5] = { 0.f,  dstH, white, 0.f, v1 };
 
         bgfx::setVertexBuffer(0, &tvb);
         uint64_t st = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A;
-        if (alphaBlend) st |= BGFX_STATE_BLEND_ALPHA; // overlay over the host image
+        if (alphaBlend) st |= BGFX_STATE_BLEND_ALPHA;   /* overlay over the host image */
         bgfx::setState(st);
         bgfx::submit(viewId, program);
     }
 }
 
+/*
+    runBlurPasses(uint32_t width, uint32_t height):
+    - Params:   uint32_t width, uint32_t height
+    - Returns:  none
+    - Desc:     Runs the separable blur used by glass materials: a horizontal
+                pass then a vertical one, at reduced resolution. Separating the
+                two turns an NxN kernel into two N-wide ones, which is what
+                makes a wide blur affordable.
+*/
 void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
     if (!bgfx::isValid(sceneFB) || !bgfx::isValid(blurProgram)) return;
     const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
@@ -356,7 +392,7 @@ void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
 
     const bool flipV = bgfx::getCaps()->originBottomLeft;
 
-    // Set ortho for blur views matching their FB sizes.
+    /* Set ortho for blur views matching their FB sizes. */
     auto setOrtho = [](uint16_t viewId, uint32_t w, uint32_t h) {
         const float W = (float)w, H = (float)h;
         const bool  hd = bgfx::getCaps()->homogeneousDepth;
@@ -373,7 +409,7 @@ void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
     setOrtho(kBlurHViewId, halfW, halfH);
     setOrtho(kBlurVViewId, halfW, halfH);
 
-    // ---- Horizontal blur: sceneFB color -> blurFB_A ----
+    /* Horizontal blur: sceneFB color -> blurFB_A */
     {
         const float step[4] = { 1.f / (float)halfW, 0.f, 0.f, 0.f };
         bgfx::setUniform(u_blurParams, step);
@@ -382,7 +418,7 @@ void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
                              (float)halfW, (float)halfH,
                              blurProgram, flipV);
     }
-    // ---- Vertical blur: blurFB_A -> blurFB_B ----
+    /* Vertical blur: blurFB_A -> blurFB_B */
     {
         const float step[4] = { 0.f, 1.f / (float)halfH, 0.f, 0.f };
         bgfx::setUniform(u_blurParams, step);
@@ -393,6 +429,14 @@ void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
     }
 }
 
+/*
+    compositeSceneToBackbuffer(...):
+    - Params:   uint32_t width, uint32_t height, const bgfx::VertexLayout&
+                layout, bgfx::ProgramHandle program
+    - Returns:  none
+    - Desc:     Draws the finished offscreen scene onto the backbuffer as a
+                fullscreen quad, which is the last step of a frame.
+*/
 void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
                                                 const bgfx::VertexLayout& layout,
                                                 bgfx::ProgramHandle program) {
@@ -411,19 +455,13 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     };
     bgfx::setViewTransform(kCompositeViewId, nullptr, ortho);
 
-    // For the composite step we want the fs_tex shader path so we need to
-    // also reset the u_imgFlags uniform (no ellipse clipping).
+    /* For the composite step we want the fs_tex shader path so we need to also
+       reset the u_imgFlags uniform (no ellipse clipping). */
     const float flags[4] = { 0.f, 0.f, 0.f, 0.f };
     bgfx::setUniform(u_imgFlags, flags);
 
-    // The full-screen blit must not inherit a stale rounded-clip from the
-    // last in-scene draw call. Reset clip uniforms to "disabled",
-    // UNCONDITIONALLY: the lastClip* dedup's CPU-side model of encoder
-    // uniform state is not sound across program switches in bgfx, and a
-    // dedup-skip here can leave the composite clipped to the last glass
-    // child's SDF -- only that region of the backbuffer gets rewritten and
-    // everything else keeps the previous frame (moving glass elements leave
-    // permanent trails). Do not route this through applyClipUniforms.
+    /* The full-screen blit must not inherit a stale rounded-clip from the last
+       in-scene draw call. */
     const float clipZero[4] = { 0.f, 0.f, 0.f, 0.f };
     if (bgfx::isValid(u_clipRect))    bgfx::setUniform(u_clipRect,    clipZero);
     if (bgfx::isValid(u_clipParams))  bgfx::setUniform(u_clipParams,  clipZero);
@@ -434,13 +472,35 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV, embedded);
 }
 
-// ============================================================================
-//  Renderer ctor/dtor/lifecycle
-// ============================================================================
-
+/*
+    Renderer() : m_impl(std::make_unique<Impl>()):
+    - Params:   ) : m_impl(std::make_unique<Impl>()
+    - Returns:  R
+    - Desc:     ============================================================
+                ================ Renderer ctor/dtor/lifecycle ==============
+                ============================================================
+                ==
+*/
 Renderer::Renderer() : m_impl(std::make_unique<Impl>()) {}
+/*
+    ~Renderer() { shutdown():
+    - Params:   ) { shutdown(
+    - Returns:  R
+    - Desc:     Shuts the renderer down, releasing the GPU resources and, unless
+                attached to a host's context, the window and bgfx too.
+*/
 Renderer::~Renderer() { shutdown(); }
 
+/*
+    init(uint32_t width, uint32_t height, const std::string& title, uint8_t msaa):
+    - Params:   uint32_t width, uint32_t height, const std::string& title,
+                uint8_t msaa
+    - Returns:  bool
+    - Desc:     Creates the window and brings bgfx up on it, then builds the
+                shaders and the initial framebuffers. Reports false rather than
+                throwing if any stage fails, so an application can fall back or
+                exit cleanly.
+*/
 bool Renderer::init(uint32_t width, uint32_t height,
                     const std::string& title, uint8_t msaa) {
     if (m_initialised) return true;
@@ -457,8 +517,8 @@ bool Renderer::init(uint32_t width, uint32_t height,
         return false;
     }
 
-    // Use real backing-pixel size (HiDPI displays make this larger than the
-    // logical width/height requested above).
+    /* Use real backing-pixel size (HiDPI displays make this larger than the
+       logical width/height requested above). */
     {
         int pxW = (int)width, pxH = (int)height;
         SDL_GetWindowSizeInPixels(m_window, &pxW, &pxH);
@@ -472,10 +532,8 @@ bool Renderer::init(uint32_t width, uint32_t height,
     pd.nwh = SDL_GetPointerProperty(props,
                 SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 #elif defined(SDL_PLATFORM_MACOS)
-    // Pass the CAMetalLayer, not the SDL_MetalView (an NSView): the Metal
-    // backend accepts either, but bgfx's Vulkan/MoltenVK surface creation
-    // only accepts an NSWindow or CAMetalLayer and silently falls back to
-    // Metal when handed a view.
+    /* Pass the CAMetalLayer, not the SDL_MetalView (an NSView): the Metal
+       backend accepts either, but bgfx's Vulkan/MoltenVK surface creation only. */
     pd.nwh = SDL_Metal_GetLayer(SDL_Metal_CreateView(m_window));
 #elif defined(SDL_PLATFORM_LINUX)
     SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
@@ -501,9 +559,7 @@ bool Renderer::init(uint32_t width, uint32_t height,
     init.platformData      = pd;
     init.resolution.width  = width;
     init.resolution.height = height;
-    // Count = let bgfx pick the platform default (Metal / D3D / Vulkan).
-    // UILO_RENDERER overrides for A/B testing without a rebuild:
-    // vulkan | metal | d3d11 | d3d12 | gl | auto.
+    /* Count = let bgfx pick the platform default (Metal / D3D / Vulkan). */
     init.type = bgfx::RendererType::Count;
     if (const char* env = std::getenv("UILO_RENDERER")) {
         const std::string_view want{env};
@@ -516,9 +572,8 @@ bool Renderer::init(uint32_t width, uint32_t height,
         else std::fprintf(stderr, "[UILO] unknown UILO_RENDERER '%s' (ignored)\n", env);
     }
 
-    // Raise transient buffer budgets so dense UI passes (grids, markers,
-    // waveform-like primitives) don't hit allocation cliffs and silently drop
-    // draws mid-frame.
+    /* Raise transient buffer budgets so dense UI passes (grids, markers,
+       waveform-like primitives) don't hit allocation cliffs and silently drop. */
     constexpr uint32_t kTransientVbBytes = 32u * 1024u * 1024u;
     constexpr uint32_t kTransientIbBytes =  8u * 1024u * 1024u;
     init.limits.maxTransientVbSize = std::max(init.limits.maxTransientVbSize,
@@ -532,7 +587,7 @@ bool Renderer::init(uint32_t width, uint32_t height,
     else if (msaa >=  4) resetFlags |= BGFX_RESET_MSAA_X4;
     else if (msaa >=  2) resetFlags |= BGFX_RESET_MSAA_X2;
     init.resolution.reset = resetFlags;
-    // Limit swapchain queued frames (Metal/DXGI) to 1 to minimise input lag.
+    /* Limit swapchain queued frames (Metal/DXGI) to 1 to minimise input lag. */
     init.resolution.maxFrameLatency = 1;
     m_resetFlags = resetFlags;
 
@@ -560,16 +615,25 @@ bool Renderer::init(uint32_t width, uint32_t height,
     return true;
 }
 
+/*
+    attach(SDL_Window* hostWindow, uint16_t baseView):
+    - Params:   SDL_Window* hostWindow, uint16_t baseView
+    - Returns:  bool
+    - Desc:     Embedded mode: binds to a window and bgfx context a host already
+                owns. Skips creation entirely, rebases UILO's views to start
+                after the host's, and clears transparent so the UI composites
+                over the host's image rather than erasing it.
+*/
 bool Renderer::attach(SDL_Window* hostWindow, uint16_t baseView) {
     if (m_initialised) return true;
 
-    m_window      = hostWindow;        // borrowed; not destroyed in shutdown()
-    m_ownsContext = false;             // host owns SDL + bgfx + the frame loop
-    m_impl->embedded = true;           // composite alpha-blends over the host image
-    m_impl->setViewBase(baseView);     // rebase the pipeline views above the host's
-    m_nextViewId  = baseView + 6;      // user framebuffers above UILO's pipeline
+    m_window      = hostWindow;   /* borrowed; not destroyed in shutdown() */
+    m_ownsContext = false;   /* host owns SDL + bgfx + the frame loop */
+    m_impl->embedded = true;   /* composite alpha-blends over the host image */
+    m_impl->setViewBase(baseView);   /* rebase the pipeline views above the host's */
+    m_nextViewId  = baseView + 6;   /* user framebuffers above UILO's pipeline */
 
-    // bgfx + window already exist; just build UILO's own GPU resources.
+    /* bgfx + window already exist; just build UILO's own GPU resources. */
     m_impl->ensureLayouts();
     if (!m_impl->initShaders()) return false;
 
@@ -577,22 +641,33 @@ bool Renderer::attach(SDL_Window* hostWindow, uint16_t baseView) {
     return true;
 }
 
+/*
+    shutdown():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Releases everything init() created, and the window and bgfx
+                context too unless this renderer was attached to a host's.
+*/
 void Renderer::shutdown() {
     if (!m_initialised) return;
-    if (m_impl) m_impl->shutdownResources();   // UILO's own FBs/shaders, both modes
+    if (m_impl) m_impl->shutdownResources();   /* UILO's own FBs/shaders, both modes */
     if (m_ownsContext) {
         bgfx::shutdown();
         if (m_window) SDL_DestroyWindow(m_window);
         SDL_Quit();
     }
-    m_window = nullptr; // borrowed in attach mode; just drop the reference
+    m_window = nullptr;   /* borrowed in attach mode; just drop the reference */
     m_initialised = false;
 }
 
-// ============================================================================
-//  Window / cursor
-// ============================================================================
-
+/*
+    getSize():
+    - Params:   none
+    - Returns:  Vec2u
+    - Desc:     ============================================================
+                ================ Window / cursor ===========================
+                =================================================
+*/
 Vec2u Renderer::getSize() const {
     if (!m_window) return {0u, 0u};
     int w, h;
@@ -600,16 +675,29 @@ Vec2u Renderer::getSize() const {
     return { (unsigned)w, (unsigned)h };
 }
 
+/*
+    setTitle(const std::string& title):
+    - Params:   const std::string& title
+    - Returns:  none
+    - Desc:     Sets the window title.
+*/
 void Renderer::setTitle(const std::string& title) {
     if (m_window) SDL_SetWindowTitle(m_window, title.c_str());
 }
 
+/*
+    getStats():
+    - Params:   none
+    - Returns:  RendererStats
+    - Desc:     Draw-call and vertex counters for the previous frame, for a HUD
+                or profiling.
+*/
 RendererStats Renderer::getStats() const {
     RendererStats out;
     const bgfx::Stats* s = bgfx::getStats();
     if (!s) return out;
     out.numDraw     = s->numDraw;
-    out.numVertices = 0; // bgfx::Stats doesn't break out vertex counts in the public struct
+    out.numVertices = 0;   /* bgfx::Stats doesn't break out vertex counts in the public struct */
     const double toMs = 1000.0 / (double)s->cpuTimerFreq;
     out.cpuTimeMs   = double(s->cpuTimeEnd - s->cpuTimeBegin) * toMs;
     const double gpuToMs = s->gpuTimerFreq ? 1000.0 / (double)s->gpuTimerFreq : 0.0;
@@ -617,6 +705,13 @@ RendererStats Renderer::getStats() const {
     return out;
 }
 
+/*
+    setVsync(bool enabled):
+    - Params:   bool enabled
+    - Returns:  none
+    - Desc:     Turns vertical sync on or off, which takes effect on the next
+                reset.
+*/
 void Renderer::setVsync(bool enabled) {
     uint32_t f = m_resetFlags;
     if (enabled) f |=  BGFX_RESET_VSYNC;
@@ -624,21 +719,33 @@ void Renderer::setVsync(bool enabled) {
     if (f == m_resetFlags) return;
     m_resetFlags = f;
     Vec2u sz = getSize();
-    // maxFrameLatency only applies on full reset with width/height; keep 1.
+    /* maxFrameLatency only applies on full reset with width/height; keep 1. */
     bgfx::reset(sz.x, sz.y, m_resetFlags);
     m_lastWidth  = sz.x;
     m_lastHeight = sz.y;
-    // bgfx::reset can invalidate view->framebuffer bindings on some
-    // backends. Force ensureSceneFramebuffers() to rebuild + re-bind every
-    // reserved view on the next beginFrame by clearing the cached size.
+    /* bgfx::reset can invalidate view->framebuffer bindings on some backends. */
     m_impl->fbWidth  = 0;
     m_impl->fbHeight = 0;
 }
 
+/*
+    getVsync():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether vertical sync is on.
+*/
 bool Renderer::getVsync() const {
     return (m_resetFlags & BGFX_RESET_VSYNC) != 0;
 }
 
+/*
+    setFramerateLimit(float fps):
+    - Params:   float fps
+    - Returns:  none
+    - Desc:     Caps the frame rate by sleeping out the remainder of each frame.
+                0 removes the cap. Useful with vsync off, where an unbounded
+                loop would spin the GPU for no visible benefit.
+*/
 void Renderer::setFramerateLimit(float fps) {
     if (fps <= 0.f || !std::isfinite(fps)) {
         m_frameInterval = 0.0;
@@ -646,13 +753,26 @@ void Renderer::setFramerateLimit(float fps) {
         return;
     }
     m_frameInterval = 1.0 / (double)fps;
-    m_nextFrameTick = 0; // re-anchor on next endFrame()
+    m_nextFrameTick = 0;   /* re-anchor on next endFrame() */
 }
 
+/*
+    getFramerateLimit():
+    - Params:   none
+    - Returns:  float
+    - Desc:     The current frame-rate cap, 0 when uncapped.
+*/
 float Renderer::getFramerateLimit() const {
     return m_frameInterval > 0.0 ? (float)(1.0 / m_frameInterval) : 0.f;
 }
 
+/*
+    setCursor(CursorType type):
+    - Params:   CursorType type
+    - Returns:  none
+    - Desc:     Applies a cursor shape to the window, creating and caching the
+                system cursor on first use.
+*/
 void Renderer::setCursor(CursorType type) {
     auto& impl = *m_impl;
     int key = (int)type;
@@ -676,40 +796,43 @@ void Renderer::setCursor(CursorType type) {
     if (cur) SDL_SetCursor(cur);
 }
 
-// ============================================================================
-//  Frame lifecycle / projection
-// ============================================================================
-
+/*
+    beginFrame():
+    - Params:   none
+    - Returns:  none
+    - Desc:     ============================================================
+                ================ Frame lifecycle / projection ==============
+                ============================================================
+                ==
+*/
 void Renderer::beginFrame() {
     Vec2u sz = getSize();
     if (sz.x != m_lastWidth || sz.y != m_lastHeight) {
-        if (m_ownsContext) bgfx::reset(sz.x, sz.y, m_resetFlags); // host owns reset when embedded
+        if (m_ownsContext) bgfx::reset(sz.x, sz.y, m_resetFlags);   /* host owns reset when embedded */
         m_lastWidth  = sz.x;
         m_lastHeight = sz.y;
     }
-    // Wall-clock timer for animated materials. Use real time (not dt) so
-    // animation rate is independent of vsync / framerate-cap.
+    /* Wall-clock timer for animated materials. Use real time (not dt) so
+       animation rate is independent of vsync / framerate-cap. */
     {
         using clock = std::chrono::steady_clock;
         static const auto s_t0 = clock::now();
         const auto now = clock::now();
         m_impl->elapsed = std::chrono::duration<float>(now - s_t0).count();
     }
-    // (Re)create offscreen scene + blur framebuffers if the window resized.
+    /* (Re)create offscreen scene + blur framebuffers if the window resized. */
     m_impl->ensureSceneFramebuffers(sz.x, sz.y);
 
-    // Predict whether this frame will use glass based on what we saw
-    // last frame. When bypassing, view 0 renders straight to the
-    // backbuffer and the endFrame pipeline (blur+replay+composite) is
-    // skipped entirely.
+    /* Predict whether this frame will use glass based on what we saw last
+       frame. */
     m_impl->bypassSceneFb     = !m_impl->hadGlassLastFrame;
     m_impl->hadGlassThisFrame = false;
 
-    // Embedded: never bypass to the backbuffer (that would clear the host's
-    // scene). Always render to sceneFB, then composite over the host image.
+    /* Embedded: never bypass to the backbuffer (that would clear the host's
+       scene). Always render to sceneFB, then composite over the host image. */
     if (!m_ownsContext) m_impl->bypassSceneFb = false;
 
-    // Scene view → sceneFB (set every frame in case bgfx reset clobbered it).
+    /* Scene view → sceneFB (set every frame in case bgfx reset clobbered it). */
     const uint16_t sceneView = m_impl->kSceneViewId;
     if (m_impl->bypassSceneFb) {
         bgfx::setViewFrameBuffer(sceneView, BGFX_INVALID_HANDLE);
@@ -717,43 +840,46 @@ void Renderer::beginFrame() {
         bgfx::setViewFrameBuffer(sceneView, m_impl->sceneFB);
     }
     bgfx::setViewRect(sceneView, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
-    // Transparent clear when embedded so the UI composites over the host scene.
+    /* Transparent clear when embedded so the UI composites over the host
+       scene. */
     const uint32_t sceneClear = m_ownsContext ? 0x000000ff : 0x00000000;
     bgfx::setViewClear(sceneView, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, sceneClear, 1.f, 0);
     bgfx::setViewMode(sceneView, bgfx::ViewMode::Sequential);
     submitOrtho(sceneView, sz);
     bgfx::touch(sceneView);
 
-    // Defensively clear any rotation left set by user code from the last
-    // frame so internal/system draws (composite, blur, etc.) never inherit.
+    /* Defensively clear any rotation left set by user code from the last frame
+       so internal/system draws (composite, blur, etc.) never inherit. */
     clearRotation();
     m_impl->deferredGlass.clear();
-    // Reset clip-uniform dedup so the first draw of the frame always
-    // pushes its uniforms (bgfx uniform state isn't guaranteed to
-    // persist across bgfx::frame()).
+    /* Reset clip-uniform dedup so the first draw of the frame always pushes
+       its uniforms (bgfx uniform state isn't guaranteed to persist across. */
     m_impl->lastClipValid = false;
-    // Defensive reset: clip stacks should be balanced each frame.
+    /* Defensive reset: clip stacks should be balanced each frame. */
     m_impl->scissorTop = 0;
     m_impl->roundClipTop = 0;
     m_impl->scissorOverflowDepth = 0;
     m_impl->roundClipOverflowDepth = 0;
 }
 
+/*
+    endFrame():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Flush any rects still sitting in the solid-rect batch from
+                the last user draw call before kicking off internal passes.
+*/
 void Renderer::endFrame() {
-    // Flush any rects still sitting in the solid-rect batch from the
-    // last user draw call before kicking off internal passes.
     m_impl->flushSolidBatch();
 
-    // Carry the per-frame glass-presence flag into the next frame's
-    // prediction. Done before the early-out below so the next frame
-    // correctly switches back to the FB pipeline when glass appeared.
+    /* Carry the per-frame glass-presence flag into the next frame's prediction. */
     m_impl->hadGlassLastFrame = m_impl->hadGlassThisFrame;
 
     if (m_impl->bypassSceneFb) {
-        // Scene was rendered directly to backbuffer; nothing else to do.
+        /* Scene was rendered directly to backbuffer; nothing else to do. */
         m_impl->deferredGlass.clear();
-        if (m_ownsContext) bgfx::frame(); // host presents when embedded
-        // Framerate cap (unchanged from the FB path below).
+        if (m_ownsContext) bgfx::frame();   /* host presents when embedded */
+        /* Framerate cap (unchanged from the FB path below). */
         if (m_frameInterval > 0.0) {
             using clock = std::chrono::steady_clock;
             const auto now    = clock::now();
@@ -781,29 +907,24 @@ void Renderer::endFrame() {
         return;
     }
 
-    // After the scene has been submitted to sceneFB (without any glass
-    // elements — those were deferred), run the blur ladder so glass
-    // samples a glass-free backdrop, then replay the deferred glass
-    // draws into sceneFB, then composite.
+    /* After the scene has been submitted to sceneFB (without any glass
+       elements — those were deferred), run the blur ladder so glass samples a. */
     Vec2u sz = getSize();
-    // Skip the (expensive) blur ladder + glass replay entirely when no
-    // glass material drew this frame. The blur target's contents become
-    // stale but nothing samples them this frame, so it doesn't matter.
+    /* Skip the (expensive) blur ladder + glass replay entirely when no glass
+       material drew this frame. */
     const bool anyGlass = !m_impl->deferredGlass.empty();
     if (anyGlass) {
         m_impl->runBlurPasses(sz.x, sz.y);
     }
 
     if (!m_impl->deferredGlass.empty()) {
-        // kGlassBgViewId was configured in beginFrame; push it so
-        // drawGlass submits there during replay. It executes BEFORE
-        // kGlassChildViewId (where child elements were submitted), so
-        // glass backgrounds end up beneath their children in sceneFB.
+        /* kGlassBgViewId was configured in beginFrame; push it so drawGlass
+           submits there during replay. */
         m_viewStack[m_viewStackTop++] = { m_impl->kGlassBgViewId };
         m_impl->replayingGlass = true;
         for (const auto& d : m_impl->deferredGlass) {
-            // Re-establish the scissor that was active at capture time.
-            // (Push then pop around each replay so they don't accumulate.)
+            /* Re-establish the scissor that was active at capture time. (Push
+               then pop around each replay so they don't accumulate.) */
             if (d.hasScissor) {
                 m_impl->scissorStack[m_impl->scissorTop++] =
                     { d.sx, d.sy, d.sw, d.sh };
@@ -822,7 +943,7 @@ void Renderer::endFrame() {
                                        m_impl->texLayout,
                                        m_impl->texProgram);
 
-    if (m_ownsContext) bgfx::frame(); // host presents when embedded
+    if (m_ownsContext) bgfx::frame();   /* host presents when embedded */
     if (m_frameInterval > 0.0) {
         using clock = std::chrono::steady_clock;
         const auto now    = clock::now();
@@ -830,14 +951,14 @@ void Renderer::endFrame() {
                                 std::chrono::nanoseconds>(now.time_since_epoch()).count();
         const uint64_t intervalNs = (uint64_t)(m_frameInterval * 1e9);
         if (m_nextFrameTick == 0 || nowNs > m_nextFrameTick + intervalNs) {
-            // First call or we drifted way behind: re-anchor.
+            /* First call or we drifted way behind: re-anchor. */
             m_nextFrameTick = nowNs + intervalNs;
         } else {
             if (nowNs < m_nextFrameTick) {
                 const uint64_t waitNs = m_nextFrameTick - nowNs;
-                // Sleep most of the remaining time, leaving ~0.5 ms for a
-                // short spin so we don't overshoot due to scheduler latency.
-                constexpr uint64_t spinMarginNs = 500'000; // 0.5 ms
+                /* Sleep most of the remaining time, leaving ~0.5 ms for a
+                   short spin so we don't overshoot due to scheduler latency. */
+                constexpr uint64_t spinMarginNs = 500'000;   /* 0.5 ms */
                 if (waitNs > spinMarginNs) {
                     std::this_thread::sleep_for(
                         std::chrono::nanoseconds(waitNs - spinMarginNs));
@@ -852,6 +973,14 @@ void Renderer::endFrame() {
     }
 }
 
+/*
+    submitOrtho(uint16_t viewId, Vec2u size):
+    - Params:   uint16_t viewId, Vec2u size
+    - Returns:  none
+    - Desc:     Sets a view's orthographic projection so one unit is one pixel
+                with the origin at the top left, which is the space every
+                element's bounds are expressed in.
+*/
 void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
     const float W  = (float)size.x;
     const float H  = (float)size.y;
@@ -868,15 +997,26 @@ void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
     bgfx::setViewTransform(viewId, nullptr, ortho);
 }
 
+/*
+    currentViewId():
+    - Params:   none
+    - Returns:  uint16_t
+    - Desc:     The view currently being drawn into, which is the top of the
+                framebuffer stack or the scene view when that stack is empty.
+*/
 uint16_t Renderer::currentViewId() const {
     if (m_viewStackTop > 0) return m_viewStack[m_viewStackTop - 1].viewId;
-    return m_impl->kSceneViewId; // rebased scene view (was hardcoded 0)
+    return m_impl->kSceneViewId;   /* rebased scene view (was hardcoded 0) */
 }
 
-// ============================================================================
-//  Framebuffer
-// ============================================================================
-
+/*
+    createFrameBuffer(Vec2u size):
+    - Params:   Vec2u size
+    - Returns:  FrameBuffer
+    - Desc:     ============================================================
+                ================ Framebuffer ===============================
+                =============================================
+*/
 FrameBuffer Renderer::createFrameBuffer(Vec2u size) {
     FrameBuffer fb;
     fb.size   = size;
@@ -894,12 +1034,25 @@ FrameBuffer Renderer::createFrameBuffer(Vec2u size) {
     return fb;
 }
 
+/*
+    resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize):
+    - Params:   FrameBuffer& fb, Vec2u newSize
+    - Returns:  none
+    - Desc:     Resizes a framebuffer by recreating it, since a bgfx
+                framebuffer's dimensions are fixed at creation.
+*/
 void Renderer::resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize) {
     if (fb.size == newSize) return;
     destroyFrameBuffer(fb);
     fb = createFrameBuffer(newSize);
 }
 
+/*
+    destroyFrameBuffer(FrameBuffer& fb):
+    - Params:   FrameBuffer& fb
+    - Returns:  none
+    - Desc:     Destroys a framebuffer and its texture.
+*/
 void Renderer::destroyFrameBuffer(FrameBuffer& fb) {
     if (!fb.valid()) return;
     bgfx::FrameBufferHandle h{ fb.handle };
@@ -907,6 +1060,14 @@ void Renderer::destroyFrameBuffer(FrameBuffer& fb) {
     fb.handle = UINT16_MAX;
 }
 
+/*
+    pushFrameBuffer(FrameBuffer& fb):
+    - Params:   FrameBuffer& fb
+    - Returns:  none
+    - Desc:     Redirects drawing into a framebuffer until the matching pop.
+                Used to render a subtree offscreen so it can be composited as a
+                unit.
+*/
 void Renderer::pushFrameBuffer(FrameBuffer& fb) {
     m_impl->flushSolidBatch();
     assert(m_viewStackTop < kMaxViewStack);
@@ -915,35 +1076,67 @@ void Renderer::pushFrameBuffer(FrameBuffer& fb) {
     submitOrtho(fb.viewId, fb.size);
 }
 
+/*
+    popFrameBuffer():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Returns drawing to whatever target was active before the
+                matching push.
+*/
 void Renderer::popFrameBuffer() {
     m_impl->flushSolidBatch();
     if (m_viewStackTop > 0) --m_viewStackTop;
 }
 
+/*
+    beginGlassSubtree():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Opens a glass group, so every element drawn until the matching
+                end composites into the blur the material established rather
+                than each blurring the backdrop separately.
+*/
 void Renderer::beginGlassSubtree() {
     m_impl->flushSolidBatch();
     assert(m_viewStackTop < kMaxViewStack);
     m_viewStack[m_viewStackTop++] = { m_impl->kGlassChildViewId };
 }
 
+/*
+    endGlassSubtree():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Closes the glass group opened by beginGlassSubtree.
+*/
 void Renderer::endGlassSubtree() {
     m_impl->flushSolidBatch();
     if (m_viewStackTop > 0) --m_viewStackTop;
 }
 
+/*
+    drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint):
+    - Params:   const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint
+    - Returns:  none
+    - Desc:     Draws a framebuffer's texture as a tinted quad, which is how an
+                offscreen subtree is composited back into the scene.
+*/
 void Renderer::drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size,
                                 Color tint) {
     (void)fb; (void)dest; (void)size; (void)tint;
-    // TODO: textured-quad blit of fb's color attachment
+    /* TODO: textured-quad blit of fb's color attachment */
 }
 
-// ============================================================================
-//  Scissor
-// ============================================================================
-
+/*
+    pushScissor(Rectf b):
+    - Params:   Rectf b
+    - Returns:  none
+    - Desc:     ============================================================
+                ================ Scissor ===================================
+                =========================================
+*/
 void Renderer::pushScissor(Rectf b) {
-    // No batch flush here: the solid-rect batch flushes lazily on state
-    // mismatch at the next draw (see draw(Rect)).
+    /* No batch flush here: the solid-rect batch flushes lazily on state
+       mismatch at the next draw (see draw(Rect)). */
     auto& impl = *m_impl;
     if (impl.scissorTop >= Impl::kMaxScissor) {
         ++impl.scissorOverflowDepth;
@@ -962,9 +1155,8 @@ void Renderer::pushScissor(Rectf b) {
         b.size     = {std::max(0.f, nx2 - nx), std::max(0.f, ny2 - ny)};
     }
 
-    // Quantize to integer pixel bounds conservatively: floor min edges and
-    // ceil max edges so clipping remains symmetric and stable as UI scale
-    // introduces fractional coordinates.
+    /* Quantize to integer pixel bounds conservatively: floor min edges and
+       ceil max edges so clipping remains symmetric and stable as UI scale. */
     const float qx0f = std::floor(b.position.x);
     const float qy0f = std::floor(b.position.y);
     const float qx1f = std::ceil(b.position.x + b.size.x);
@@ -988,6 +1180,12 @@ void Renderer::pushScissor(Rectf b) {
     };
 }
 
+/*
+    popScissor():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Restores the clip rectangle in force before the matching push.
+*/
 void Renderer::popScissor() {
     if (m_impl->scissorOverflowDepth > 0) {
         --m_impl->scissorOverflowDepth;
@@ -996,6 +1194,14 @@ void Renderer::popScissor() {
     if (m_impl->scissorTop > 0) --m_impl->scissorTop;
 }
 
+/*
+    pushRoundClip(Rectf b, float radius):
+    - Params:   Rectf b, float radius
+    - Returns:  none
+    - Desc:     Clips to a rounded rectangle. A radius of 0 is a plain scissor;
+                anything larger also feeds the rounded mask the shaders test
+                against, so content cannot spill past a corner.
+*/
 void Renderer::pushRoundClip(Rectf b, float radius) {
     auto& impl = *m_impl;
     pushScissor(b);
@@ -1003,24 +1209,23 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
         ++impl.roundClipOverflowDepth;
         return;
     }
-    ++impl.clipVersion;    // stack changes below; invalidate the clip cache
+    ++impl.clipVersion;   /* stack changes below; invalidate the clip cache */
     float r = std::max(0.f, radius);
     if (r <= 0.f) {
-        // Plain rectangle: still record an "off" entry so pop balances
-        // and (when there's already a rounded parent clip) the parent
-        // clip still applies to children that don't add their own.
+        /* Plain rectangle: still record an "off" entry so pop balances and
+           (when there's already a rounded parent clip) the parent clip still. */
         if (impl.roundClipTop == 0) {
             impl.roundClipStack[impl.roundClipTop++] = {0.f, 0.f, 0.f, 0.f, -1.f};
         } else {
-            // Inherit parent's clip verbatim so SDF mask doesn't change.
+            /* Inherit parent's clip verbatim so SDF mask doesn't change. */
             impl.roundClipStack[impl.roundClipTop] =
                 impl.roundClipStack[impl.roundClipTop - 1];
             impl.roundClipTop++;
         }
         return;
     }
-    // Snap rounded clip bounds to pixel edges to keep AA and corner shape
-    // visually consistent across scales.
+    /* Snap rounded clip bounds to pixel edges to keep AA and corner shape
+       visually consistent across scales. */
     const float x0 = std::floor(b.position.x);
     const float y0 = std::floor(b.position.y);
     const float x1 = std::ceil(b.position.x + b.size.x);
@@ -1030,18 +1235,17 @@ void Renderer::pushRoundClip(Rectf b, float radius) {
     float halfH = std::max(0.f, (y1 - y0) * 0.5f);
     float cx    = x0 + halfW;
     float cy    = y0 + halfH;
-    // Do NOT intersect the child's rounded-rect SDF with the parent's
-    // rect. The SDF defines the *shape* of this element (circle, pill,
-    // rounded button, etc.); shrinking halfW/halfH to the visible
-    // intersection would force the radius to clamp against min(halfW,
-    // halfH) and visually squash the corners as the element overflows
-    // the parent. Rectangular cropping is already handled by the
-    // scissor pushed above; soft cropping by the parent's rounded edge
-    // is an acceptable trade-off we skip here.
+    /* Do NOT intersect the child's rounded-rect SDF with the parent's rect. */
     r = std::min(r, std::min(halfW, halfH));
     impl.roundClipStack[impl.roundClipTop++] = {cx, cy, halfW, halfH, r};
 }
 
+/*
+    popRoundClip():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Restores the rounded clip in force before the matching push.
+*/
 void Renderer::popRoundClip() {
     auto& impl = *m_impl;
     if (impl.roundClipOverflowDepth > 0) {
@@ -1053,10 +1257,15 @@ void Renderer::popRoundClip() {
     popScissor();
 }
 
+/*
+    setRotation(float degrees, Vec2f pivot):
+    - Params:   float degrees, Vec2f pivot
+    - Returns:  none
+    - Desc:     No flush: rotation is applied CPU-side when vertices are
+                appended, so rects already queued in the batch keep the
+                rotation they were emitted under.
+*/
 void Renderer::setRotation(float degrees, Vec2f pivot) {
-    // No flush: rotation is applied CPU-side when vertices are appended,
-    // so rects already queued in the batch keep the rotation they were
-    // emitted under.
     auto& r = m_impl->rotation;
     r.pivotX   = pivot.x;
     r.pivotY   = pivot.y;
@@ -1067,6 +1276,13 @@ void Renderer::setRotation(float degrees, Vec2f pivot) {
     r.enabled = std::abs(r.sinA) > 1e-6f || std::abs(r.cosA - 1.f) > 1e-6f;
 }
 
+/*
+    rotate(float deltaDegrees):
+    - Params:   float deltaDegrees
+    - Returns:  none
+    - Desc:     Rotates subsequent drawing about the current origin,
+                accumulating with any rotation already in force.
+*/
 void Renderer::rotate(float deltaDegrees) {
     auto& r = m_impl->rotation;
     r.angleDeg += deltaDegrees;
@@ -1076,6 +1292,12 @@ void Renderer::rotate(float deltaDegrees) {
     r.enabled = std::abs(r.sinA) > 1e-6f || std::abs(r.cosA - 1.f) > 1e-6f;
 }
 
+/*
+    clearRotation():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Drops any accumulated rotation.
+*/
 void Renderer::clearRotation() {
     auto& r = m_impl->rotation;
     r.angleDeg = 0.f;
@@ -1084,10 +1306,16 @@ void Renderer::clearRotation() {
     r.enabled = false;
 }
 
+/*
+    setMouseState(Vec2f mousePosFbPx):
+    - Params:   Vec2f mousePosFbPx
+    - Returns:  none
+    - Desc:     Detect motion vs the previous frame so animated materials
+                can fade the ripple amplitude when the cursor sits still.
+                Threshold avoids sub-pixel noise from triggering constant
+                "moving" state.
+*/
 void Renderer::setMouseState(Vec2f mousePosFbPx) {
-    // Detect motion vs the previous frame so animated materials can fade
-    // the ripple amplitude when the cursor sits still. Threshold avoids
-    // sub-pixel noise from triggering constant "moving" state.
     const float dx = mousePosFbPx.x - m_mousePosPrev.x;
     const float dy = mousePosFbPx.y - m_mousePosPrev.y;
     if (dx * dx + dy * dy > 0.25f) {
@@ -1097,6 +1325,12 @@ void Renderer::setMouseState(Vec2f mousePosFbPx) {
     m_mousePos     = mousePosFbPx;
 }
 
+/*
+    clear(Color color):
+    - Params:   Color color
+    - Returns:  none
+    - Desc:     Clears the scene target to a colour, which begins a frame.
+*/
 void Renderer::clear(Color color) {
     m_impl->flushSolidBatch();
     uint32_t rgba = (uint32_t(color.r) << 24) | (uint32_t(color.g) << 16) |
@@ -1106,18 +1340,23 @@ void Renderer::clear(Color color) {
     bgfx::touch(currentViewId());
 }
 
-// ============================================================================
-//  Shape drawing
-// ============================================================================
+/* ============================================================================
+   Shape drawing. */
 
 static constexpr float kDeg2Rad = 3.14159265f / 180.f;
 
-// Walk the clip stack from the top down and collect the two top-most rounded
-// entries (radius > 0). The first becomes the "inner" SDF (the shape being
-// drawn, e.g. a button's own rounded body); the second becomes the "outer"
-// SDF (the enclosing rounded ancestor, e.g. the parent panel). Both are
-// applied in the fragment shader, so a child element stays its own shape AND
-// gets cropped by the parent's rounded corners.
+/*
+    refreshClipCache():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Walk the clip stack from the top down and collect the two
+                top-most rounded entries (radius > 0). The first becomes the
+                "inner" SDF (the shape being drawn, e.g. a button's own
+                rounded body); the second becomes the "outer" SDF (the
+                enclosing rounded ancestor, e.g. the parent panel). Both are
+                applied in the fragment shader, so a child element stays its
+                own shape AND gets cropped by the parent's rounded corners.
+*/
 void Renderer::Impl::refreshClipCache() {
     if (curClipVersion == clipVersion) return;
     for (int i = 0; i < 4; ++i) {
@@ -1144,6 +1383,15 @@ void Renderer::Impl::refreshClipCache() {
     curClipVersion = clipVersion;
 }
 
+/*
+    batchStateMatches(uint16_t viewId):
+    - Params:   uint16_t viewId
+    - Returns:  bool
+    - Desc:     Whether a new shape can join the batch already being built.
+                Batching is only valid while the view, clip and transform are
+                unchanged, so this is what decides between appending and
+                flushing first.
+*/
 bool Renderer::Impl::batchStateMatches(uint16_t viewId) {
     if (solidBatchView != viewId) return false;
     const bool hasSc = scissorTop > 0;
@@ -1160,6 +1408,13 @@ bool Renderer::Impl::batchStateMatches(uint16_t viewId) {
         && std::memcmp(curClipParams2, batchClipParams2, sizeof(curClipParams2)) == 0;
 }
 
+/*
+    captureBatchState(uint16_t viewId):
+    - Params:   uint16_t viewId
+    - Returns:  none
+    - Desc:     Records the view, clip and transform a batch was started under,
+                so batchStateMatches has something to compare against.
+*/
 void Renderer::Impl::captureBatchState(uint16_t viewId) {
     solidBatchView  = viewId;
     batchHasScissor = scissorTop > 0;
@@ -1172,7 +1427,14 @@ void Renderer::Impl::captureBatchState(uint16_t viewId) {
 }
 
 namespace {
-// Center-vertex color for gradient quads: the average of the four corners.
+
+/*
+    packAvgColor(Color a, Color b, Color c, Color d):
+    - Params:   Color a, Color b, Color c, Color d
+    - Returns:  inline uint32_t
+    - Desc:     Center-vertex color for gradient quads: the average of the
+                four corners.
+*/
 inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
     return packColor(Color{
         uint8_t((a.r + b.r + c.r + d.r) / 4),
@@ -1182,13 +1444,19 @@ inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
 }
 } // anon
 
+/*
+    draw(const Rect& r):
+    - Params:   const Rect& r
+    - Returns:  none
+    - Desc:     Queues an axis-aligned rectangle, with an optional inside border
+                and per-corner gradient, into the solid batch.
+*/
 void Renderer::draw(const Rect& r) {
     auto& impl = *m_impl;
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
 
-    // Lazy flush: only break the batch when this rect's pipeline state
-    // (view + scissor + round-clip) differs from what the queued rects
-    // were recorded under.
+    /* Lazy flush: only break the batch when this rect's pipeline state (view +
+       scissor + round-clip) differs from what the queued rects were recorded. */
     const uint16_t view = currentViewId();
     if (!impl.solidBatchVerts.empty() && !impl.batchStateMatches(view))
         impl.flushSolidBatch();
@@ -1205,7 +1473,7 @@ void Renderer::draw(const Rect& r) {
     impl.rotPt(x0, y0); impl.rotPt(x1, y1);
     impl.rotPt(x2, y2); impl.rotPt(x3, y3);
 
-    // Vertex order is TL, TR, BR, BL.
+    /* Vertex order is TL, TR, BR, BL. */
     uint32_t c0, c1, c2, c3;
     if (r.gradient) {
         c0 = packColor(r.colorTL); c1 = packColor(r.colorTR);
@@ -1216,8 +1484,8 @@ void Renderer::draw(const Rect& r) {
 
     const uint16_t vertsNeeded = r.gradient ? 5 : 4;
     const uint16_t base = (uint16_t)impl.solidBatchVerts.size();
-    // A frame can legitimately overflow uint16_t indices (65535 / 4 = 16383
-    // rects). Flush before crossing the line.
+    /* A frame can legitimately overflow uint16_t indices (65535 / 4 = 16383
+       rects). Flush before crossing the line. */
     if (base + vertsNeeded > 65532) {
         impl.flushSolidBatch();
         impl.captureBatchState(view);
@@ -1235,10 +1503,8 @@ void Renderer::draw(const Rect& r) {
         impl.solidBatchIdx.push_back(b2 + 2);
         impl.solidBatchIdx.push_back(b2 + 3);
     } else {
-        // Two triangles interpolate a 4-corner gradient with a visible seam
-        // along the shared diagonal whenever the corner colors aren't
-        // coplanar; a center vertex at the average color keeps the blend
-        // symmetric.
+        /* Two triangles interpolate a 4-corner gradient with a visible seam
+           along the shared diagonal whenever the corner colors aren't. */
         float cx = x + w * 0.5f, cy = y + h * 0.5f;
         impl.rotPt(cx, cy);
         impl.solidBatchVerts.push_back(
@@ -1257,6 +1523,14 @@ void Renderer::draw(const Rect& r) {
     }
 }
 
+/*
+    flushSolidBatch():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Submits the accumulated solid geometry as one draw call and
+                empties the batch. Called whenever the state changes or a
+                textured draw has to be ordered against it.
+*/
 void Renderer::Impl::flushSolidBatch() {
     if (solidBatchVerts.empty() || solidBatchView == UINT16_MAX) {
         solidBatchVerts.clear();
@@ -1280,10 +1554,8 @@ void Renderer::Impl::flushSolidBatch() {
         bgfx::setIndexBuffer(&tib);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
                        BGFX_STATE_BLEND_ALPHA);
-        // Apply the scissor/round-clip snapshot captured when the batch
-        // started. Flushing is lazy, so the live stacks may have changed
-        // since these rects were queued — the snapshot is what they were
-        // actually drawn under.
+        /* Apply the scissor/round-clip snapshot captured when the batch
+           started. */
         if (batchHasScissor)
             bgfx::setScissor(batchScissor.x, batchScissor.y,
                              batchScissor.w, batchScissor.h);
@@ -1296,6 +1568,15 @@ void Renderer::Impl::flushSolidBatch() {
     solidBatchView = UINT16_MAX;
 }
 
+/*
+    draw(const RoundedRect& rr):
+    - Params:   const RoundedRect& rr
+    - Returns:  none
+    - Desc:     Queues a rounded rectangle. The fill is masked by a signed-
+                distance test in the shader; the border is a true inside ring --
+                four annular corners and four straight bars -- drawn after the
+                fill so it is visible over a transparent one.
+*/
 void Renderer::draw(const RoundedRect& rr) {
     auto& impl = *m_impl;
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
@@ -1311,14 +1592,12 @@ void Renderer::draw(const RoundedRect& rr) {
         return;
     }
 
-    // Immediate-mode submits below: flush queued rects first so draw order
-    // is preserved (push/popRoundClip no longer flush).
+    /* Immediate-mode submits below: flush queued rects first so draw order is
+       preserved (push/popRoundClip no longer flush). */
     impl.flushSolidBatch();
 
-    // Render the outline as a slightly larger rounded rect underneath, then
-    // the fill on top. Each is a single quad masked by the fragment-shader
-    // SDF clip — anti-aliased corners with no per-corner tessellation, which
-    // also means a gradient fill is nothing more than per-vertex colors.
+    /* Render the outline as a slightly larger rounded rect underneath, then
+       the fill on top. */
     auto submitQuad = [&](float x, float y, float w, float h,
                           Color cTL, Color cTR, Color cBR, Color cBL,
                           bool gradient) {
@@ -1333,11 +1612,11 @@ void Renderer::draw(const RoundedRect& rr) {
             {x1, y1, packColor(cTR)},
             {x2, y2, packColor(cBR)},
             {x3, y3, packColor(cBL)},
-            {0.f, 0.f, 0u},             // center, used for gradients only
+            {0.f, 0.f, 0u},   /* center, used for gradients only */
         };
         static constexpr uint16_t idxQuad[6]  = {0,1,2, 0,2,3};
-        // Center-vertex fan: see draw(Rect) — avoids the diagonal seam on
-        // non-coplanar corner colors.
+        /* Center-vertex fan: see draw(Rect) — avoids the diagonal seam on
+           non-coplanar corner colors. */
         static constexpr uint16_t idxFan[12]  = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
         const uint16_t* idx  = idxQuad;
         uint32_t        numV = 4, numI = 6;
@@ -1362,19 +1641,6 @@ void Renderer::draw(const RoundedRect& rr) {
         bgfx::submit(currentViewId(), impl.solidProgram);
     };
 
-    if (rr.outlineThickness > 0.f && rr.outlineColor.a > 0) {
-        const float t  = rr.outlineThickness;
-        const float ox = rr.position.x - t;
-        const float oy = rr.position.y - t;
-        const float ow = rr.size.x + t * 2.f;
-        const float oh = rr.size.y + t * 2.f;
-        const float orad = r + t;
-        pushRoundClip({{ox, oy}, {ow, oh}}, orad);
-        submitQuad(ox, oy, ow, oh, rr.outlineColor, rr.outlineColor,
-                   rr.outlineColor, rr.outlineColor, false);
-        popRoundClip();
-    }
-
     pushRoundClip({rr.position, rr.size}, r);
     if (rr.gradient) {
         submitQuad(rr.position.x, rr.position.y, rr.size.x, rr.size.y,
@@ -1384,18 +1650,64 @@ void Renderer::draw(const RoundedRect& rr) {
                    rr.fillColor, rr.fillColor, rr.fillColor, rr.fillColor, false);
     }
     popRoundClip();
+    if (rr.outlineThickness > 0.f && rr.outlineColor.a > 0) {
+        /* A true ring -- four annular corners plus four straight edges --
+           drawn *inside* the bounds. */
+        const float t   = std::min(rr.outlineThickness,
+                                   std::min(rr.size.x, rr.size.y) * 0.5f);
+        const float x   = rr.position.x, y = rr.position.y;
+        const float w   = rr.size.x,     h = rr.size.y;
+        const float ir  = std::max(0.f, r - t);
+        const Color oc  = rr.outlineColor;
+        /* Enough segments to stay smooth at the radii a UI uses. */
+        const int   seg = std::max(4, static_cast<int>(r * 0.75f) + 4);
+
+        /* drawArc antialiases by fading out over roughly a pixel past each
+           radial edge, so a band handed to it straight reads about a pixel. */
+        constexpr float kArcFade = 0.5f;
+        const float aOuter = std::max(0.f, r  - kArcFade);
+        const float aInner = std::min(aOuter, std::max(0.f, ir + kArcFade));
+
+        /* Corners. Angles are cartesian with 0 = +x and y running down the
+           screen, so an increasing sweep travels clockwise as drawn. */
+        drawArc({x + r,     y + r    }, aInner, aOuter, 180.f, 270.f, oc, seg);   /* top-left */
+        drawArc({x + w - r, y + r    }, aInner, aOuter, 270.f, 360.f, oc, seg);   /* top-right */
+        drawArc({x + w - r, y + h - r}, aInner, aOuter,   0.f,  90.f, oc, seg);   /* bottom-right */
+        drawArc({x + r,     y + h - r}, aInner, aOuter,  90.f, 180.f, oc, seg);   /* bottom-left */
+
+        /* Edges, spanning the straight runs between the corners. */
+        const float midW = std::max(0.f, w - 2.f * r);
+        const float midH = std::max(0.f, h - 2.f * r);
+        if (midW > 0.f) {
+            draw(Rect{{x + r, y        }, {midW, t}, oc});
+            draw(Rect{{x + r, y + h - t}, {midW, t}, oc});
+        }
+        if (midH > 0.f) {
+            draw(Rect{{x,         y + r}, {t, midH}, oc});
+            draw(Rect{{x + w - t, y + r}, {t, midH}, oc});
+        }
+        /* draw(Rect) queues into the solid batch; flush so the edges land with
+           the arcs rather than behind a later immediate-mode submit. */
+        impl.flushSolidBatch();
+    }
+
 }
 
+/*
+    draw(const Circle& c):
+    - Params:   const Circle& c
+    - Returns:  none
+    - Desc:     Queues a circle, tessellated to a segment count that keeps the
+                silhouette smooth at its drawn size.
+*/
 void Renderer::draw(const Circle& c) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
     if (c.radius <= 0.f || c.fillColor.a == 0) return;
 
-    // Render as a rounded-rect with radius == half-size — the fragment
-    // shader SDF gives proper sub-pixel AA, matching Button/Dropdown.
-    // Inflate the quad by 1px so the AA falloff has room outside the
-    // disc's geometric bounds (the SDF eats ~1px of edge).
+    /* Render as a rounded-rect with radius == half-size — the fragment shader
+       SDF gives proper sub-pixel AA, matching Button/Dropdown. */
     const float r   = c.radius;
     const float pad = 1.f;
     const float x   = c.center.x - r - pad;
@@ -1438,6 +1750,12 @@ void Renderer::draw(const Circle& c) {
     popRoundClip();
 }
 
+/*
+    draw(const Triangle& t):
+    - Params:   const Triangle& t
+    - Returns:  none
+    - Desc:     Queues a triangle.
+*/
 void Renderer::draw(const Triangle& t) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
@@ -1471,6 +1789,12 @@ void Renderer::draw(const Triangle& t) {
     bgfx::submit(currentViewId(), impl.solidProgram);
 }
 
+/*
+    draw(const Line& l):
+    - Params:   const Line& l
+    - Returns:  none
+    - Desc:     Queues a single line as a quad expanded to its thickness.
+*/
 void Renderer::draw(const Line& l) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
@@ -1481,20 +1805,19 @@ void Renderer::draw(const Line& l) {
     float len = std::sqrt(dx*dx + dy*dy);
     if (len < 0.001f) return;
 
-    // Unit normal (perp to line direction).
+    /* Unit normal (perp to line direction). */
     const float ux = -dy / len;
     const float uy =  dx / len;
     const float half = l.thickness * 0.5f;
-    const float pad  = 1.f; // skirt width in pixels for edge AA
+    const float pad  = 1.f;   /* skirt width in pixels for edge AA */
 
-    // Six vertices per line endpoint: outer skirt | edge | inner edge twice
-    // simplifies to 4 rows along the normal at offsets:
-    //   +half+pad (a=0), +half (a=1), -half (a=1), -half-pad (a=0)
+    /* Six vertices per line endpoint: outer skirt | edge | inner edge twice
+       simplifies to 4 rows along the normal at offsets: +half+pad (a=0), +half. */
     const float offs[4]   = {  half + pad,  half, -half, -half - pad };
     const uint8_t alphas[4] = { 0, 255, 255, 0 };
 
     const uint8_t baseA = l.color.a;
-    float vx[8], vy[8]; // 2 endpoints * 4 rows
+    float vx[8], vy[8];   /* 2 endpoints * 4 rows */
     uint32_t vc[8];
     for (int ep = 0; ep < 2; ++ep) {
         const float bx = (ep == 0) ? l.start.x : l.end.x;
@@ -1513,7 +1836,7 @@ void Renderer::draw(const Line& l) {
     PosColorVertex verts[8];
     for (int i = 0; i < 8; ++i) verts[i] = { vx[i], vy[i], vc[i] };
 
-    // 3 quads (skirt, body, skirt) between the two endpoints.
+    /* 3 quads (skirt, body, skirt) between the two endpoints. */
     uint16_t idx[18];
     int ii = 0;
     for (int r = 0; r < 3; ++r) {
@@ -1539,20 +1862,28 @@ void Renderer::draw(const Line& l) {
     bgfx::submit(currentViewId(), impl.solidProgram);
 }
 
+/*
+    drawLines(const Line* lines, size_t count):
+    - Params:   const Line* lines, size_t count
+    - Returns:  none
+    - Desc:     Draws many lines in a single batch, which is what keeps a
+                subdivision grid or a waveform to one draw call instead of
+                hundreds.
+*/
 void Renderer::drawLines(const Line* lines, size_t count) {
     auto& impl = *m_impl;
     impl.flushSolidBatch();
     if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
     if (!lines || count == 0) return;
 
-    // Worst case all `count` lines are non-degenerate. Cap so we never
-    // exceed the 16-bit index range (max 65535 indices => 10922 quads).
+    /* Worst case all `count` lines are non-degenerate. Cap so we never exceed
+       the 16-bit index range (max 65535 indices => 10922 quads). */
     constexpr size_t kMaxQuadsPerBatch = 65535 / 6;
     size_t offset = 0;
     while (offset < count) {
         size_t chunk = std::min(count - offset, kMaxQuadsPerBatch);
 
-        // First pass: count non-degenerate lines so we allocate tightly.
+        /* First pass: count non-degenerate lines so we allocate tightly. */
         size_t valid = 0;
         for (size_t i = 0; i < chunk; ++i) {
             const Line& l = lines[offset + i];
@@ -1613,6 +1944,16 @@ void Renderer::drawLines(const Line* lines, size_t count) {
     }
 }
 
+/*
+    drawArc(...):
+    - Params:   Vec2f center, float innerR, float outerR, float startDeg,
+                float endDeg, Color color, int segments
+    - Returns:  none
+    - Desc:     Draws an annular sector between two radii, antialiased by fading
+                out over about a pixel past each edge, angular and radial alike.
+                A zero inner radius makes it a filled wedge instead, in which
+                case the inner fade is dropped.
+*/
 void Renderer::drawArc(Vec2f center, float innerR, float outerR,
                        float startDeg, float endDeg, Color color, int segments) {
     auto& impl = *m_impl;
@@ -1625,9 +1966,7 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
     if (innerR < 0.f) innerR = 0.f;
 
     int segs = std::max(1, segments);
-    // We emit (segs + 2 angular skirt) slices x 4 radial rows. Cap so
-    // vertex / index counts stay in 16-bit range. Per slice = 4 verts,
-    // 6 quads (between adjacent slices) x 6 indices = 18 indices.
+    /* We emit (segs + 2 angular skirt) slices x 4 radial rows. */
     constexpr int kMaxSlices = (65535 / 6);
     if (segs + 2 > kMaxSlices) segs = kMaxSlices - 2;
 
@@ -1635,24 +1974,25 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
     const float endRad   = endDeg   * kDeg2Rad;
     const float step     = (endRad - startRad) / (float)segs;
 
-    // Angular skirt width = ~1 pixel of arc length at outerR.
+    /* Angular skirt width = ~1 pixel of arc length at outerR. */
     const float angSkirt = (outerR > 0.5f) ? (1.f / outerR) : 0.f;
     const float startSk  = startRad - (step >= 0.f ? angSkirt : -angSkirt);
     const float endSk    = endRad   + (step >= 0.f ? angSkirt : -angSkirt);
 
-    // Radial rows: outer skirt | outer | inner | inner skirt.
+    /* Radial rows: outer skirt | outer | inner | inner skirt. */
     const float innerSk = std::max(0.f, innerR - 1.f);
     const float outerSk = outerR + 1.f;
     const float radii[4] = { outerSk, outerR, innerR, innerSk };
-    // Alpha modulation per row (skirts fade to 0).
+    /* Alpha modulation per row (skirts fade to 0). */
     const uint8_t alphaMul[4] = { 0, 255, 255, 0 };
-    // If innerR <= 0 we draw a wedge; pull the inner skirt in and keep it
-    // at alpha 1 (no inner hole, no AA needed).
+    /* If innerR <= 0 we draw a wedge; pull the inner skirt in and keep it at
+       alpha 1 (no inner hole, no AA needed). */
     const bool solidCore = innerR <= 0.f;
 
-    const int sliceCount = segs + 3; // [-1, 0..segs, segs+1]
+    const int sliceCount = segs + 3;   /* [-1, 0..segs, segs+1] */
     const uint32_t nV = (uint32_t)sliceCount * 4;
-    // Quads per slice gap: 3 normally, or 2 if solidCore (skip inner-skirt row).
+    /* Quads per slice gap: 3 normally, or 2 if solidCore (skip inner-skirt
+       row). */
     const int rowsPerGap = solidCore ? 2 : 3;
     const uint32_t nI = (uint32_t)(sliceCount - 1) * rowsPerGap * 6;
 
@@ -1665,10 +2005,8 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
     auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
 
     auto sliceAngle = [&](int s) -> float {
-        // s = 0       -> startSk
-        // s = 1       -> startRad
-        // s = segs+1  -> endRad
-        // s = segs+2  -> endSk
+        /* s = 0 -> startSk s = 1 -> startRad s = segs+1 -> endRad s = segs+2
+           -> endSk */
         if (s == 0)              return startSk;
         if (s == sliceCount - 1) return endSk;
         return startRad + step * (float)(s - 1);
@@ -1686,8 +2024,8 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
             float px = center.x + radii[r] * ca;
             float py = center.y + radii[r] * sa;
             impl.rotPt(px, py);
-            // Combine radial-skirt alpha with angular-skirt alpha
-            // (multiplicative). Solid-core forces inner skirt alpha to 1.
+            /* Combine radial-skirt alpha with angular-skirt alpha
+               (multiplicative). Solid-core forces inner skirt alpha to 1. */
             uint8_t ra = (solidCore && r == 3) ? 255 : alphaMul[r];
             uint16_t a16 = (uint16_t)ra * (uint16_t)am;
             uint8_t finalA = (uint8_t)((a16 + 127) / 255);

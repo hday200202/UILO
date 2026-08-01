@@ -5,11 +5,13 @@
 #include <memory>
 #include <vector>
 #include <functional>
+#include <optional>
 
 #include "Elements.hpp"
 #include "Palette.hpp"
 #include "utils/OS.hpp"
 #include "utils/Resources.hpp"
+#include "utils/Theme.hpp"
 #include "input/Keybinds.hpp"
 #include "input/Mousebinds.hpp"
 #include "../include/renderer/Renderer.hpp"
@@ -20,10 +22,17 @@ class Interactible;
 
 /*
     UILO:
-    - Desc: Top-level UI controller. Owns pages and the element pool,
-            drives per-frame layout and input dispatch, and manages
-            overlays, floating elements, scaling, cursors, and shared
-            scroll/zoom links.
+    - Desc: The top-level controller. It owns the pages and the element pool,
+            drives layout and input dispatch once per frame, and manages
+            overlays, the floating layer, scaling, cursor requests and the shared
+            scroll and zoom links.
+    - Ownership runs through here rather than through the tree. An element binds
+      itself with setUILO() on the first walk that reaches it, which puts it in
+      the pool, and erase() only marks it -- the sweep happens between frames, so
+      a handler is free to remove elements while the tree is still being walked.
+    - The floating layer is the one part of the tree that is ticked, hit-tested
+      and drawn above the page. A popup has to live there rather than as a child,
+      or the container it sits in would clip it.
 */
 class UILO {
 public:
@@ -51,10 +60,7 @@ public:
     // pointer actually is.
     Vec2f queryMousePixelPosition() const;
 
-    void setRenderer(Renderer& renderer) {
-        m_renderer = &renderer;
-        m_mousebinds.setWindow(renderer.sdlWindow());
-    }
+    void setRenderer(Renderer& renderer);
     void addPage(Page* page);
     void setPage(const std::string& pageName);
     void setActivePage(Page* page);
@@ -66,16 +72,7 @@ public:
     Element* addFloating(FreeElement f);
     void removeFloating(Element* e);
 
-    // The elements currently in the floating layer, in insertion order. Native
-    // rendering walks m_floating directly; the web bridge has no access to it,
-    // so this is what it reads each sync to mirror popups -- which add their
-    // backdrop here at open() -- into an on-top overlay.
-    std::vector<Element*> getFloatingElements() const {
-        std::vector<Element*> out;
-        out.reserve(m_floating.size());
-        for (const FloatingEntry& f : m_floating) out.push_back(f.element);
-        return out;
-    }
+    std::vector<Element*> getFloatingElements() const;
 
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
@@ -100,15 +97,25 @@ public:
     float getFrameRateWindow()      const { return m_avgFrameWindow; }
     Vec2u getWindowSize()           const { return m_renderer ? m_renderer->getSize() : Vec2u{}; }
     Vec2f getMousePosition()        const { return m_mousePos; }
+    // The cursor currently applied to the window, i.e. the winner of last
+    // frame's requests. A host embedding UILO reads this to keep its own cursor
+    // handling in step.
+    CursorType getActiveCursor()    const { return m_activeCursor; }
     bool isMomentumScrolling()      const { return m_inMomentumScroll; }
     bool isForcingTreeUpdate()      const { return m_forceTreeUpdate; }
     Renderer& getRenderer()         { return *m_renderer; }
 
 
+    // A palette set here belongs to this UILO and overrides the theme's, which
+    // is how the Wt backend gives one session a different look from another.
     void setPalette(const Palette& palette)     { m_palette = palette; }
     void setPalette(Palette&& palette)          { m_palette = std::move(palette); }
-    Palette& getPalette()                       { return m_palette; }
-    const Palette& getPalette()                 const { return m_palette; }
+    const Palette& getPalette() const;
+    Palette&       ownPalette();
+    // Whether this UILO has taken a palette of its own.
+    bool hasOwnPalette() const { return m_palette.has_value(); }
+    // Hands colour resolution back to the theme.
+    void clearPalette() { m_palette.reset(); }
 
     void requestCursor(CursorType type, int priority = 0);
 
@@ -119,12 +126,7 @@ public:
 
     void setOnLiveResize(std::function<void()> cb);
 
-    template <typename T>
-    T* getElement(const std::string& name) {
-        auto it = m_elements.find(name);
-        if (it == m_elements.end()) return nullptr;
-        return dynamic_cast<T*>(it->second);
-    }
+    template <typename T> T* getElement(const std::string& name);
 
 private:
     std::vector<std::unique_ptr<Element>>                   m_elementPool;
@@ -180,7 +182,7 @@ private:
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
 
-    Palette m_palette;
+    std::optional<Palette> m_palette;
 
     std::unordered_map<std::string, float> m_scrollLinksX;
     std::unordered_map<std::string, float> m_scrollLinksY;
@@ -199,6 +201,86 @@ private:
     friend class Element;
     friend class Interactible;
 };
+
+
+/*
+    setRenderer(Renderer& renderer):
+    - Params:   Renderer& renderer
+    - Returns:  void
+    - Desc:     Attaches the renderer this UILO draws through, and hands its SDL
+                window to the mouse bindings so they can resolve positions
+                against it.
+*/
+inline void UILO::setRenderer(Renderer& renderer) {
+    m_renderer = &renderer;
+    m_mousebinds.setWindow(renderer.sdlWindow());
+}
+
+
+/*
+    getFloatingElements():
+    - Params:   none
+    - Returns:  std::vector<Element*> -- in insertion order
+    - Desc:     The elements currently in the floating layer. Native rendering
+                walks the internal list directly; this exists for the web
+                bridge, which cannot see it and reads this on each sync to
+                mirror popups -- a picker adds its backdrop here when it opens
+                -- into an on-top overlay.
+*/
+inline std::vector<Element*> UILO::getFloatingElements() const {
+    std::vector<Element*> out;
+    out.reserve(m_floating.size());
+    for (const FloatingEntry& f : m_floating) out.push_back(f.element);
+    return out;
+}
+
+
+/*
+    getPalette():
+    - Params:   none
+    - Returns:  const Palette&
+    - Desc:     The palette colours resolve against: this UILO's own when it has
+                one, otherwise the Theme's. Read live rather than cached, so
+                replacing the theme's palette restyles every UILO that has not
+                overridden it and theme switching needs no rebuild.
+*/
+inline const Palette& UILO::getPalette() const {
+    return m_palette ? *m_palette : Theme::palette();
+}
+
+
+/*
+    ownPalette():
+    - Params:   none
+    - Returns:  Palette& -- this UILO's own, to edit in place
+    - Desc:     Takes ownership of a palette: the theme's is copied in on the
+                first call and this UILO stops following Theme::setPalette()
+                from then on. Deliberately not an overload of getPalette(),
+                because that ownership transfer is too surprising to happen
+                merely because the caller happened to hold a non-const UILO --
+                reading through getPalette() always keeps following the theme.
+*/
+inline Palette& UILO::ownPalette() {
+    if (!m_palette) m_palette = Theme::palette();
+    return *m_palette;
+}
+
+
+/*
+    getElement(const std::string& name):
+    - Params:   const std::string& name
+    - Returns:  T* -- null when the name is unknown or the type does not match
+    - Desc:     Looks up a named element and casts it to the requested type.
+                Only elements given a name at construction are registered, and
+                the cast is checked, so asking for the wrong type yields null
+                rather than undefined behaviour.
+*/
+template <typename T>
+T* UILO::getElement(const std::string& name) {
+    auto it = m_elements.find(name);
+    if (it == m_elements.end()) return nullptr;
+    return dynamic_cast<T*>(it->second);
+}
 
 }
 

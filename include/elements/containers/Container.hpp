@@ -9,7 +9,17 @@ namespace uilo {
 
 using contains = std::initializer_list<Element*>;
 
-class Container : public Element{
+/*
+    Container:
+    - Desc: Base class for every element that holds others. It owns the child
+            list and the pointer-event plumbing -- clicks, hover, scroll and
+            zoom are offered to the children before the container itself gets a
+            look -- and leaves layout and drawing abstract for Row, Column and
+            Canvas to define. Children are raw pointers, since UILO's element
+            pool owns them; pruneChildren() drops any that have been erased, and
+            m_fb is the container's own render target.
+*/
+class Container : public Element {
 public:
     Container(Modifier modifier, contains children, const std::string& name);
 
@@ -19,8 +29,18 @@ public:
     bool checkRightClick(const Vec2f& mousePosition) override;
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkHover(const Vec2f& mousePosition) override;
-    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
-    bool checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise = false, bool momentum = false) override;
+    bool checkScroll(
+        const Vec2f& mousePosition,
+        float delta,
+        bool precise = false,
+        bool momentum = false
+    ) override;
+    bool checkScroll(
+        const Vec2f& mousePosition,
+        Vec2f delta,
+        bool precise = false,
+        bool momentum = false
+    ) override;
     bool checkZoom(const Vec2f& mousePosition, float magnification) override;
 
     void addElement(Element* element);
@@ -32,7 +52,8 @@ public:
 
 protected:
     std::vector<Element*> m_children;
-    FrameBuffer m_fb;  // per-container render target (replaces sf::RenderTexture m_rt)
+    FrameBuffer           m_fb;
+
     void pruneChildren();
 };
 

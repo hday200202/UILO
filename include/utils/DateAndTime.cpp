@@ -19,8 +19,14 @@ const std::array<const char*, 7> kWeekdayNames = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 };
 
-// Bridges to <chrono>'s calendar types, which own all the awkward parts (leap
-// years, month lengths, day-of-week) and get them right.
+/*
+    toYMD(const Date& d):
+    - Params:   const Date& d
+    - Returns:  std::chrono::year_month_day
+    - Desc:     Bridges to <chrono>'s calendar types, which own all the
+                awkward parts (leap years, month lengths, day-of-week) and
+                get them right.
+*/
 std::chrono::year_month_day toYMD(const Date& d) {
     return std::chrono::year_month_day{
         std::chrono::year{d.year},
@@ -29,6 +35,13 @@ std::chrono::year_month_day toYMD(const Date& d) {
     };
 }
 
+/*
+    fromYMD(const std::chrono::year_month_day& ymd):
+    - Params:   const std::chrono::year_month_day& ymd
+    - Returns:  Date
+    - Desc:     Builds a Date from year, month and day without validating it,
+                for the internal paths that have already checked.
+*/
 Date fromYMD(const std::chrono::year_month_day& ymd) {
     return Date{
         static_cast<int>(ymd.year()),
@@ -37,12 +50,25 @@ Date fromYMD(const std::chrono::year_month_day& ymd) {
     };
 }
 
+/*
+    toSysDays(const Date& d):
+    - Params:   const Date& d
+    - Returns:  std::chrono::sys_days
+    - Desc:     Converts a Date to a chrono sys_days, which is the form the
+                calendar arithmetic and weekday lookups work in.
+*/
 std::chrono::sys_days toSysDays(const Date& d) {
     return std::chrono::sys_days{toYMD(d)};
 }
 
-// localtime/gmtime are not thread-safe in their plain form and the reentrant
-// spelling differs on Windows, so both are funnelled through here.
+/*
+    breakDown(std::time_t t, bool local, std::tm& out):
+    - Params:   std::time_t t, bool local, std::tm& out
+    - Returns:  bool
+    - Desc:     localtime/gmtime are not thread-safe in their plain form and
+                the reentrant spelling differs on Windows, so both are
+                funnelled through here.
+*/
 bool breakDown(std::time_t t, bool local, std::tm& out) {
 #if defined(_WIN32)
     return local ? localtime_s(&out, &t) == 0
@@ -53,6 +79,13 @@ bool breakDown(std::time_t t, bool local, std::tm& out) {
 #endif
 }
 
+/*
+    makeTm(const DateTime& dt):
+    - Params:   const DateTime& dt
+    - Returns:  std::tm
+    - Desc:     Fills a std::tm from a DateTime, for handing to the C formatting
+                and parsing functions.
+*/
 std::tm makeTm(const DateTime& dt) {
     std::tm tm{};
     tm.tm_year  = dt.date.year - 1900;
@@ -61,10 +94,16 @@ std::tm makeTm(const DateTime& dt) {
     tm.tm_hour  = static_cast<int>(dt.time.hour);
     tm.tm_min   = static_cast<int>(dt.time.minute);
     tm.tm_sec   = static_cast<int>(dt.time.second);
-    tm.tm_isdst = -1;   // let the C library decide whether DST applies
+    tm.tm_isdst = -1;   /* let the C library decide whether DST applies */
     return tm;
 }
 
+/*
+    fromTm(const std::tm& tm, unsigned milliseconds):
+    - Params:   const std::tm& tm, unsigned milliseconds
+    - Returns:  DateTime
+    - Desc:     Reads a std::tm back into a DateTime.
+*/
 DateTime fromTm(const std::tm& tm, unsigned milliseconds = 0) {
     return DateTime{
         Date{ tm.tm_year + 1900,
@@ -77,18 +116,28 @@ DateTime fromTm(const std::tm& tm, unsigned milliseconds = 0) {
     };
 }
 
+/*
+    pad(long long value, int width):
+    - Params:   long long value, int width
+    - Returns:  std::string
+    - Desc:     Left-pads a number with zeros to a fixed width, which is what
+                most of the format tokens need.
+*/
 std::string pad(long long value, int width) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%0*lld", width, value);
     return buf;
 }
 
-// ---------------------------------------------------------------------------
-// Pattern scanning, shared by format() and parseDate()
-// ---------------------------------------------------------------------------
+/* Pattern scanning, shared by format() and parseDate() */
 
-// How many times `c` repeats starting at `i`. Tokens are runs of one letter,
-// so this is what decides MM from MMMM.
+/*
+    runLength(std::string_view pattern, std::size_t i):
+    - Params:   std::string_view pattern, std::size_t i
+    - Returns:  std::size_t
+    - Desc:     How many times `c` repeats starting at `i`. Tokens are runs
+                of one letter, so this is what decides MM from MMMM.
+*/
 std::size_t runLength(std::string_view pattern, std::size_t i) {
     const char c = pattern[i];
     std::size_t n = 0;
@@ -96,11 +145,17 @@ std::size_t runLength(std::string_view pattern, std::size_t i) {
     return n;
 }
 
-// A quoted run is literal text. Returns the literal and advances past the
-// closing quote; a doubled '' is one apostrophe.
+/*
+    readQuoted(std::string_view pattern, std::size_t& i):
+    - Params:   std::string_view pattern, std::size_t& i
+    - Returns:  std::string
+    - Desc:     A quoted run is literal text. Returns the literal and
+                advances past the closing quote; a doubled '' is one
+                apostrophe.
+*/
 std::string readQuoted(std::string_view pattern, std::size_t& i) {
     std::string out;
-    ++i;    // opening quote
+    ++i;   /* opening quote */
     while (i < pattern.size()) {
         if (pattern[i] == '\'') {
             if (i + 1 < pattern.size() && pattern[i + 1] == '\'') { out += '\''; i += 2; continue; }
@@ -112,6 +167,15 @@ std::string readQuoted(std::string_view pattern, std::size_t& i) {
     return out;
 }
 
+/*
+    formatFields(const Date& date, const Time& time, std::string_view pattern):
+    - Params:   const Date& date, const Time& time, std::string_view pattern
+    - Returns:  std::string
+    - Desc:     Expands a format pattern against a date and time. Walks the
+                pattern once, replacing each recognised token and copying
+                everything else through, so literal text needs no escaping
+                unless it happens to spell a token.
+*/
 std::string formatFields(const Date& date, const Time& time, std::string_view pattern) {
     std::string out;
     out.reserve(pattern.size() + 8);
@@ -176,9 +240,7 @@ std::string formatFields(const Date& date, const Time& time, std::string_view pa
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------------
+/* Parsing */
 
 struct Parser {
     std::string_view text;
@@ -186,8 +248,8 @@ struct Parser {
 
     bool done() const { return pos >= text.size(); }
 
-    // Up to maxDigits digits, at least one. Fixed width when exact is set,
-    // which is what keeps "202607" from being read as one long year.
+    /* Up to maxDigits digits, at least one. Fixed width when exact is set,
+       which is what keeps "202607" from being read as one long year. */
     bool number(unsigned maxDigits, bool exact, long long& out) {
         std::size_t start = pos;
         long long value = 0;
@@ -216,7 +278,7 @@ struct Parser {
         return false;
     }
 
-    // Longest case-insensitive match from the table; yields the 1-based index.
+    /* Longest case-insensitive match from the table; yields the 1-based index. */
     bool nameFrom(const char* const* names, std::size_t count, unsigned& outIndex) {
         std::size_t bestLen = 0;
         std::size_t bestIdx = 0;
@@ -237,8 +299,8 @@ struct Parser {
         return true;
     }
 
-    // Abbreviations are the first three letters of the full names, so they get
-    // their own pass against a fixed width.
+    /* Abbreviations are the first three letters of the full names, so they get
+       their own pass against a fixed width. */
     bool abbreviatedName(const char* const* names, std::size_t count, unsigned& outIndex) {
         if (text.size() - pos < 3) return false;
         for (std::size_t i = 0; i < count; ++i) {
@@ -254,8 +316,15 @@ struct Parser {
     }
 };
 
-// Fills whichever fields the pattern mentions; anything absent keeps the
-// fallback's value, so a date-only pattern leaves the time at midnight.
+/*
+    parseFields(std::string_view text, std::string_view pattern, DateTime& out):
+    - Params:   std::string_view text, std::string_view pattern, DateTime&
+                out
+    - Returns:  bool
+    - Desc:     Fills whichever fields the pattern mentions; anything absent
+                keeps the fallback's value, so a date-only pattern leaves
+                the time at midnight.
+*/
 bool parseFields(std::string_view text, std::string_view pattern, DateTime& out) {
     Parser p{text};
     bool pmMarker = false, hasPmMarker = false;
@@ -281,8 +350,8 @@ bool parseFields(std::string_view text, std::string_view pattern, DateTime& out)
                     out.date.year = static_cast<int>(value);
                 } else if (n == 2) {
                     if (!p.number(2, true, value)) return false;
-                    // Two digits are ambiguous by nature; the usual 1969/2068
-                    // split is the least surprising resolution.
+                    /* Two digits are ambiguous by nature; the usual 1969/2068
+                       split is the least surprising resolution. */
                     out.date.year = static_cast<int>(value >= 69 ? 1900 + value : 2000 + value);
                 } else {
                     if (!p.signedNumber(6, false, value)) return false;
@@ -306,8 +375,8 @@ bool parseFields(std::string_view text, std::string_view pattern, DateTime& out)
                 out.date.day = static_cast<unsigned>(value);
                 break;
             case 'd':
-                // Weekday names carry no information a date needs; consume and
-                // discard so "dddd, MMMM D" round-trips.
+                /* Weekday names carry no information a date needs; consume and
+                   discard so "dddd, MMMM D" round-trips. */
                 if (n >= 4) { if (!p.nameFrom(kWeekdayNames.data(), kWeekdayNames.size(), index)) return false; }
                 else if (n == 3) { if (!p.abbreviatedName(kWeekdayNames.data(), kWeekdayNames.size(), index)) return false; }
                 else { if (p.done()) return false; ++p.pos; }
@@ -350,7 +419,7 @@ bool parseFields(std::string_view text, std::string_view pattern, DateTime& out)
         i += n;
     }
 
-    if (!p.done()) return false;   // trailing junk is a mismatch, not a match
+    if (!p.done()) return false;   /* trailing junk is a mismatch, not a match */
 
     if (hour12 >= 0) {
         if (hour12 < 1 || hour12 > 12) return false;
@@ -364,9 +433,7 @@ bool parseFields(std::string_view text, std::string_view pattern, DateTime& out)
 } // namespace
 
 
-// ---------------------------------------------------------------------------
-// Now
-// ---------------------------------------------------------------------------
+/* Now */
 
 /*
     today():
@@ -472,9 +539,7 @@ int DateAndTime::timeZoneOffsetMinutes() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Validity
-// ---------------------------------------------------------------------------
+/* Validity */
 
 /*
     isValid(const Date& date):
@@ -527,9 +592,7 @@ Date DateAndTime::normalize(const Date& date) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Calendar facts
-// ---------------------------------------------------------------------------
+/* Calendar facts */
 
 /*
     isLeapYear(int year):
@@ -615,7 +678,7 @@ unsigned DateAndTime::dayOfYear(const Date& date) {
                 can fall in week 52 or 53 of the year before.
 */
 unsigned DateAndTime::weekOfYear(const Date& date) {
-    // Thursday of this date's week identifies the owning year outright.
+    /* Thursday of this date's week identifies the owning year outright. */
     const int64_t days     = toDaysSinceEpoch(date);
     const unsigned mondayIdx = columnOf(weekdayOf(date), Weekday::Monday);
     const int64_t thursday = days - static_cast<int64_t>(mondayIdx) + 3;
@@ -640,9 +703,7 @@ int DateAndTime::isoWeekYear(const Date& date) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Relationships
-// ---------------------------------------------------------------------------
+/* Relationships */
 
 /*
     isToday(const Date& date):
@@ -717,9 +778,7 @@ void DateAndTime::order(Date& first, Date& last) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Arithmetic
-// ---------------------------------------------------------------------------
+/* Arithmetic */
 
 /*
     addDays(const Date& date, int days):
@@ -753,8 +812,8 @@ Date DateAndTime::addWeeks(const Date& date, int weeks) {
                 March. That keeps a month-by-month walk from skipping a month.
 */
 Date DateAndTime::addMonths(const Date& date, int months) {
-    // Month as a running count from year 0 so the arithmetic is plain integer
-    // work with no wrap-around cases.
+    /* Month as a running count from year 0 so the arithmetic is plain integer
+       work with no wrap-around cases. */
     const int64_t total = static_cast<int64_t>(date.year) * 12
                         + static_cast<int64_t>(date.month) - 1
                         + months;
@@ -794,8 +853,8 @@ DateTime DateAndTime::addSeconds(const DateTime& dateTime, int64_t seconds) {
                         + static_cast<int64_t>(dateTime.time.second)
                         + seconds;
 
-    // Floored division so a negative shift borrows a day rather than
-    // truncating toward zero.
+    /* Floored division so a negative shift borrows a day rather than
+       truncating toward zero. */
     int64_t dayShift = secondOfDay / kDay;
     secondOfDay     %= kDay;
     if (secondOfDay < 0) { secondOfDay += kDay; --dayShift; }
@@ -931,7 +990,7 @@ Date DateAndTime::endOfWeek(const Date& date, Weekday firstDayOfWeek) {
 
 
 /*
-    clamp(const Date& date, const std::optional<Date>& min, const std::optional<Date>& max):
+    clamp(...):
     - Params:   const Date& date, const std::optional<Date>& min,
                 const std::optional<Date>& max
     - Returns:  Date
@@ -947,9 +1006,7 @@ Date DateAndTime::clamp(const Date& date,
 }
 
 
-// ---------------------------------------------------------------------------
-// Month grids
-// ---------------------------------------------------------------------------
+/* Month grids */
 
 /*
     gridStart(int year, unsigned month, Weekday firstDayOfWeek):
@@ -1003,9 +1060,7 @@ Weekday DateAndTime::weekdayInColumn(unsigned index, Weekday firstDayOfWeek) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Names
-// ---------------------------------------------------------------------------
+/* Names */
 
 /*
     monthName(unsigned month, bool abbreviated):
@@ -1050,9 +1105,7 @@ std::string DateAndTime::weekdayInitial(Weekday day) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Conversion
-// ---------------------------------------------------------------------------
+/* Conversion */
 
 /*
     toDaysSinceEpoch(const Date& date):
@@ -1158,9 +1211,7 @@ std::time_t DateAndTime::toTimestampUTC(const DateTime& dateTime) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Text out
-// ---------------------------------------------------------------------------
+/* Text out */
 
 /*
     format(const Date& date, std::string_view pattern):
@@ -1261,9 +1312,7 @@ std::string DateAndTime::formatDuration(int64_t seconds, bool forceHours) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Text in
-// ---------------------------------------------------------------------------
+/* Text in */
 
 /*
     parseDate(std::string_view text, std::string_view pattern):
@@ -1289,7 +1338,10 @@ std::optional<Date> DateAndTime::parseDate(std::string_view text, std::string_vi
     - Desc:     As parseDate(), for a pattern carrying time tokens as well.
                 Fields the pattern omits stay at midnight.
 */
-std::optional<DateTime> DateAndTime::parseDateTime(std::string_view text, std::string_view pattern) {
+std::optional<DateTime> DateAndTime::parseDateTime(
+    std::string_view text,
+    std::string_view pattern
+) {
     DateTime out{};
     if (!parseFields(text, pattern, out)) return std::nullopt;
     if (!isValid(out)) return std::nullopt;

@@ -9,50 +9,66 @@
 #include "../utils/Color.hpp"
 #include "../utils/Alignment.hpp"
 #include "../utils/Material.hpp"
+/* CursorType lives in its own header so Modifier can carry one without pulling
+   in the renderer. */
+#include "../utils/Cursor.hpp"
 #include "Shapes.hpp"
 
-// Forward-declare SDL and bgfx types so elements never need to include those
-// headers directly. The Renderer owns all BGFX/SDL state.
+/* Forward-declare SDL and bgfx types so elements never need to include those
+   headers directly. The Renderer owns all BGFX/SDL state. */
 struct SDL_Window;
 namespace bgfx { struct FrameBufferHandle; }
 
 namespace uilo {
 
-// ---- Cursor types --------------------------------------------------------
-enum class CursorType {
-    Arrow,
-    Hand,
-    SizeHorizontal,
-    SizeVertical,
-    Text,
-    Crosshair,
-};
-
-// ---- Opaque GPU resource handles -----------------------------------------
-// Elements hold these but never touch bgfx directly.
+/* Opaque GPU resource handles. */
+/* Elements hold these but never touch bgfx directly. */
 
 struct Texture {
-    uint16_t handle = UINT16_MAX;   // bgfx::TextureHandle.idx
+    uint16_t handle = UINT16_MAX;   /* bgfx::TextureHandle.idx */
     uint16_t width  = 0;
     uint16_t height = 0;
     bool valid() const { return handle != UINT16_MAX; }
 };
 
+/*
+    Font:
+    - Desc: An opaque handle to a loaded font, an index into the renderer's font
+            table. Invalid until loadFont succeeds, which is what a caller checks
+            before drawing rather than testing the path.
+*/
 struct Font {
-    uint32_t id = UINT32_MAX;       // index into Renderer's font table
+    uint32_t id = UINT32_MAX;   /* index into Renderer's font table */
     bool valid() const { return id != UINT32_MAX; }
 };
 
+/*
+    TextMetrics:
+    - Desc:     Measurements of a laid-out string: the bounding box plus the
+                vertical
+            metrics of the face it was measured with. lineHeight() is ascent plus
+            descent plus the recommended gap, which is the spacing text should be
+            laid out on.
+*/
 struct TextMetrics {
-    Vec2f size      = {0.f, 0.f};   // total bounding box
-    float ascent    = 0.f;          // pixels above baseline (positive)
-    float descent   = 0.f;          // pixels below baseline (positive)
-    float lineGap   = 0.f;          // recommended extra gap between lines
+    Vec2f size      = {0.f, 0.f};   /* total bounding box */
+    float ascent    = 0.f;   /* pixels above baseline (positive) */
+    float descent   = 0.f;   /* pixels below baseline (positive) */
+    float lineGap   = 0.f;   /* recommended extra gap between lines */
     float lineHeight() const { return ascent + descent + lineGap; }
 };
 
-// Snapshot of bgfx renderer counters for the previous frame. Useful for
-// HUD overlays and perf instrumentation.
+/* Synthetic text styling, applied when the glyph quads are emitted rather than
+   by loading a second font file -- so any face can be emboldened or slanted. */
+struct TextStyle {
+    bool bold   = false;
+    bool italic = false;
+
+    bool none() const { return !bold && !italic; }
+};
+
+/* Snapshot of bgfx renderer counters for the previous frame. Useful for HUD
+   overlays and perf instrumentation. */
 struct RendererStats {
     uint32_t numDraw     = 0;
     uint32_t numVertices = 0;
@@ -60,7 +76,7 @@ struct RendererStats {
     double   gpuTimeMs   = 0.0;
 };
 
-// ---- Framebuffer handle (opaque wrapper around bgfx framebuffer) ---------
+/* Framebuffer handle (opaque wrapper around bgfx framebuffer) */
 struct FrameBuffer {
     uint16_t handle  = UINT16_MAX;
     uint16_t viewId  = UINT16_MAX;
@@ -68,7 +84,7 @@ struct FrameBuffer {
     bool     valid() const { return handle != UINT16_MAX; }
 };
 
-// ---- Renderer ------------------------------------------------------------
+/* Renderer */
 class Renderer {
 public:
     Renderer();
@@ -77,14 +93,12 @@ public:
     Renderer(const Renderer&)            = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    // ---- Lifecycle --------------------------------------------------------
+    /* Lifecycle */
     bool init(uint32_t width, uint32_t height,
               const std::string& title = "UILO",
               uint8_t msaa = 4);
-    // Embedded mode: attach to a host that already owns the SDL window + bgfx
-    // context. Skips SDL/bgfx/window creation and never calls bgfx::frame /
-    // reset / shutdown. UILO's pipeline views are rebased to start at baseView,
-    // and the scene clears transparent so the UI composites over the host image.
+    /* Embedded mode: attach to a host that already owns the SDL window + bgfx
+       context. */
     bool attach(SDL_Window* hostWindow, uint16_t baseView);
     bool ownsContext() const { return m_ownsContext; } // false in attach mode
     void shutdown();
@@ -92,117 +106,97 @@ public:
     void beginFrame();
     void endFrame();
 
-    // ---- Window -----------------------------------------------------------
+    /* Window */
     Vec2u  getSize() const;
     void   setTitle(const std::string& title);
     void   setVsync(bool enabled);
     bool   getVsync() const;
-    // Throttle the frame rate. Pass 0 (or any non-positive value) to disable.
-    // With vsync also on, the effective rate is min(vsync, this limit).
+    /* Throttle the frame rate. Pass 0 (or any non-positive value) to disable.
+       With vsync also on, the effective rate is min(vsync, this limit). */
     void   setFramerateLimit(float fps);
     float  getFramerateLimit() const;
     SDL_Window* sdlWindow() const { return m_window; }
 
-    // Returns counters from bgfx::getStats() for the most recently
-    // submitted frame. Cheap; safe to call once per frame.
+    /* Returns counters from bgfx::getStats() for the most recently submitted
+       frame. Cheap; safe to call once per frame. */
     RendererStats getStats() const;
 
-    // ---- Cursor -----------------------------------------------------------
+    /* Cursor */
     void setCursor(CursorType type);
 
-    // ---- Shape draw calls -------------------------------------------------
+    /* Shape draw calls */
     void draw(const Rect&        rect);
     void draw(const RoundedRect& roundedRect);
     void draw(const Circle&      circle);
     void draw(const Triangle&    triangle);
     void draw(const Line&        line);
 
-    // Batched line draw: emits all `count` lines in a single transient
-    // vertex buffer / submit. Far cheaper than calling draw(Line) in a
-    // loop when rendering many primitives (e.g. waveforms, grids).
+    /* Batched line draw: emits all `count` lines in a single transient vertex
+       buffer / submit. */
     void drawLines(const Line* lines, size_t count);
 
-    // Filled annular arc (gap-free triangle strip between innerR/outerR).
-    // Angles in degrees, cartesian convention (0=+x, sweep increases CCW;
-    // pass endDeg < startDeg for a clockwise sweep). Caller chooses
-    // tessellation density via `segments` (clamped to >= 1).
+    /* Filled annular arc (gap-free triangle strip between innerR/outerR). */
     void drawArc(Vec2f center, float innerR, float outerR,
                  float startDeg, float endDeg, Color color, int segments);
 
-    // ---- Texture / image --------------------------------------------------
-    // Load an image file (png/jpg/etc.). Cached by path; safe to call
-    // multiple times. Returns invalid Texture on failure.
+    /* Texture / image. */
+    /* Load an image file (png/jpg/etc.). */
     Texture loadTexture(const std::string& path);
     void    destroyTexture(Texture& tex);
 
-    // Decode an image file to tightly-packed RGBA8 bytes without creating a
-    // GPU texture (row-major, top-left origin). Not cached. Returns false
-    // and leaves the outputs untouched on failure.
+    /* Decode an image file to tightly-packed RGBA8 bytes without creating a
+       GPU texture (row-major, top-left origin). */
     bool loadImagePixels(const std::string& path, std::vector<uint8_t>& outRgba,
                          uint32_t& outWidth, uint32_t& outHeight);
 
-    // Create an empty *mutable* RGBA8 texture. Unlike loadTexture's cached
-    // textures (immutable: created with initial contents), these accept
-    // updateTexture and are owned by the caller — pair with destroyTexture.
+    /* Create an empty *mutable* RGBA8 texture. */
     Texture createTexture(uint16_t width, uint16_t height);
 
-    // Replace the full contents of a texture made by createTexture with
-    // width*height*4 RGBA8 bytes. No-op on invalid texture / null pixels.
+    /* Replace the full contents of a texture made by createTexture with
+       width*height*4 RGBA8 bytes. No-op on invalid texture / null pixels. */
     void updateTexture(const Texture& tex, const uint8_t* rgba);
 
-    // Draw a textured quad in screen space. uv defaults to the whole image.
-    // If `clipEllipse` is true, alpha is masked to the inscribed ellipse of
-    // the destination rectangle.
+    /* Draw a textured quad in screen space. */
     void drawImage(const Rectf& dst, const Texture& tex,
                    Color tint = Color::White,
                    Rectf uv   = {{0.f, 0.f}, {1.f, 1.f}},
                    bool flipH = false, bool flipV = false,
                    bool clipEllipse = false);
 
-    // ---- Material effects -------------------------------------------------
-    // Render an Apple-style "glass" panel of the given size at `dst`. Samples
-    // the blurred backdrop captured in the previous frame's scene FB. Safe to
-    // call from any element's render(). When the material is not Glass, this
-    // is a no-op.
-    //
-    // `baseColor` is the element's own set color — Material kinds Tinted /
-    // Ripple / Hover blend it into the panel so the original colour shows
-    // through. Other kinds ignore it.
+    /* Material effects. */
+    /* Render an Apple-style "glass" panel of the given size at `dst`. */
     void drawGlass(const Rectf& dst, const Material& mat,
                    Color baseColor = Color::Transparent);
 
-    // ---- Mouse state for interactive materials ----------------------------
-    // UILO calls this each frame after sampling the cursor. The renderer
-    // uses it to drive Material::Ripple / Material::Hover (mouse trail
-    // ripples and proximity glow). Coordinates are in framebuffer pixels.
+    /* Mouse state for interactive materials. */
+    /* UILO calls this each frame after sampling the cursor. */
     void setMouseState(Vec2f mousePosFbPx);
 
-    // ---- Text -------------------------------------------------------------
-    // Load a TTF font file. Cached by path. Returns invalid Font on failure.
+    /* Text. */
+    /* Load a TTF font file. Cached by path. Returns invalid Font on failure. */
     Font loadFont(const std::string& path);
 
-    // Draw a UTF-8 string at `position` (top-left of the text box).
-    // `sizePx` is the requested cap height in pixels.
+    /* Draw a UTF-8 string at `position` (top-left of the text box). `sizePx`
+       is the requested cap height in pixels. */
     void drawText(const std::string& utf8,
                   Vec2f position,
                   const Font& font,
                   float sizePx,
-                  Color color = Color::White);
+                  Color color = Color::White,
+                  TextStyle style = {});
 
-    // Measure a UTF-8 string at the given size.
+    /* Measure a UTF-8 string at the given size. */
     TextMetrics measureText(const std::string& utf8,
                             const Font& font,
                             float sizePx);
 
-    // Returns N+1 positions (relative to the top-left passed to drawText)
-    // for each codepoint boundary in `utf8`. A '\n' advances the pen to
-    // (0, prev_y + lineHeight). Position [N] is the trailing cursor slot.
-    // Empty input yields a single {0,0} entry.
+    /* Returns N+1 positions (relative to the top-left passed to drawText) for
+       each codepoint boundary in `utf8`. */
     std::vector<Vec2f> charPositions(const std::string& utf8,
                                      const Font& font,
                                      float sizePx);
 
-    // ---- Framebuffer management -------------------------------------------
+    /* Framebuffer management */
     FrameBuffer createFrameBuffer(Vec2u size);
     void        resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize);
     void        destroyFrameBuffer(FrameBuffer& fb);
@@ -215,36 +209,23 @@ public:
 
     void clear(Color color = Color::Transparent);
 
-    // ---- Scissor clipping -------------------------------------------------
+    /* Scissor clipping */
     void pushScissor(Rectf bounds);
     void popScissor();
 
-    // ---- Rounded-rect clipping (SDF in fragment shaders) ------------------
-    // Pushes a rounded clip region. All subsequent draws (solid/tex/text)
-    // are alpha-masked to a rounded rect of the given bounds + radius.
-    // Also pushes an axis-aligned scissor of `bounds` for early-out.
-    // A radius <= 0 falls back to a plain rectangular scissor.
+    /* Rounded-rect clipping (SDF in fragment shaders). */
+    /* Pushes a rounded clip region. */
     void pushRoundClip(Rectf bounds, float radius);
     void popRoundClip();
 
-    // ---- Glass subtree routing -------------------------------------------
-    // Elements rendered with Material::Kind != None call drawGlass which
-    // defers the draw until after the blur ladder, so the blur backdrop
-    // never contains the glass element itself. To prevent the glass
-    // element's CHILDREN from being included in the blur either, wrap
-    // their render() calls in begin/endGlassSubtree(): submissions inside
-    // the pair are routed to the glass view, which executes after blur
-    // and replays of glass backgrounds.
+    /* Glass subtree routing. */
+    /* Elements rendered with Material::Kind != None call drawGlass which. */
     void beginGlassSubtree();
     void endGlassSubtree();
 
-    // ---- Rotation ---------------------------------------------------------
-    // Degrees, standard cartesian convention: 0 = +x, 90 = +y,
-    // 180 = -x, 270 = -y, 360 wraps to 0. Pivot is in screen-pixel coords.
-    // Applied CPU-side to vertex positions of subsequent draws (Rect,
-    // Circle, Triangle, Line, drawLines, drawImage, drawText). Note:
-    // RoundedRect's SDF clip is axis-aligned and won't itself rotate; for
-    // knob indicators prefer Image/Triangle/Line drawn on top of a Circle.
+    /* Rotation. */
+    /* Degrees, standard cartesian convention: 0 = +x, 90 = +y, 180 = -x, 270
+       =. */
     void setRotation(float degrees, Vec2f pivot);
     void rotate(float deltaDegrees);
     void clearRotation();
@@ -256,20 +237,19 @@ private:
     uint8_t     m_msaa        = 4;
     uint32_t    m_resetFlags  = 0;
     bool        m_initialised = false;
-    double      m_frameInterval = 0.0; // seconds per frame; 0 = unlimited
-    uint64_t    m_nextFrameTick = 0;   // steady_clock ns of next frame deadline
+    double      m_frameInterval = 0.0;   /* seconds per frame; 0 = unlimited */
+    uint64_t    m_nextFrameTick = 0;   /* steady_clock ns of next frame deadline */
 
-    // Mouse state plumbed through by UILO each frame so interactive
-    // materials (Ripple / Hover) can sample a global cursor. Coordinates
-    // are in framebuffer pixels.
+    /* Mouse state plumbed through by UILO each frame so interactive materials
+       (Ripple / Hover) can sample a global cursor. */
     Vec2f       m_mousePos      = { -1.f, -1.f };
     Vec2f       m_mousePosPrev  = { -1.f, -1.f };
-    float       m_mouseLastMoveT = 0.f; // value of impl.elapsed at last move
+    float       m_mouseLastMoveT = 0.f;   /* value of impl.elapsed at last move */
 
-    // Views 0..3 are reserved for the scene FB + blur ladder + composite
-    // (see RendererImpl.hpp::Impl). User framebuffers start at 4.
+    /* Views 0..3 are reserved for the scene FB + blur ladder + composite (see
+       RendererImpl.hpp::Impl). User framebuffers start at 4. */
     uint16_t m_nextViewId = 6;
-    bool     m_ownsContext = true; // false in attach() mode: host owns bgfx/window/frame
+    bool     m_ownsContext = true;   /* false in attach() mode: host owns bgfx/window/frame */
 
     struct ViewEntry { uint16_t viewId; };
     static constexpr int kMaxViewStack = 16;
@@ -280,9 +260,8 @@ private:
     void     submitOrtho(uint16_t viewId, Vec2u size);
 
 public:
-    // PIMPL is public so TU-local helpers (in renderer .cpp files that include
-    // RendererImpl.hpp) can reference Impl. The Impl struct itself is only
-    // declared in the private RendererImpl.hpp header.
+    /* PIMPL is public so TU-local helpers (in renderer .cpp files that include
+       RendererImpl.hpp) can reference Impl. */
     struct Impl;
 private:
     std::unique_ptr<Impl> m_impl;

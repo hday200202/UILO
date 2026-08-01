@@ -6,17 +6,44 @@
 
 namespace uilo {
 
-Resizer::Resizer(Modifier modifier, ResizerOptions options, const std::string& name)
-    : m_options(options)
-{
+/*
+    Resizer(Modifier modifier, ResizerOptions options, const std::string& name):
+    - Params:   Modifier modifier, ResizerOptions options,
+                const std::string& name
+    - Returns:  Resizer
+    - Desc:     Constructs a drag handle and tags it as a Resizer, which is what
+                makes Row and Column skip it in the flow and place it at a
+                boundary instead.
+*/
+Resizer::Resizer(
+    Modifier modifier,
+    ResizerOptions options,
+    const std::string& name
+) : m_options(options) {
     m_modifier = modifier;
     m_name = name;
     m_type = ElementType::Resizer;
 }
 
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Takes the bounds the parent worked out and, while a drag is in
+                progress, resizes the target. The parent's rect is used verbatim
+                rather than run through resize(), because Row and Column place a
+                resizer at a boundary rather than in the flow and have already
+                decided exactly where it goes. The drag ends when the mouse
+                button is found released, which is polled here rather than
+                driven by an event so a release outside the window still
+                finishes it. Deltas are converted out of render pixels into
+                unscaled units before being applied, since a Modifier's
+                dimensions are unscaled, and each direction clamps to its own
+                min and max and quantises to the step when one is set.
+*/
 void Resizer::update(Rectf& parentBounds, float dt) {
     (void)dt;
-    m_bounds = parentBounds;  // Container sets exact bounds; no resize() here
+    m_bounds = parentBounds;
 
     if (!m_uiloRef || !m_target || !m_dragging) return;
 
@@ -83,9 +110,18 @@ void Resizer::update(Rectf& parentBounds, float dt) {
     }
 }
 
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the visible strip, which is narrower than the hit area and
+                centred within it -- the handle is easy to grab but reads as a
+                thin divider. Nothing is drawn when the colour is transparent,
+                which is the default: a resizer is usually invisible until a
+                hover handler colours it in.
+*/
 void Resizer::render() {
     if (!m_modifier.getVisible()) return;
-    // TODO: BGFX rendering for resizer visual strip
     Color c = resolveColor(m_options.getColorRole(), m_options.getColor());
     if (c.a == 0) { m_dirty = false; return; }
     if (m_uiloRef) {
@@ -106,6 +142,16 @@ void Resizer::render() {
     m_dirty = false;
 }
 
+/*
+    checkHover(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true whenever the pointer is inside
+    - Desc:     Tracks the hovered state, fires the enter and exit handlers, and
+                asks for the resize cursor matching the drag axis. The request
+                is made at a higher priority than an ordinary element's, so the
+                resize arrows win over the hand of whatever the handle
+                straddles.
+*/
 bool Resizer::checkHover(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) {
         if (m_hovered) {
@@ -127,11 +173,21 @@ bool Resizer::checkHover(const Vec2f& mousePosition) {
     return true;
 }
 
+/*
+    checkLeftClick(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when the handle took the click
+    - Desc:     Starts a drag, or restores the target's original size on a
+                double click. The starting size is read from the target's
+                resolved bounds plus its outer padding, since padding is inside
+                the slot the parent gave it and a drag should move the slot edge
+                rather than the drawn edge. Declines when there is no target,
+                which is the case for a handle with no visible neighbour on the
+                side it points at.
+*/
 bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
 
-    // Double-click → restore the target's original size (captured when this
-    // resizer was first attached to it during layout).
     const uint64_t nowMs = SDL_GetTicks();
     constexpr uint64_t doubleClickMs = 350;
     const bool isDoubleClick = (nowMs - m_lastClickMs) <= doubleClickMs;
@@ -157,6 +213,14 @@ bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
+/*
+    onDeactivate():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Ends any drag in progress when focus moves elsewhere, so a
+                handle cannot be left latched after a click lands on something
+                else.
+*/
 void Resizer::onDeactivate() {
     m_dragging = false;
 }

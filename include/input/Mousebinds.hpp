@@ -41,7 +41,7 @@ public:
 
     struct ButtonActionItem {
         std::string           name;
-        std::vector<uint32_t> buttonMasks; // pre-computed SDL_BUTTON_MASK per button
+        std::vector<uint32_t> buttonMasks;   /* pre-computed SDL_BUTTON_MASK per button */
         ButtonCallback        callback;
         bool                  onPressOnly = false;
     };
@@ -51,7 +51,7 @@ public:
     void setWindow(SDL_Window* window) { m_window = window; }
     SDL_Window* getWindow() const      { return m_window; }
 
-    // Hides and locks the cursor, switching motion reporting to pure deltas.
+    /* Hides and locks the cursor, switching motion reporting to pure deltas. */
     void setRelativeMode(bool enabled) {
         if (!m_window) {
             std::fprintf(stderr, "[UILO] Mousebinds::setRelativeMode: no window yet "
@@ -116,8 +116,8 @@ public:
         return false;
     }
 
-    // dispatch=false advances edge-detection state without firing callbacks,
-    // matching Keybinds::update().
+    /* dispatch=false advances edge-detection state without firing callbacks,
+       matching Keybinds::update(). */
     void update(bool dispatch = true) {
         const uint32_t currentButtons = SDL_GetMouseState(nullptr, nullptr);
 
@@ -138,12 +138,13 @@ public:
             }
         }
 
-        // Snapshot once every action has been evaluated, for the same reason as
-        // Keybinds: actions sharing a button must all see the same prior frame.
+        /* Snapshot once every action has been evaluated, for the same reason
+           as Keybinds: actions sharing a button must all see the same prior. */
         for (auto& [mask, prev] : m_prevButtonState)
             prev = ((currentButtons & mask) != 0);
 
-        // Motion: relative mode only, and never on the frame the lock is taken.
+        /* Motion: relative mode only, and never on the frame the lock is
+           taken. */
         const bool relativeMode = getRelativeMode();
         const bool justLocked    = relativeMode && !m_wasRelativeMode;
         m_wasRelativeMode        = relativeMode;
@@ -156,8 +157,8 @@ public:
         if (dx == 0.f && dy == 0.f) return;
         if (m_motionActions.empty()) return;
 
-        // Deltas arrive in backing-store pixels; divide out the display scale so
-        // handlers work in the same logical units as the rest of the API.
+        /* Deltas arrive in backing-store pixels; divide out the display scale
+           so handlers work in the same logical units as the rest of the API. */
         const float scale = m_window ? SDL_GetWindowDisplayScale(m_window) : 1.f;
         if (scale > 0.f) { dx /= scale; dy /= scale; }
 

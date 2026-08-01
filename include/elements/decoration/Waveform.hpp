@@ -1,122 +1,169 @@
 #pragma once
 
+#include <optional>
+
 #include "../Element.hpp"
 #include <vector>
 #include <cstddef>
+#include "../../utils/Theme.hpp"
 
 namespace uilo {
 
-// How multiple audio channels are arranged inside the widget bounds.
+/*
+    WaveformLayout:
+    - Desc: How multiple audio channels are arranged inside the widget bounds.
+            Stacked gives each channel its own horizontal strip, Overlay draws
+            them over each other at full height, and SumMono averages them into a
+            single full-height waveform.
+*/
 enum class WaveformLayout {
-    Stacked, // each channel gets its own horizontal strip
-    Overlay, // all channels drawn over each other, full height
-    SumMono, // average all channels into a single full-height waveform
+    Stacked,
+    Overlay,
+    SumMono,
 };
 
-// How a single channel's samples are drawn.
+
+/*
+    WaveformStyle:
+    - Desc: How one channel's samples are drawn. Bars is a vertical min/max line
+            per column, the oscilloscope look; Line is a continuous polyline
+            through the per-column samples; Filled mirrors that polyline to form a
+            filled envelope.
+*/
 enum class WaveformStyle {
-    Bars, // vertical min/max line per column (default, oscilloscope look)
-    Line, // continuous polyline through per-column samples
-    Filled, // continuous polyline mirrored to form a filled envelope
+    Bars,
+    Line,
+    Filled,
 };
 
+
+/*
+    WaveformOptions:
+    - Desc:     Everything a Waveform draws: the trace colour with optional per-
+                channel
+            overrides, the background, corner rounding, line thickness, the channel
+            layout and trace style, how many columns the samples are binned into,
+            and a vertical gain. Colors come as a literal plus a role, where the
+            role wins when it resolves against the active Palette and the literal
+            is the fallback.
+*/
 class WaveformOptions {
 public:
     WaveformOptions() = default;
 
-    WaveformOptions& setColor(Color c)              { m_color = c;       return *this; }
-    WaveformOptions& setColorRole(const std::string& r)            { m_colorRole = r;       return *this; }
-    // Per-channel overrides. Take effect only when layout is Stacked or
-    // Overlay (SumMono collapses channels and always uses the base color).
-    // An unset channel color (alpha == 0) falls back to setColor().
-    WaveformOptions& setLeftChannelColor(Color c)   { m_leftColor  = c;  return *this; }
-    WaveformOptions& setLeftChannelColorRole(const std::string& r) { m_leftColorRole = r;  return *this; }
-    WaveformOptions& setRightChannelColor(Color c)  { m_rightColor = c;  return *this; }
-    WaveformOptions& setRightChannelColorRole(const std::string& r){ m_rightColorRole = r; return *this; }
-    WaveformOptions& setBackgroundColor(Color c)    { m_bgColor = c;     return *this; }
-    WaveformOptions& setBackgroundColorRole(const std::string& r)  { m_bgColorRole = r;     return *this; }
-    WaveformOptions& setRounding(float r)           { m_rounding = r;    return *this; }
-    WaveformOptions& setLineThickness(float t)      { m_lineThickness = t; return *this; }
-    WaveformOptions& setLayout(WaveformLayout l)    { m_layout = l;      return *this; }
-    WaveformOptions& setStyle(WaveformStyle s)      { m_style = s;       return *this; }
-    // 0 == "use widget pixel width" (1 column per pixel). Otherwise a
-    // fixed bin count regardless of widget size.
-    WaveformOptions& setColumns(int c)              { m_columns = c;     return *this; }
-    // Multiplier on the per-pixel column count. 1.0 == 1 column per
-    // pixel (default), 0.25 == 1 column per 4 pixels (smoother / less
-    // aliasing), 2.0 == 2 columns per pixel (supersampled). Ignored
-    // when an explicit setColumns(>0) is used.
-    WaveformOptions& setResolution(float r)         { m_resolution = r;  return *this; }
-    // Vertical scaling factor applied to the normalized peak before
-    // mapping to pixels. 1.0 == fill the strip; values > 1 over-drive.
-    WaveformOptions& setGain(float g)               { m_gain = g;        return *this; }
+    WaveformOptions& setColor(Color c)                  { m_color = c; return *this; }
+    WaveformOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
 
-    Color           getColor()          const { return m_color; }
-    const std::string& getColorRole()           const { return m_colorRole; }
-    Color           getLeftChannelColor()  const { return m_leftColor; }
-    const std::string& getLeftChannelColorRole()  const { return m_leftColorRole; }
-    Color           getRightChannelColor() const { return m_rightColor; }
-    const std::string& getRightChannelColorRole() const { return m_rightColorRole; }
-    Color           getBackgroundColor() const { return m_bgColor; }
-    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
-    float           getRounding()       const { return m_rounding; }
-    float           getLineThickness()  const { return m_lineThickness; }
-    WaveformLayout  getLayout()         const { return m_layout; }
-    WaveformStyle   getStyle()          const { return m_style; }
-    int             getColumns()        const { return m_columns; }
-    float           getResolution()     const { return m_resolution; }
-    float           getGain()           const { return m_gain; }
+    // Per-channel overrides. These take effect only under the Stacked and Overlay
+    // layouts, since SumMono collapses the channels and always uses the base
+    // colour. An unset channel colour -- alpha 0 -- falls back to setColor().
+    WaveformOptions& setLeftChannelColor(Color c)                    { m_leftColor = c; return *this; }
+    WaveformOptions& setLeftChannelColorRole(const std::string& r)   { m_leftColorRole = r; return *this; }
+    WaveformOptions& setRightChannelColor(Color c)                   { m_rightColor = c; return *this; }
+    WaveformOptions& setRightChannelColorRole(const std::string& r)  { m_rightColorRole = r; return *this; }
+
+    WaveformOptions& setBackgroundColor(Color c)                    { m_bgColor = c; return *this; }
+    WaveformOptions& setBackgroundColorRole(const std::string& r)   { m_bgColorRole = r; return *this; }
+    WaveformOptions& setRounding(float r)                           { m_rounding = r; return *this; }
+    WaveformOptions& setLineThickness(float t)                      { m_lineThickness = t; return *this; }
+    WaveformOptions& setLayout(WaveformLayout l)                    { m_layout = l; return *this; }
+    WaveformOptions& setStyle(WaveformStyle s)                      { m_style = s; return *this; }
+
+    // 0 means "use the widget's pixel width", one column per pixel. Any other
+    // value is a fixed bin count regardless of widget size.
+    WaveformOptions& setColumns(int c)         { m_columns = c; return *this; }
+    // Multiplier on the per-pixel column count: 1.0 is one column per pixel,
+    // 0.25 one per four pixels (smoother, less aliasing), 2.0 supersampled.
+    // Ignored when an explicit setColumns above 0 is used.
+    WaveformOptions& setResolution(float r)   { m_resolution = r; return *this; }
+    // Vertical scaling applied to the normalised peak before it is mapped to
+    // pixels. 1.0 fills the strip; above that over-drives it.
+    WaveformOptions& setGain(float g)         { m_gain = g; return *this; }
+
+    Color              getColor()                   const { return m_color; }
+    const std::string& getColorRole()               const { return m_colorRole; }
+    Color              getLeftChannelColor()        const { return m_leftColor; }
+    const std::string& getLeftChannelColorRole()    const { return m_leftColorRole; }
+    Color              getRightChannelColor()       const { return m_rightColor; }
+    const std::string& getRightChannelColorRole()   const { return m_rightColorRole; }
+    Color              getBackgroundColor()         const { return m_bgColor; }
+    const std::string& getBackgroundColorRole()     const { return m_bgColorRole; }
+    float              getRounding()                const;
+    float              getLineThickness()           const { return m_lineThickness; }
+    WaveformLayout     getLayout()                  const { return m_layout; }
+    WaveformStyle      getStyle()                   const { return m_style; }
+    int                getColumns()                 const { return m_columns; }
+    float              getResolution()              const { return m_resolution; }
+    float              getGain()                    const { return m_gain; }
 
 private:
-    Color          m_color         = Color{255, 255, 255, 255};
-    std::string    m_colorRole;
-    Color          m_leftColor     = Color{0, 0, 0, 0};   // a=0 -> use m_color
-    std::string    m_leftColorRole;
-    Color          m_rightColor    = Color{0, 0, 0, 0};   // a=0 -> use m_color
-    std::string    m_rightColorRole;
-    Color          m_bgColor       = Color{0, 0, 0, 0};
-    std::string    m_bgColorRole;
-    float          m_rounding      = 0.f;
-    float          m_lineThickness = 1.f;
-    WaveformLayout m_layout        = WaveformLayout::Stacked;
-    WaveformStyle  m_style         = WaveformStyle::Bars;
-    int            m_columns       = 0;
-    float          m_resolution    = 1.f;
-    float          m_gain          = 1.f;
+    Color       m_color = Color{255, 255, 255, 255};
+    std::string m_colorRole;
+    Color       m_leftColor = Color{0, 0, 0, 0};   /* a == 0 -> use m_color */
+    std::string m_leftColorRole;
+    Color       m_rightColor = Color{0, 0, 0, 0};   /* a == 0 -> use m_color */
+    std::string m_rightColorRole;
+    Color       m_bgColor = Color{0, 0, 0, 0};
+    std::string m_bgColorRole;
+
+    std::optional<float> m_rounding;
+    float                m_lineThickness = 1.f;
+    WaveformLayout       m_layout        = WaveformLayout::Stacked;
+    WaveformStyle        m_style         = WaveformStyle::Bars;
+    int                  m_columns       = 0;
+    float                m_resolution    = 1.f;
+    float                m_gain          = 1.f;
 };
 
+
+/*
+    getRounding():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Corner radius, resolved in three steps: the value this element
+                was given, then the active Theme's, then 0. Resolved on every
+                read rather than cached, so changing the Theme restyles a
+                waveform already on screen.
+*/
+inline float WaveformOptions::getRounding() const {
+    return Theme::resolveRounding(m_rounding, 0.f);
+}
+
+
+/*
+    Waveform:
+    - Desc:     An audio waveform display. The element owns a copy of the sample
+                data,
+            so the caller's buffers can be freed as soon as setSamples returns, and
+            bins it into per-column min/max peaks that are cached and only rebuilt
+            when the data, the visible range, the column count or the widget size
+            changes. A sub-range of the buffer can be shown and zoomed about a
+            point, which is what makes it usable as a scrubbable view of a long
+            recording rather than only a whole-file thumbnail.
+*/
 class Waveform : public Element {
 public:
-    explicit Waveform(Modifier modifier, WaveformOptions options = {},
-                      const std::string& name = "");
+    explicit Waveform(
+        Modifier modifier,
+        WaveformOptions options = {},
+        const std::string& name = ""
+    );
 
     const WaveformOptions& getOptions() const { return m_options; }
     WaveformOptions&       getOptions()       { return m_options; }
-    void setOptions(const WaveformOptions& o) { m_options = o; m_peaksDirty = true; m_dirty = true; }
+    void                   setOptions(const WaveformOptions& o);
 
-    // Copy `numFrames` samples from each of `numChannels` planar buffers
-    // (matches miniaudio's `float**` deinterleaved layout). Pass nullptr
-    // or numFrames==0 to clear. Samples are copied into the widget so the
-    // caller's buffers may be freed immediately afterwards.
-    void setSamples(const float* const* channels,
-                    std::size_t numChannels,
-                    std::size_t numFrames);
+    void setSamples(
+        const float* const* channels,
+        std::size_t numChannels,
+        std::size_t numFrames
+    );
 
-    // Restrict rendered region to [firstFrame, firstFrame+frameCount).
-    // Pass frameCount == 0 to show the full buffer.
     void setRange(std::size_t firstFrame, std::size_t frameCount);
-
-    // Zoom around a normalized x-position within the widget
-    // (`anchorNorm` in [0,1], 0 == left edge, 1 == right edge).
-    // `factor` > 1 zooms in (visible range shrinks), `factor` < 1
-    // zooms out. The sample sitting under `anchorNorm` stays under
-    // `anchorNorm` after the zoom (clamped at the buffer ends).
     void zoomAt(float anchorNorm, float factor);
 
     std::size_t getRangeStart() const { return m_rangeStart; }
-    std::size_t getRangeCount() const {
-        return m_rangeCount ? m_rangeCount : m_numFrames;
-    }
+    std::size_t getRangeCount() const;
 
     std::size_t getNumChannels() const { return m_numChannels; }
     std::size_t getNumFrames()   const { return m_numFrames; }
@@ -130,26 +177,54 @@ private:
 
     WaveformOptions m_options;
 
-    // Owning copy of the audio data.
-    std::vector<float> m_samples;        // numChannels * numFrames, planar
-    std::size_t m_numChannels = 0;
-    std::size_t m_numFrames   = 0;
+    // Owning copy of the audio data, planar: numChannels * numFrames.
+    std::vector<float> m_samples;
+    std::size_t        m_numChannels = 0;
+    std::size_t        m_numFrames   = 0;
 
-    std::size_t m_rangeStart  = 0;
-    std::size_t m_rangeCount  = 0; // 0 == full buffer
-    // High-precision shadow of the visible range. zoomAt() integrates many
-    // tiny per-tick factors (trackpad momentum) and snapping to int frame
-    // counts each call jitters the visible window. The doubles carry the
-    // real state; the size_t fields are derived (rounded) for sampling.
-    double      m_rangeStartD = 0.0;
-    double      m_rangeCountD = 0.0; // 0 == full buffer
+    std::size_t m_rangeStart = 0;
+    std::size_t m_rangeCount = 0;   /* 0 == full buffer */
+    // High-precision shadow of the visible range. zoomAt integrates many tiny
+    // per-tick factors (trackpad momentum), and snapping to integer frame counts
+    // on each call jitters the visible window. The doubles carry the real state;
+    // the size_t fields above are derived from them, rounded, for sampling.
+    double m_rangeStartD = 0.0;
+    double m_rangeCountD = 0.0;   /* 0 == full buffer */
 
-    // Cached peaks: m_peaks[ch * numColumns * 2 + col * 2 + {0,1}] = {min,max}.
+    // Cached peaks, indexed m_peaks[ch * numColumns * 2 + col * 2 + {0,1}] as
+    // {min, max}.
     std::vector<float> m_peaks;
-    std::size_t        m_peakChannels = 0;
-    int                m_peakColumns  = 0;
+    std::size_t        m_peakChannels   = 0;
+    int                m_peakColumns    = 0;
     Vec2f              m_peakBoundsSize = {0.f, 0.f};
-    bool               m_peaksDirty   = true;
+    bool               m_peaksDirty     = true;
 };
+
+
+/*
+    setOptions(const WaveformOptions& o):
+    - Params:   const WaveformOptions& o
+    - Returns:  void
+    - Desc:     Replaces the options and invalidates the cached peaks, since the
+                column count and resolution both feed the binning.
+*/
+inline void Waveform::setOptions(const WaveformOptions& o) {
+    m_options    = o;
+    m_peaksDirty = true;
+    m_dirty      = true;
+}
+
+
+/*
+    getRangeCount():
+    - Params:   none
+    - Returns:  std::size_t
+    - Desc:     How many frames are visible. A stored count of 0 means the whole
+                buffer, so that is reported as the frame count rather than as
+                zero.
+*/
+inline std::size_t Waveform::getRangeCount() const {
+    return m_rangeCount ? m_rangeCount : m_numFrames;
+}
 
 } // namespace uilo

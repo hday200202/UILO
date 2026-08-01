@@ -4,15 +4,15 @@ namespace uilo {
 
 /*
     Dimension:
-    - value: the actual value of the dimension, 
-      either in pixels or percentage
-    - percent: whether the value is a percentage 
-      of the parent dimension or an absolute pixel 
-      value
-    - resolve(parent): a method to calculate the 
-      actual pixel value based on the parent 
-      dimension if it's a percentage, or return 
-      the value directly if it's in pixels
+    - Desc:     A size given either as absolute pixels or as a percentage of
+                whatever
+            the parent offers. The `percent` flag says which, and resolve() turns
+            the pair into a concrete number against a parent size. Percent
+            children share the space left over after their fixed-size siblings
+            have taken theirs, which is why the two are kept distinct rather than
+            resolved up front.
+    - Write them with the _px and _pct literals -- 10_px, 50_pct -- rather than
+      constructing the struct directly.
 */
 struct Dimension {
     float value = 0;
@@ -20,8 +20,6 @@ struct Dimension {
 
     float resolve(float parent) const { return percent ? parent * value / 100.f : value; }
 };
-
-// Literals to make it easier to specify dimensions in code, e.g. 10_px or 50_pct
 inline Dimension operator""_px(long double val)         { return {static_cast<float>(val), false}; }
 inline Dimension operator""_px(unsigned long long val)  { return {static_cast<float>(val), false}; }
 inline Dimension operator""_pct(long double val)        { return {static_cast<float>(val), true};  }

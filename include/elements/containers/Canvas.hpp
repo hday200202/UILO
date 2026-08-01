@@ -4,9 +4,16 @@
 #include "../../utils/Math.hpp"
 #include <optional>
 #include <unordered_map>
+#include "../../utils/Theme.hpp"
 
 namespace uilo {
 
+/*
+    GridLineStyle:
+    - Desc: How the Canvas draws its grid behind the children. None draws
+            nothing, Lines rules the full extent, Dots marks each intersection,
+            and Crosses draws a small tick at each one.
+*/
 enum class GridLineStyle {
     None,
     Lines,
@@ -14,6 +21,15 @@ enum class GridLineStyle {
     Crosses,
 };
 
+/*
+    CanvasOptions:
+    - Desc:     Everything a Canvas draws and how it responds to panning and
+                zooming:
+            the backdrop, the grid metric children snap to, the grid's own
+            appearance, the pan bounds, and the zoom range and locks. Colors come
+            as a literal plus a role, where the role wins when it resolves against
+            the active Palette. Sizes and coordinates are canvas-space pixels.
+*/
 class CanvasOptions {
 public:
     CanvasOptions() = default;
@@ -26,6 +42,16 @@ public:
     CanvasOptions& setGradient(const Gradient& g)        { m_gradient     = g; return *this; }
     CanvasOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
     CanvasOptions& setRounding(float r)                 { m_rounding  = r; return *this; }
+
+    // Outline -------------------------------------------------------------
+    // A border drawn inside the element's bounds, so turning one on never
+    // changes the space the element takes. Thickness follows
+    // Theme::setOutlineThickness() when left unset, and an unnamed role falls
+    // back to Theme::setOutlineColorRole() -- 0 and transparent otherwise,
+    // which is no border at all.
+    CanvasOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
+    CanvasOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
+    CanvasOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
 
     // Grid metric. Children placed via addChild(elem, x, y) get x/y rounded
     // to the nearest multiple of these values. 0 on an axis disables snap
@@ -80,7 +106,10 @@ public:
     const std::string& getColorRole()  const { return m_colorRole; }
     const Gradient&    getGradient()     const { return m_gradient; }
     const std::string& getGradientRole() const { return m_gradientRole; }
-    float         getRounding()        const { return m_rounding; }
+    float         getRounding()        const;
+    Color              getOutlineColor()     const { return m_outlineColor; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
+    float              getOutlineThickness() const { return m_outlineThickness; }
     Vec2f         getGridSize()        const { return m_gridSize; }
     GridLineStyle getGridLineStyle()   const { return m_gridStyle; }
     Color         getGridLineColor()   const { return m_gridColor; }
@@ -106,7 +135,10 @@ private:
     std::string m_colorRole;
     Gradient    m_gradient;
     std::string m_gradientRole;
-    float       m_rounding      = 0.f;
+    std::optional<float>       m_rounding;
+    Color                m_outlineColor = Color::Transparent;
+    std::string          m_outlineColorRole;
+    float m_outlineThickness = 0.f;
 
     Vec2f       m_gridSize      = {0.f, 0.f};
     GridLineStyle m_gridStyle   = GridLineStyle::None;
@@ -128,22 +160,54 @@ private:
     bool        m_zoomAxisY     = true;
 };
 
-// Canvas: a Container that places children at free canvas-space pixel
-// coordinates inside a pannable viewport. Optional grid metric snaps
-// placement positions to a regular lattice; optional bounds clamp the
-// pan extent. Pan input comes from the trackpad / scroll wheel and
-// (when enabled) middle-mouse drag.
+/*
+    getRounding():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Corner radius, resolved in three steps: the value this element
+                was given, then the active Theme's, then 0. Resolved on every
+                read rather than cached, so changing the Theme restyles a canvas
+                already on screen.
+*/
+inline float CanvasOptions::getRounding() const {
+    return Theme::resolveRounding(m_rounding, 0.f);
+}
+
+
+/*
+    Canvas:
+    - Desc: A Container that places its children at free canvas-space pixel
+            coordinates inside a pannable, zoomable viewport, rather than flowing
+            them along an axis the way Row and Column do. An optional grid metric
+            snaps placement to a regular lattice, and optional per-side bounds
+            clamp how far the view can travel. Pan comes from the trackpad or
+            scroll wheel and, when enabled, a middle-mouse drag; zoom from a pinch
+            or Ctrl-scroll, and can be locked per axis so a timeline can scale
+            horizontally only.
+    - Child positions live in a side table keyed by element rather than on the
+      children themselves, so an ordinary element can be placed on a canvas
+      without knowing anything about one.
+*/
 class Canvas : public Container {
 public:
-    Canvas(Modifier modifier, CanvasOptions options, const std::string& name = "");
-    Canvas(Modifier modifier, CanvasOptions options, contains children, const std::string& name = "");
+    Canvas(
+        Modifier modifier,
+        CanvasOptions options,
+        const std::string& name = ""
+    );
+    Canvas(
+        Modifier modifier,
+        CanvasOptions options,
+        contains children,
+        const std::string& name = ""
+    );
 
     const CanvasOptions& getOptions() const { return m_options; }
     CanvasOptions&       getOptions()       { return m_options; }
-    void setOptions(const CanvasOptions& o) { m_options = o; m_dirty = true; }
+    void                 setOptions(const CanvasOptions& o) { m_options = o; m_dirty = true; }
 
-    // Place a child at canvas-space (x, y). The position is snapped to
-    // the grid step on each axis where the step is > 0.
+    // Places a child at canvas-space (x, y), snapped to the grid step on each
+    // axis where that step is above 0.
     void addChild(Element* element, float x, float y);
     void setChildPosition(Element* element, float x, float y);
     Vec2f getChildPosition(Element* element) const;
@@ -169,8 +233,18 @@ public:
 
     void update(Rectf& parentBounds, float dt) override;
     void render() override;
-    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
-    bool checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise = false, bool momentum = false) override;
+    bool checkScroll(
+        const Vec2f& mousePosition,
+        float delta,
+        bool precise = false,
+        bool momentum = false
+    ) override;
+    bool checkScroll(
+        const Vec2f& mousePosition,
+        Vec2f delta,
+        bool precise = false,
+        bool momentum = false
+    ) override;
     bool checkZoom(const Vec2f& mousePosition, float magnification) override;
 
 private:
@@ -178,7 +252,7 @@ private:
     Vec2f clampPan(Vec2f pan) const;
 
     CanvasOptions m_options;
-    std::unordered_map<Element*, Vec2f> m_positions; // child -> canvas-space pos
+    std::unordered_map<Element*, Vec2f> m_positions;   /* child -> canvas-space pos */
     Vec2f m_pan   = {0.f, 0.f};
     float m_zoomX = 1.f;
     float m_zoomY = 1.f;

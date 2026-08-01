@@ -31,31 +31,27 @@ public:
         setTitle(Wt::WString::fromUTF8(config.title));
         addBaseRules();
 
-        // The renderer is the headless no-op from the UILO_WT build. UILO
-        // needs one to exist, but the bridge never ticks or draws the tree, so
-        // nothing is ever asked of it.
+        /* The renderer is the headless no-op from the UILO_WT build. */
         m_ui.setRenderer(m_renderer);
         m_ui.setPalette(config.palette);
 
         m_host = root()->addWidget(std::make_unique<Wt::WContainerWidget>());
         m_host->setStyleClass("uilo-root");
 
-        // Anything the builder registers with addPage() lands in m_pages; the
-        // page it returns is simply the one to open on.
+        /* Anything the builder registers with addPage() lands in m_pages; the
+           page it returns is simply the one to open on. */
         Page* initial = build(*this);
         if (initial) addPage(initial);
         if (m_pages.empty()) return;
 
-        // A deep link wins over the builder's choice, so a bookmarked page
-        // opens where it was bookmarked.
+        /* A deep link wins over the builder's choice, so a bookmarked page
+           opens where it was bookmarked. */
         const std::string fromUrl = pageFromPath(internalPath());
         const std::string first   = initial ? initial->getName() : m_order.front();
         show(m_pages.count(fromUrl) ? fromUrl : first, false);
 
         internalPathChanged().connect([this](const std::string& path) {
-            // Back/forward and typed URLs arrive here. Don't write the path
-            // back out: the browser already moved it, and doing so would push
-            // a duplicate history entry.
+            /* Back/forward and typed URLs arrive here. */
             const std::string name = pageFromPath(path);
             if (m_pages.count(name)) show(name, false);
         });
@@ -64,10 +60,8 @@ public:
     void addPage(Page* page) override {
         if (!page || m_pages.count(page->getName())) return;
 
-        // Hands the page (and, through it, every element) to UILO, which owns
-        // it for the rest of the session. Must happen before translating: it is
-        // what binds elements to this UILO, and colour roles resolve through
-        // that binding.
+        /* Hands the page (and, through it, every element) to UILO, which owns
+           it for the rest of the session. */
         m_ui.addPage(page);
         m_ui.setPage(page->getName());
 
@@ -108,8 +102,8 @@ public:
     }
 
 private:
-    // Pages are addressed as "/name". The leading slash is all that separates
-    // the two forms, so the conversion is a trim in each direction.
+    /* Pages are addressed as "/name". The leading slash is all that separates
+       the two forms, so the conversion is a trim in each direction. */
     static std::string pageFromPath(const std::string& path) {
         std::string name = path;
         while (!name.empty() && name.front() == '/') name.erase(name.begin());
@@ -126,8 +120,8 @@ private:
         it->second->setHidden(false);
         m_current = name;
 
-        // Keeps UILO's own notion of the active page in step, so getElement()
-        // and anything else reading it agree with what is on screen.
+        /* Keeps UILO's own notion of the active page in step, so getElement()
+           and anything else reading it agree with what is on screen. */
         m_ui.setPage(name);
 
         if (pushUrl) setInternalPath("/" + name, false);
@@ -141,18 +135,16 @@ private:
         sheet.addRule("html, body",
                       "margin:0;padding:0;width:100%;height:100%;overflow:hidden;");
         sheet.addRule(".uilo-root", "position:absolute;inset:0;overflow:hidden;");
-        // Every page fills the same box; only one is ever un-hidden.
+        /* Every page fills the same box; only one is ever un-hidden. */
         sheet.addRule(".uilo-page", "position:absolute;inset:0;overflow:hidden;");
-        // A floating layer (a popup and its backdrop) sits above the page,
-        // filling the window the same way. Only shown while its element is in
-        // UILO's floating list.
+        /* A floating layer (a popup and its backdrop) sits above the page,
+           filling the window the same way. */
         sheet.addRule(".uilo-overlay", "position:absolute;inset:0;overflow:hidden;z-index:1000;");
-        // A flex item defaults to a content-based minimum size, which would
-        // stop children shrinking to the size UILO gives them. UILO has no
-        // such floor, so it is removed here for every translated element.
+        /* A flex item defaults to a content-based minimum size, which would
+           stop children shrinking to the size UILO gives them. */
         sheet.addRule(".uilo-el", "box-sizing:border-box;min-width:0;min-height:0;");
-        // Resizer handles sit invisible until pointed at, the way the UILO
-        // examples fade theirs in from a per-frame handler.
+        /* Resizer handles sit invisible until pointed at, the way the UILO
+           examples fade theirs in from a per-frame handler. */
         sheet.addRule(".uilo-resizer-bar", "opacity:0;transition:opacity .15s;");
         sheet.addRule(".uilo-resizer:hover .uilo-resizer-bar", "opacity:1;");
     }
@@ -162,14 +154,23 @@ private:
     detail::Translator m_translator;
 
     Wt::WContainerWidget*                             m_host = nullptr;
-    std::map<std::string, Wt::WContainerWidget*>      m_pages;   // name -> host
-    std::vector<std::string>                          m_order;   // registration order
+    std::map<std::string, Wt::WContainerWidget*>      m_pages;   /* name -> host */
+    std::vector<std::string>                          m_order;   /* registration order */
     std::string                                       m_current;
     std::vector<std::function<void(const std::string&)>> m_onPageChanged;
 };
 
 } // namespace
 
+/*
+    run(int argc, char** argv, Builder build, Config config):
+    - Params:   int argc, char** argv, Builder build, Config config
+    - Returns:  int
+    - Desc:     Starts the Wt application server with the caller's builder. Each
+                browser session gets its own UILO and Translator, so sessions
+                share the Theme but never each other's element trees or
+                palettes.
+*/
 int run(int argc, char** argv, Builder build, Config config) {
     return Wt::WRun(argc, argv,
         [build = std::move(build), config = std::move(config)](const Wt::WEnvironment& env) {
@@ -179,4 +180,4 @@ int run(int argc, char** argv, Builder build, Config config) {
 
 } // namespace uilo::wt
 
-#endif // UILO_WT
+#endif   /* UILO_WT */

@@ -14,7 +14,7 @@ namespace uilo {
     - Desc: Process-wide registry for assets UILO ships with, plus anything the
             application wants to register alongside them. Reached through
             Resources::get().
-    - Icons: the built-in set is embedded in the binary (see
+    - The built-in icon set is embedded in the binary (see
              assets/EmbeddedIcons.hpp, generated from assets/icons/), so
              nothing has to be found on disk at runtime. Lookup is by name:
 
@@ -26,23 +26,20 @@ namespace uilo {
              an application-registered icon behaves exactly like a built-in.
     - Registering is only about *source markup*. Parsing and rasterizing happen
       in the Icon element, lazily, cached per on-screen size.
-    - Fonts: the same idea, one level simpler. Resources::fonts::default_ names
+    - Fonts work the same way, one level simpler. Resources::fonts::default_ names
       the DejaVu Sans built into the binary, which is also what any text that
       never had a font set renders with:
 
                 text({}, TextOptions().setFont(Resources::fonts::default_));
-                text({}, TextOptions());   // identical -- default is implicit
+                text({}, TextOptions());   identical -- default is implicit
 */
 class Resources {
 public:
-    // Defined by the generated header included at the bottom of this file:
-    // one `static constexpr std::string_view` per built-in icon, holding the
-    // icon's canonical name.
+    /* Defined by the generated header included at the bottom of this file: one
+       `static constexpr std::string_view` per built-in icon, holding the. */
     struct icons;
 
-    // Named fonts. `default_` carries a trailing underscore because `default`
-    // is a keyword -- the same rule the icon generator applies to reserved
-    // words. Defined below the class.
+    /* Named fonts. */
     struct fonts;
 
     static Resources& get();
@@ -59,34 +56,33 @@ public:
     */
     class IconRegistry {
     public:
-        // Empty view when the name is unknown -- callers treat that as "draw
-        // nothing" rather than an error, since a missing icon should not take
-        // the UI down.
+        /* Empty view when the name is unknown -- callers treat that as "draw
+           nothing" rather than an error, since a missing icon should not take. */
         std::string_view find(std::string_view name) const;
         std::string_view operator[](std::string_view name) const { return find(name); }
         bool contains(std::string_view name) const { return !find(name).empty(); }
 
-        // Registers (or shadows) an icon from markup already in memory.
+        /* Registers (or shadows) an icon from markup already in memory. */
         void add(std::string name, std::string markup);
-        // Reads an .svg off disk and registers its contents. False if the file
-        // could not be read; the registry is left untouched.
+        /* Reads an .svg off disk and registers its contents. False if the file
+           could not be read; the registry is left untouched. */
         bool addFile(std::string name, const std::filesystem::path& file);
-        // Registers every .svg in a directory, named after each file's stem.
-        // Returns how many were added.
+        /* Registers every .svg in a directory, named after each file's stem.
+           Returns how many were added. */
         std::size_t addDirectory(const std::filesystem::path& dir);
 
         void remove(std::string_view name);
 
-        // Every known name, built-ins and registered, sorted.
+        /* Every known name, built-ins and registered, sorted. */
         std::vector<std::string_view> names() const;
-        // Built-ins plus registered additions.
+        /* Built-ins plus registered additions. */
         std::size_t size() const;
-        // Just the icons compiled into the binary.
+        /* Just the icons compiled into the binary. */
         static std::size_t builtInCount();
 
     private:
-        // Transparent hash/equal so find(string_view) looks up without
-        // allocating a std::string. Same pattern as Palette's role map.
+        /* Transparent hash/equal so find(string_view) looks up without
+           allocating a std::string. Same pattern as Palette's role map. */
         struct StringHash {
             using is_transparent = void;
             std::size_t operator()(std::string_view s) const noexcept {
@@ -126,11 +122,11 @@ public:
     public:
         FontRegistry();
 
-        // A registered name -> its path; anything else -> itself.
+        /* A registered name -> its path; anything else -> itself. */
         std::string_view resolve(std::string_view nameOrPath) const;
 
-        // Points a name at a font file. Registering "default" repoints what
-        // unset text renders with.
+        /* Points a name at a font file. Registering "default" repoints what
+           unset text renders with. */
         void add(std::string name, std::string path);
         void remove(std::string_view name);
         bool contains(std::string_view name) const;
@@ -171,15 +167,19 @@ private:
     FontRegistry m_fonts;
 };
 
+/*
+    Resources:
+    - Desc: Compile-time names for the fonts that ship with UILO, so a call site
+            spells one as Resources::fonts::default_ and gets a compiler error on
+            a typo rather than a silent fallback at runtime.
+*/
 struct Resources::fonts {
-    // The DejaVu Sans compiled into the binary (assets/EmbeddedFont.hpp). Also
-    // what text with no font set falls back to, so setting this is a way to say
-    // "the default" out loud rather than a different outcome.
+    /* The DejaVu Sans compiled into the binary (assets/EmbeddedFont.hpp). */
     static constexpr std::string_view default_ = "default";
 };
 
 } // namespace uilo
 
-// Defines Resources::icons. Included last so Resources is a complete type by
-// the time the nested struct is defined.
+/* Defines Resources::icons. Included last so Resources is a complete type by
+   the time the nested struct is defined. */
 #include "../assets/EmbeddedIcons.hpp"
