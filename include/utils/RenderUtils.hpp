@@ -1,4 +1,10 @@
 #pragma once
-// RenderUtils.hpp — SFML render helpers replaced by BGFX renderer
-// These functions were used by the old SFML renderer and are now defunct.
-// The BGFX equivalents live in include/renderer/Renderer.hpp.
+
+/*
+    RenderUtils.hpp:
+    - Desc:     Empty. It once held helpers for the SFML renderer, which the
+                bgfx one
+            replaced -- the equivalents now live in renderer/Renderer.hpp. The
+            file remains only because several translation units still include it,
+            and can go once those includes are removed.
+*/

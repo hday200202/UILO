@@ -10,18 +10,19 @@ namespace {
 
 using DT = DateAndTime;
 
-// The card itself is a plain Column; DatePickerOptions exposes the subset of
-// ColumnOptions that makes sense here so the widget keeps one Options type.
+/* The card itself is a plain Column; DatePickerOptions exposes the subset of
+   ColumnOptions that makes sense here so the widget keeps one Options type. */
 ColumnOptions cardOptionsFrom(const DatePickerOptions& o) {
     return ColumnOptions()
         .setColor(o.getBackgroundColor())
         .setColorRole(o.getBackgroundColorRole())
-        .setRounding(o.getRounding());
+        .inheritRounding(o.getRoundingOpt(), DatePickerOptions::getRoundingOptFallback())
+        .setOutlineColor(o.getOutlineColor())
+        .setOutlineColorRole(o.getOutlineColorRole())
+        .setOutlineThickness(o.getOutlineThickness());
 }
 
-// Marks an element and everything below it for deletion. Erasing only the row
-// would leave its cells in UILO's element pool for the lifetime of the
-// program, since the pool sweep is driven by the flag alone.
+/* Marks an element and everything below it for deletion. */
 void eraseSubtree(Element* element) {
     if (!element) return;
 
@@ -47,10 +48,23 @@ std::string weekdayLabel(Weekday day, WeekdayLabelStyle style) {
 } // namespace
 
 
-DatePicker::DatePicker(Modifier modifier, DatePickerOptions options, const std::string& name)
-    : Column(modifier, cardOptionsFrom(options), {}, name),
-      m_dpOptions(std::move(options)),
-      m_embeddedModifier(modifier)
+/*
+    DatePicker(Modifier modifier, DatePickerOptions options, const std::string& name):
+    - Params:   Modifier modifier, DatePickerOptions options,
+                const std::string& name
+    - Returns:  DatePicker
+    - Desc:     Builds the picker as a Column: header, weekday row, day grid and
+                footer. The modifier is kept as well as applied, because opening
+                the picker as a popup replaces it with a centred free position
+                and closing has to put the embedded one back.
+*/
+DatePicker::DatePicker(
+    Modifier modifier,
+    DatePickerOptions options,
+    const std::string& name
+) : Column(modifier, cardOptionsFrom(options), {}, name),
+    m_dpOptions(std::move(options)),
+    m_embeddedModifier(modifier)
 {
     const Date today = DT::today();
     m_displayYear  = today.year;
@@ -101,9 +115,7 @@ void DatePicker::update(Rectf& parentBounds, float dt) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Selection
-// ---------------------------------------------------------------------------
+/* Selection */
 
 /*
     setSelectedDate(const Date& date):
@@ -169,9 +181,7 @@ void DatePicker::clearSelection() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Navigation
-// ---------------------------------------------------------------------------
+/* Navigation */
 
 /*
     showMonth(int year, unsigned month):
@@ -188,13 +198,7 @@ void DatePicker::showMonth(int year, unsigned month) {
     m_displayYear  = year;
     m_displayMonth = month;
 
-    // Prefer refreshing the existing cells in place over a structural rebuild.
-    // It allocates nothing, and -- unlike a rebuild, which replaces the cell
-    // elements -- it is visible to the Wt bridge, whose sync only re-applies
-    // properties to the elements translated once at build time. A rebuild is
-    // only needed when a month can lay out to a different grid shape (variable
-    // week rows, or adjacent days drawn as gaps), which updateGridInPlace()
-    // rejects; the queued rebuild then runs from update() as before.
+    /* Prefer refreshing the existing cells in place over a structural rebuild. */
     if (!updateGridInPlace(m_displayYear, m_displayMonth))
         m_needsRebuild = true;
 
@@ -216,10 +220,8 @@ void DatePicker::showMonth(int year, unsigned month) {
 bool DatePicker::updateGridInPlace(int year, unsigned month) {
     const DatePickerOptions& o = m_dpOptions;
 
-    // The in-place path holds only when every month draws the same grid: six
-    // fixed rows, and neighbour-month days as real cells rather than gaps.
-    // Otherwise the cell count or the cells' positions shift between months and
-    // only a rebuild can express it.
+    /* The in-place path holds only when every month draws the same grid: six
+       fixed rows, and neighbour-month days as real cells rather than gaps. */
     if (!o.getFixedWeekRows() || !o.getShowAdjacentMonths()) return false;
     if (m_cells.size() != static_cast<std::size_t>(6u * 7u)) return false;
 
@@ -232,9 +234,8 @@ bool DatePicker::updateGridInPlace(int year, unsigned month) {
         m_cellAdjacent[i] = adjacent;
         m_cellTexts[i]->setString(std::to_string(cursor.day));
 
-        // The cell's handlers captured its old date by value, so rebind them to
-        // the day it now shows. The bridge reads handlers at click time, so
-        // swapping the modifier's callbacks is enough -- no re-translation.
+        /* The cell's handlers captured its old date by value, so rebind them
+           to the day it now shows. */
         m_cells[i]->getModifier()
             .setOnLeftClick([this, cursor, adjacent](Element*) { handleDayClicked(cursor, adjacent); })
             .setOnHoverEnter([this, cursor](Element*) { setHoverDate(cursor); })
@@ -323,9 +324,7 @@ void DatePicker::notifyMonthChanged() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Popup presentation
-// ---------------------------------------------------------------------------
+/* Popup presentation */
 
 /*
     hasFooterButtons():
@@ -372,8 +371,8 @@ float DatePicker::preferredHeight() const {
         : DT::weeksInMonthGrid(m_displayYear, m_displayMonth, o.getFirstDayOfWeek());
     height += static_cast<float>(rows) * o.getCellHeight();
 
-    // Nothing is reserved for a footer that has no buttons in it -- an
-    // embedded picker with the footer off ends exactly at its last week.
+    /* Nothing is reserved for a footer that has no buttons in it -- an
+       embedded picker with the footer off ends exactly at its last week. */
     if (hasFooterButtons())
         height += o.getFooterHeight() + o.getFooterSpacing();
 
@@ -422,8 +421,8 @@ void DatePicker::open(UILO& uiloRef) {
     const DatePickerOptions& o = m_dpOptions;
 
     if (!m_backdrop) {
-        // Full-window, so it catches every click; the card is its only child
-        // and centres itself on both axes.
+        /* Full-window, so it catches every click; the card is its only child
+           and centres itself on both axes. */
         m_backdrop = new Column(
             Modifier().setWidth(100_pct).setHeight(100_pct),
             ColumnOptions()
@@ -433,9 +432,8 @@ void DatePicker::open(UILO& uiloRef) {
         m_backdrop->addElement(this);
     }
 
-    // A click that reaches the backdrop itself missed the card, since
-    // Container::checkLeftClick offers children first and only falls through
-    // when none of them took it.
+    /* A click that reaches the backdrop itself missed the card, since
+       Container::checkLeftClick offers children first and only falls through. */
     m_backdrop->getModifier().setOnLeftClick([this](Element*) {
         if (m_dpOptions.getDismissOnScrimClick()) close();
     });
@@ -490,9 +488,7 @@ void DatePicker::close() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Building
-// ---------------------------------------------------------------------------
+/* Building */
 
 /*
     clearRows():
@@ -546,10 +542,8 @@ void DatePicker::rebuild() {
     Element* footer = o.getShowFooter() ? buildFooter() : nullptr;
 
     if (footer) {
-        // Two equal percent spacers split whatever room is left below the grid,
-        // which centres the button row between the last week and the bottom
-        // edge however tall the card ends up. The bottom padding is part of
-        // that slack rather than a separate gap underneath.
+        /* Two equal percent spacers split whatever room is left below the
+           grid, which centres the button row between the last week and the. */
         addElement(new Spacer(Modifier().setHeight(50_pct)));
         addElement(footer);
         addElement(new Spacer(Modifier().setHeight(50_pct)));
@@ -597,8 +591,8 @@ Element* DatePicker::buildHeader() {
             .setBold(o.getHeaderBold()));
 
     if (o.getTitleClickGoesToToday()) {
-        // The Text has no handlers of its own, so wrapping it in a Row is what
-        // gives the title something clickable.
+        /* The Text has no handlers of its own, so wrapping it in a Row is what
+           gives the title something clickable. */
         auto* titleWrap = new Row(
             Modifier()
                 .setWidth(100_pct)
@@ -653,7 +647,8 @@ Element* DatePicker::buildNavButton(const std::string& iconName, std::function<v
         RowOptions()
             .setColor(baseColor)
             .setColorRole(baseRole)
-            .setRounding(o.getNavRounding()),
+            .inheritRounding(o.getNavRoundingOpt(),
+                             DatePickerOptions::getNavRoundingOptFallback()),
         contains{});
 
     if (!iconName.empty()) {
@@ -755,7 +750,7 @@ Element* DatePicker::buildGrid() {
             const bool adjacent = (cursor.month != m_displayMonth || cursor.year != m_displayYear);
 
             if (adjacent && !o.getShowAdjacentMonths()) {
-                // Hold the column open so the rest of the week stays put.
+                /* Hold the column open so the rest of the week stays put. */
                 weekRow->addElement(new Spacer(
                     Modifier().setWidth(Dimension{100.f / 7.f, true})));
             } else {
@@ -803,14 +798,15 @@ Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
         .setOnLeftClick([this, date, adjacent](Element*) { handleDayClicked(date, adjacent); })
         .setOnHoverEnter([this, date](Element*) { setHoverDate(date); })
         .setOnHoverExit([this, date](Element*) {
-            // Only clear if the cursor left *this* cell: the enter for the
-            // next one may already have run.
+            /* Only clear if the cursor left *this* cell: the enter for the
+               next one may already have run. */
             if (m_hoverDate && *m_hoverDate == date) setHoverDate(std::nullopt);
         });
 
     auto* cell = new Row(
         mod,
-        RowOptions().setRounding(o.getCellRounding()),
+        RowOptions().inheritRounding(o.getCellRoundingOpt(),
+                                     DatePickerOptions::getCellRoundingOptFallback()),
         contains{});
     cell->addElement(label);
 
@@ -855,9 +851,8 @@ Element* DatePicker::buildFooter() {
             clearSelection();
         }));
 
-    // Cancel sits midway between the left-hand buttons and the confirm button
-    // at the right end: two equal percent spacers divide the free width, so
-    // whatever is left of it goes half to each side.
+    /* Cancel sits midway between the left-hand buttons and the confirm button
+       at the right end: two equal percent spacers divide the free width, so. */
     footer->addElement(new Spacer(Modifier().setWidth(50_pct)));
 
     if (!o.getCancelButtonLabel().empty())
@@ -882,8 +877,9 @@ Element* DatePicker::buildFooter() {
 
 
 /*
-    buildFooterButton(const std::string& label, bool primary, std::function<void()> action):
-    - Params:   const std::string& label, bool primary, std::function<void()> action
+    buildFooterButton(...):
+    - Params:   const std::string& label, bool primary, std::function<void()>
+                action
     - Returns:  Element*
     - Desc:     One footer button. The primary one takes the confirm colours,
                 which are the accent by default so the committing action reads
@@ -919,15 +915,14 @@ Element* DatePicker::buildFooterButton(const std::string& label, bool primary,
         ButtonOptions()
             .setColor(fill)
             .setColorRole(fillRole)
-            .setRounding(o.getButtonRounding())
+            .inheritRounding(o.getButtonRoundingOpt(),
+                             DatePickerOptions::getButtonRoundingOptFallback())
             .setLabel(labelText),
         "");
 }
 
 
-// ---------------------------------------------------------------------------
-// Cell state
-// ---------------------------------------------------------------------------
+/* Cell state */
 
 /*
     isSelectable(const Date& date):
@@ -1054,9 +1049,11 @@ void DatePicker::applyCellColors() {
             fillRole = o.getCellHoverColorRole();
         }
 
-        // Mutating the live options is enough: a Row resolves its colour every
-        // frame, and Text notices a changed colour against its own cache.
-        cell->getOptions().setColor(fill).setColorRole(fillRole).setRounding(o.getCellRounding());
+        /* Mutating the live options is enough: a Row resolves its colour every
+           frame, and Text notices a changed colour against its own cache. */
+        cell->getOptions().setColor(fill).setColorRole(fillRole)
+            .inheritRounding(o.getCellRoundingOpt(),
+                             DatePickerOptions::getCellRoundingOptFallback());
         label->getOptions().setColor(text).setColorRole(textRole).setBold(bold);
     }
     m_dirty = true;
@@ -1099,8 +1096,8 @@ void DatePicker::handleDayClicked(const Date& date, bool adjacent) {
 
     if (o.getMode() == DatePickerMode::Range) {
         if (!m_rangeStart || !m_awaitingRangeEnd) {
-            // First click of a new span, or the start of a fresh one after the
-            // last was completed.
+            /* First click of a new span, or the start of a fresh one after the
+               last was completed. */
             m_rangeStart = date;
             m_rangeEnd.reset();
             m_awaitingRangeEnd = true;
@@ -1128,7 +1125,7 @@ void DatePicker::handleDayClicked(const Date& date, bool adjacent) {
     if (rangeCompleted && o.getOnRangeSelected())
         o.getOnRangeSelected()(*m_rangeStart, *m_rangeEnd);
 
-    // In Range mode there is nothing to close on until the span is complete.
+    /* In Range mode there is nothing to close on until the span is complete. */
     const bool selectionSettled = o.getMode() == DatePickerMode::Range ? rangeCompleted : true;
     if (m_isOpen && o.getCloseOnSelect() && selectionSettled) close();
 }

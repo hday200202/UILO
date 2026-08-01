@@ -12,8 +12,8 @@
 #include <memory>
 #include <sstream>
 
-// NanoSVG is this translation unit's job to instantiate. Its warnings are not
-// ours to fix, so they are silenced rather than polluting a -Wall -Wextra build.
+/* NanoSVG is this translation unit's job to instantiate. Its warnings are not
+   ours to fix, so they are silenced rather than polluting a -Wall -Wextra build. */
 #if defined(__clang__) || defined(__GNUC__)
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -41,9 +41,15 @@ namespace uilo {
 
 namespace {
 
-// One rasterizer for the process. Rasterizing is single-threaded here (it runs
-// from render()), and the context holds reusable scratch buffers, so building a
-// fresh one per icon would throw that away.
+/*
+    rasterizer():
+    - Params:   none
+    - Returns:  NSVGrasterizer* -- null when one could not be created
+    - Desc:     The one rasterizer for the process. Rasterizing is single-
+                threaded here, running from render(), and the context holds
+                reusable scratch buffers, so building a fresh one per icon would
+                throw those away. Destroyed with the holder at exit.
+*/
 NSVGrasterizer* rasterizer() {
     struct Holder {
         NSVGrasterizer* r = nsvgCreateRasterizer();
@@ -53,7 +59,12 @@ NSVGrasterizer* rasterizer() {
     return holder.r;
 }
 
-// NanoSVG packs colours as 0xAABBGGRR.
+/*
+    packColor(Color c):
+    - Params:   Color c
+    - Returns:  uint32_t
+    - Desc:     Packs a colour the way NanoSVG stores one, as 0xAABBGGRR.
+*/
 uint32_t packColor(Color c) {
     return (static_cast<uint32_t>(c.a) << 24) |
            (static_cast<uint32_t>(c.b) << 16) |
@@ -62,12 +73,15 @@ uint32_t packColor(Color c) {
 }
 
 /*
-    parseViewBox
-    - Pulls the four viewBox numbers straight out of the markup. NanoSVG applies
-      the viewBox transform during parsing and does not report it back, but the
-      original units are needed for two things: the icon's intrinsic aspect
-      ratio, and converting an authored stroke width into the parsed (scaled)
-      units NSVGshape carries.
+    parseViewBox(std::string_view markup, float& w, float& h):
+    - Params:   std::string_view markup, float& w, float& h
+    - Returns:  bool -- true when four usable numbers were found
+    - Desc:     Pulls the four viewBox numbers straight out of the markup.
+                NanoSVG applies the viewBox transform during parsing and does
+                not report it back, but the original units are needed for two
+                things: the icon's intrinsic aspect ratio, and converting an
+                authored stroke width into the parsed, already-scaled units
+                NSVGshape carries.
 */
 bool parseViewBox(std::string_view markup, float& w, float& h) {
     const std::size_t at = markup.find("viewBox");
@@ -92,21 +106,46 @@ bool parseViewBox(std::string_view markup, float& w, float& h) {
 } // namespace
 
 
-Icon::Icon(Modifier modifier, IconOptions options, const std::string& name)
-    : m_options(std::move(options))
-{
+/*
+    Icon(Modifier modifier, IconOptions options, const std::string& name):
+    - Params:   Modifier modifier, IconOptions options, const std::string& name
+    - Returns:  Icon
+    - Desc:     Constructs an icon from a modifier and its options. Nothing is
+                parsed or rasterized here: the source is resolved and rendered
+                on the first draw, once the element has a renderer and a size.
+*/
+Icon::Icon(
+    Modifier modifier,
+    IconOptions options,
+    const std::string& name
+) : m_options(std::move(options)) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Icon;
 }
 
+/*
+    ~Icon():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Destroys the icon's raster texture. Unlike Image, an Icon always
+                owns its texture, since it rasterizes its own pixels rather than
+                sharing a cached file.
+*/
 Icon::~Icon() {
     releaseTexture();
 }
 
+/*
+    setOptions(const IconOptions& opts):
+    - Params:   const IconOptions& opts
+    - Returns:  void
+    - Desc:     Replaces the options and clears every cache key, forcing a re-
+                raster on the next draw, since the source, colour and stroke may
+                all have moved at once.
+*/
 void Icon::setOptions(const IconOptions& opts) {
     m_options = opts;
-    // Force a re-raster: the source, colour, or stroke may all have moved.
     m_rasterSource.clear();
     m_rasterW = 0;
     m_rasterH = 0;
@@ -114,6 +153,13 @@ void Icon::setOptions(const IconOptions& opts) {
     m_dirty = true;
 }
 
+/*
+    releaseTexture():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Destroys the raster texture if there is one, leaving the icon
+                ready to rasterize again.
+*/
 void Icon::releaseTexture() {
     if (!m_textureValid) return;
     if (m_uiloRef) {
@@ -125,11 +171,22 @@ void Icon::releaseTexture() {
     m_textureValid  = false;
 }
 
+/*
+    getMarkup():
+    - Params:   none
+    - Returns:  std::string_view -- empty when the source is unset or unknown
+    - Desc:     The markup this icon resolves to, which is also what an
+                alternate renderer emits. The three sources are checked in
+                order: literal markup, then a file, then a registry name. A file
+                is read once and held, keyed by its path, because the returned
+                view has to stay valid after this call returns; a failed read
+                reports the error once and yields empty markup, so a missing
+                file draws nothing rather than retrying every frame.
+*/
 std::string_view Icon::getMarkup() const {
     if (!m_options.getMarkup().empty()) return m_options.getMarkup();
 
     if (!m_options.getFile().empty()) {
-        // Read once and keep it; the returned view has to outlive this call.
         if (m_fileMarkupPath != m_options.getFile()) {
             std::ifstream in(m_options.getFile(), std::ios::binary);
             if (!in) {
@@ -152,6 +209,14 @@ std::string_view Icon::getMarkup() const {
     return {};
 }
 
+/*
+    getSourceAspect():
+    - Params:   none
+    - Returns:  float -- width over height, 1.0 when it could not be determined
+    - Desc:     The icon's intrinsic aspect ratio, read from the markup's
+                viewBox and cached, so a caller sizing an element from its art
+                does not re-scan the markup every frame.
+*/
 float Icon::getSourceAspect() const {
     const std::string_view markup = getMarkup();
     if (markup.empty()) return 1.f;
@@ -164,6 +229,26 @@ float Icon::getSourceAspect() const {
     return m_sourceAspect;
 }
 
+/*
+    ensureRaster(uint32_t pxW, uint32_t pxH, Color tint):
+    - Params:   uint32_t pxW, uint32_t pxH, Color tint
+    - Returns:  bool -- true when a texture is ready to draw
+    - Desc:     Rasterizes the icon at a pixel size, reusing the existing
+                texture when nothing it depends on has changed. The cache key
+                covers only what affects the pixels -- size, tint, stroke width,
+                the preserve flag and the source markup -- so flips and the
+                destination rect are left to draw time and never force a re-
+                raster. Recoloring retints whichever paints a shape already
+                uses; a shape the author left unpainted stays that way. The
+                authored stroke width is folded through the viewBox scale
+                NanoSVG has already applied, without which a width of 1.5 on a
+                24-unit grid would come out several times too thin. The texture
+                is reused when only its contents changed and reallocated only
+                when its dimensions move. Returns false for an empty source, a
+                zero size, a texture that would exceed what bgfx can address, or
+                a failed allocation, in each case leaving the icon undrawn
+                rather than partly drawn.
+*/
 bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
     if (pxW == 0 || pxH == 0) return false;
 
@@ -172,8 +257,8 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
 
     const float stroke = m_options.hasStrokeWidth() ? m_options.getStrokeWidth() : -1.f;
 
-    // Everything the pixels depend on. Anything else (flips, the destination
-    // rect) is handled at draw time and must not force a re-raster.
+    /* Everything the pixels depend on; flips and the destination rect are
+       handled at draw time and must not force a re-raster. */
     const bool sameKey = m_textureValid
         && m_rasterW == pxW
         && m_rasterH == pxH
@@ -188,7 +273,7 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
     NSVGrasterizer* rast = rasterizer();
     if (!rast || !m_uiloRef) return false;
 
-    // nsvgParse writes into its input, so it gets a private, NUL-terminated copy.
+    /* nsvgParse writes into its input, so it gets a private NUL-terminated copy. */
     std::vector<char> mutableMarkup(markup.begin(), markup.end());
     mutableMarkup.push_back('\0');
 
@@ -198,10 +283,8 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
         return false;
     }
 
-    // Authored stroke width -> parsed units. NanoSVG has already folded the
-    // viewBox scale into every shape, so the override has to be folded the same
-    // way or a stroke set to 1.5 would come out ~4x too thin on a 24-unit grid
-    // drawn at 100px.
+    /* Authored stroke units -> parsed units, matching the viewBox scale NanoSVG
+       has already folded into every shape. */
     float docScale = 1.f;
     if (m_options.hasStrokeWidth()) {
         float vbW = 0.f, vbH = 0.f;
@@ -215,16 +298,9 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
 
     for (NSVGshape* shape = image->shapes; shape; shape = shape->next) {
         if (recolor) {
-            // The built-ins declare stroke="currentColor", which no SVG parser
-            // can resolve on its own -- NanoSVG leaves a grey behind. Retinting
-            // whichever paints the shape actually uses is what makes colouring
-            // an icon a one-liner without touching the markup.
-            //
-            // Only paints that are already active get retinted. A shape the
-            // author left unpainted stays unpainted: NanoSVG applies SVG's
-            // default black fill, so "no paint at all" means the art really was
-            // meant to be invisible (a <line> with no stroke draws nothing in a
-            // browser either), and forcing one on would fight the source.
+            /* Only paints already active get retinted: a shape the author left
+               unpainted was meant to be invisible, and forcing one on would
+               fight the source. */
             if (shape->stroke.type != NSVG_PAINT_NONE) {
                 shape->stroke.type  = NSVG_PAINT_COLOR;
                 shape->stroke.color = packed;
@@ -243,9 +319,8 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
 
     const float scaleX = static_cast<float>(pxW) / image->width;
     const float scaleY = static_cast<float>(pxH) / image->height;
-    // One uniform scale: nsvgRasterize has no non-uniform mode, and stretching
-    // is the quad's job at draw time. Fitting uses the smaller factor;
-    // stretching rasterizes at the larger one so the wider axis keeps its detail.
+    /* One uniform scale, since nsvgRasterize has no non-uniform mode: fitting
+       takes the smaller factor, stretching the larger to keep detail. */
     const float scale = m_options.getPreserveAspect()
         ? std::min(scaleX, scaleY)
         : std::max(scaleX, scaleY);
@@ -258,7 +333,7 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
     const uint32_t texH = std::max(1u, static_cast<uint32_t>(
         std::lround(image->height * finalScale)));
 
-    // bgfx textures are uint16-addressed; a pathological size would wrap.
+    /* bgfx textures are uint16-addressed; a pathological size would wrap. */
     if (texW > 4096u || texH > 4096u) {
         nsvgDelete(image);
         return false;
@@ -272,8 +347,8 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
 
     Renderer& renderer = m_uiloRef->getRenderer();
 
-    // Reuse the texture when only its contents changed (a palette switch, a new
-    // stroke width); reallocate only when the dimensions move.
+    /* Reuse the texture when only its contents changed; reallocate only when
+       the dimensions move. */
     if (m_textureValid && (m_rasterTexW != texW || m_rasterTexH != texH))
         releaseTexture();
 
@@ -302,12 +377,32 @@ bool Icon::ensureRaster(uint32_t pxW, uint32_t pxH, Color tint) {
     return true;
 }
 
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Resolves the icon's bounds. Rasterizing waits for render, which
+                is where the on-screen size is finally known.
+*/
 void Icon::update(Rectf& parentBounds, float dt) {
     (void)dt;
     resize(parentBounds);
 }
 
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Resolves the tint through the Palette, rasterizes at the size
+                the icon actually covers on screen -- which is what keeps it
+                sharp through a scale or DPI change instead of resampling a
+                fixed raster -- and draws it. With preserveAspect on, the
+                aspect-correct raster is letterboxed and centred in the bounds
+                rather than stretched by the quad. The draw passes white because
+                the tint is already baked into the pixels.
+*/
 void Icon::render() {
+    if (!m_modifier.getVisible()) { m_dirty = false; return; }
     m_dirty = false;
     if (!m_uiloRef) return;
     if (m_bounds.size.x <= 0.f || m_bounds.size.y <= 0.f) return;
@@ -315,8 +410,6 @@ void Icon::render() {
     const Color tint = m_uiloRef->getPalette().resolve(
         m_options.getColorRole(), m_options.getColor());
 
-    // Rasterize at the size actually covered on screen, so the icon stays sharp
-    // through setScale() and DPI changes instead of being resampled.
     const uint32_t pxW = static_cast<uint32_t>(std::lround(m_bounds.size.x));
     const uint32_t pxH = static_cast<uint32_t>(std::lround(m_bounds.size.y));
     if (!ensureRaster(pxW, pxH, tint)) return;
@@ -328,8 +421,7 @@ void Icon::render() {
 
     Rectf dst = m_bounds;
     if (m_options.getPreserveAspect()) {
-        // Letterbox: the raster is aspect-correct, so centre it rather than
-        // stretching the quad.
+        /* Letterbox: the raster is aspect-correct, so centre it. */
         const float aspect = static_cast<float>(m_rasterTexW) /
                              static_cast<float>(m_rasterTexH);
         float w = m_bounds.size.x;
@@ -343,8 +435,6 @@ void Icon::render() {
         dst.size = { w, h };
     }
 
-    // The tint is already baked into the pixels, so the draw passes white and
-    // lets the texture's own colour through.
     m_uiloRef->getRenderer().drawImage(
         dst, tex, Color::White, {{0.f, 0.f}, {1.f, 1.f}},
         m_options.getFlipH(), m_options.getFlipV(), false);

@@ -159,9 +159,14 @@ void Palette::clear() {
                 panelAlt
                 accent
                 accentHover
+                onAccent
                 text
                 textDim
                 outline
+
+                These are the role names the built-in widgets default to, so a
+                palette covering them themes every widget without naming a
+                single role at the call site.
 */
 Palette Palette::defaultDark() {
     Palette p;
@@ -175,6 +180,7 @@ Palette Palette::defaultDark() {
     p.set("text",       {235, 238, 245, 255});
     p.set("textDim",    {160, 168, 190, 255});
     p.set("outline",    {80,  84,  100, 255});
+    p.set("onAccent",   {255, 255, 255, 255});
 
     p.setAlias("column.bg", "panel");
     p.setAlias("row.bg",    "panel");

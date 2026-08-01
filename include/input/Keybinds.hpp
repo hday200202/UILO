@@ -61,7 +61,7 @@ public:
         return m_actions.find(name) != m_actions.end();
     }
 
-    // True while any key bound to the action is held.
+    /* True while any key bound to the action is held. */
     bool isActionDown(const std::string& name) const {
         auto it = m_actions.find(name);
         if (it == m_actions.end()) return false;
@@ -73,9 +73,8 @@ public:
 
     const std::unordered_map<std::string, Action>& getActions() const { return m_actions; }
 
-    // dispatch=false advances the edge-detection state without firing any
-    // callback, so a key held while suppressed is not reported as a fresh
-    // press once dispatching resumes.
+    /* dispatch=false advances the edge-detection state without firing any
+       callback, so a key held while suppressed is not reported as a fresh. */
     void update(bool dispatch = true) {
         const bool* state = SDL_GetKeyboardState(nullptr);
 
@@ -96,9 +95,7 @@ public:
             }
         }
 
-        // Snapshot after every action has been evaluated. Folding this into the
-        // loop above would let the first action that reads a shared key hide the
-        // press edge from every later action bound to the same key.
+        /* Snapshot after every action has been evaluated. */
         for (auto& [scancode, prev] : m_prevState) prev = state[scancode];
     }
 

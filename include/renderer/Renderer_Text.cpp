@@ -10,11 +10,17 @@
 
 namespace uilo {
 
-// applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in
-// RendererImpl.hpp.
+/* applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in
+   RendererImpl.hpp. */
 
 namespace {
-// Slurp a file fully into a vector.
+
+/*
+    readFile(const char* path, std::vector<uint8_t>& out):
+    - Params:   const char* path, std::vector<uint8_t>& out
+    - Returns:  bool
+    - Desc:     Slurp a file fully into a vector.
+*/
 bool readFile(const char* path, std::vector<uint8_t>& out) {
     std::FILE* f = std::fopen(path, "rb");
     if (!f) return false;
@@ -32,6 +38,15 @@ constexpr int kAtlasW = 1024;
 constexpr int kAtlasH = 1024;
 constexpr const char* kEmbeddedFontCacheKey = "__UILO_EMBEDDED_DEFAULT_FONT__";
 
+/*
+    initAtlasFace(...):
+    - Params:   FontFace& face, stbtt_fontinfo info, std::vector<uint8_t>
+                ttf, float pixelHeight
+    - Returns:  none
+    - Desc:     Sets up a font face at one pixel size: reads the vertical
+                metrics, scales them, and allocates a blank single-channel atlas
+                the glyphs are packed into on demand.
+*/
 void initAtlasFace(FontFace& face, stbtt_fontinfo info,
                    std::vector<uint8_t> ttf, float pixelHeight) {
     face.ttfData     = std::move(ttf);
@@ -41,7 +56,7 @@ void initAtlasFace(FontFace& face, stbtt_fontinfo info,
     int asc = 0, desc = 0, lineGap = 0;
     stbtt_GetFontVMetrics(&face.info, &asc, &desc, &lineGap);
     face.ascent  =  asc     * face.scale;
-    face.descent = -desc    * face.scale;  // stb reports negative descent
+    face.descent = -desc    * face.scale;   /* stb reports negative descent */
     face.lineGap =  lineGap * face.scale;
     face.atlasW  = kAtlasW;
     face.atlasH  = kAtlasH;
@@ -49,7 +64,7 @@ void initAtlasFace(FontFace& face, stbtt_fontinfo info,
     face.penY = 1;
     face.rowH = 0;
 
-    // Allocate R8 texture, blank.
+    /* Allocate R8 texture, blank. */
     face.atlas = bgfx::createTexture2D(
         (uint16_t)kAtlasW, (uint16_t)kAtlasH, false, 1,
         bgfx::TextureFormat::R8,
@@ -58,6 +73,15 @@ void initAtlasFace(FontFace& face, stbtt_fontinfo info,
 }
 } // anon
 
+/*
+    getFace(uint32_t fontId, float pixelHeight):
+    - Params:   uint32_t fontId, float pixelHeight
+    - Returns:  FontFace*
+    - Desc:     The cached face for a font at a pixel size, created on first
+                use. Sizes are cached separately because a glyph atlas is
+                rasterised at one size; asking for a new size builds a new face
+                rather than scaling an existing one, which would blur it.
+*/
 FontFace* Renderer::Impl::getFace(uint32_t fontId, float pixelHeight) {
     if (fontId >= fonts.size()) return nullptr;
     int key = (int)(pixelHeight + 0.5f);
@@ -66,7 +90,7 @@ FontFace* Renderer::Impl::getFace(uint32_t fontId, float pixelHeight) {
     auto it = rec.sizes.find(key);
     if (it != rec.sizes.end()) return &it->second;
 
-    // Parse font info from owning ttfData
+    /* Parse font info from owning ttfData */
     stbtt_fontinfo info{};
     if (!stbtt_InitFont(&info, rec.ttfData.data(),
                        stbtt_GetFontOffsetForIndex(rec.ttfData.data(), 0))) {
@@ -78,6 +102,15 @@ FontFace* Renderer::Impl::getFace(uint32_t fontId, float pixelHeight) {
     return &insIt->second;
 }
 
+/*
+    getGlyph(FontFace& face, uint32_t codepoint):
+    - Params:   FontFace& face, uint32_t codepoint
+    - Returns:  const Glyph*
+    - Desc:     The cached glyph for a codepoint, rasterised and packed into the
+                atlas on first use. Packing runs left to right in rows; when the
+                atlas is full the glyph is recorded as zero-sized so it simply
+                does not draw, rather than corrupting the sheet.
+*/
 const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     auto it = face.glyphs.find(codepoint);
     if (it != face.glyphs.end()) return &it->second;
@@ -94,7 +127,7 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
 
     Glyph g{};
     g.xoff     = (float)x0;
-    g.yoff     = (float)y0;   // negative (above baseline)
+    g.yoff     = (float)y0;   /* negative (above baseline) */
     g.xadvance = adv * face.scale;
 
     if (gw <= 0 || gh <= 0) {
@@ -103,7 +136,7 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
         return &face.glyphs.emplace(codepoint, g).first->second;
     }
 
-    // Reserve space in atlas
+    /* Reserve space in atlas */
     const int pad = 1;
     if (face.penX + gw + pad >= face.atlasW) {
         face.penX  = 1;
@@ -111,17 +144,17 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
         face.rowH  = 0;
     }
     if (face.penY + gh + pad >= face.atlasH) {
-        // Atlas full — give up on this glyph (no visible draw)
+        /* Atlas full — give up on this glyph (no visible draw) */
         g.w = g.h = 0;
         return &face.glyphs.emplace(codepoint, g).first->second;
     }
 
-    // Render glyph into temp buffer
+    /* Render glyph into temp buffer */
     std::vector<uint8_t> bmp((size_t)gw * (size_t)gh, 0);
     stbtt_MakeCodepointBitmap(&face.info, bmp.data(), gw, gh, gw,
                               face.scale, face.scale, (int)codepoint);
 
-    // Upload subregion
+    /* Upload subregion */
     const bgfx::Memory* mem = bgfx::copy(bmp.data(), (uint32_t)bmp.size());
     bgfx::updateTexture2D(face.atlas, 0, 0,
                           (uint16_t)face.penX, (uint16_t)face.penY,
@@ -138,6 +171,15 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     return &face.glyphs.emplace(codepoint, g).first->second;
 }
 
+/*
+    loadFont(const std::string& path):
+    - Params:   const std::string& path
+    - Returns:  Font
+    - Desc:     Loads a TTF by path, cached so the same file is read once. A
+                missing or invalid file falls back to the embedded face and is
+                cached under the requested path too, so a bad path warns once
+                rather than retrying every frame.
+*/
 Font Renderer::loadFont(const std::string& path) {
     auto& impl = *m_impl;
 
@@ -181,7 +223,7 @@ Font Renderer::loadFont(const std::string& path) {
         return f;
     }
 
-    // Validate
+    /* Validate */
     stbtt_fontinfo probe{};
     if (!stbtt_InitFont(&probe, ttf.data(),
                        stbtt_GetFontOffsetForIndex(ttf.data(), 0))) {
@@ -198,6 +240,14 @@ Font Renderer::loadFont(const std::string& path) {
     Font f; f.id = id; return f;
 }
 
+/*
+    measureText(const std::string& utf8, const Font& font, float sizePx):
+    - Params:   const std::string& utf8, const Font& font, float sizePx
+    - Returns:  TextMetrics
+    - Desc:     Measures a string's bounding box and vertical metrics at a size,
+                walking the same glyph advances the draw uses so the two always
+                agree.
+*/
 TextMetrics Renderer::measureText(const std::string& utf8, const Font& font, float sizePx) {
     TextMetrics m{};
     if (!font.valid()) return m;
@@ -234,6 +284,14 @@ TextMetrics Renderer::measureText(const std::string& utf8, const Font& font, flo
     return m;
 }
 
+/*
+    charPositions(const std::string& utf8, const Font& font, float sizePx):
+    - Params:   const std::string& utf8, const Font& font, float sizePx
+    - Returns:  std::vector<Vec2f>
+    - Desc:     The position of every codepoint boundary in a string, N+1 of
+                them so the trailing cursor slot has one. This is what the
+                Textbox maps a caret and a hit test through.
+*/
 std::vector<Vec2f> Renderer::charPositions(const std::string& utf8,
                                             const Font& font, float sizePx) {
     std::vector<Vec2f> out;
@@ -258,7 +316,7 @@ std::vector<Vec2f> Renderer::charPositions(const std::string& utf8,
             x = 0.f;
             y += lh;
         } else if (cp == '\r') {
-            // skip; matches drawText
+            /* skip; matches drawText */
         } else {
             const Glyph* g = impl.getGlyph(*face, cp);
             if (g) x += g->xadvance;
@@ -268,8 +326,21 @@ std::vector<Vec2f> Renderer::charPositions(const std::string& utf8,
     return out;
 }
 
+/*
+    drawText(...):
+    - Params:   const std::string& utf8, Vec2f position, const Font& font,
+                float sizePx, Color color, TextStyle style
+    - Returns:  none
+    - Desc:     Draws a UTF-8 string, one textured quad per glyph, batched into
+                a single submit. Bold re-emits each glyph nudged sideways and
+                italic shears the quad about the baseline, both synthetic so any
+                face can be styled without a second font file, and neither
+                changes the advances -- so a styled run measures and wraps
+                exactly like a plain one.
+*/
 void Renderer::drawText(const std::string& utf8, Vec2f position,
-                         const Font& font, float sizePx, Color color) {
+                         const Font& font, float sizePx, Color color,
+                         TextStyle style) {
     if (!font.valid() || utf8.empty()) return;
     auto& impl = *m_impl;
     impl.flushSolidBatch();
@@ -278,14 +349,15 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
     FontFace* face = impl.getFace(font.id, sizePx);
     if (!face || !bgfx::isValid(face->atlas)) return;
 
-    // Single pass: allocate transient space for the worst case (one quad per
-    // UTF-8 byte, an upper bound on codepoints) and submit only the range
-    // actually filled. This avoids a separate pre-count pass that would
-    // decode the string and hit the glyph cache twice per draw. Cap at the
-    // 16-bit index range; longer strings truncate (they produced garbage
-    // indices before, so nothing sane is lost).
+    /* Synthetic styling. */
+    const int   passes = style.bold ? 2 : 1;
+    const float boldDx = style.bold ? std::max(1.f, sizePx * 0.04f) : 0.f;
+    const float slant  = style.italic ? 0.21f : 0.f;   /* ~12 degrees */
+
+    /* Single pass: allocate transient space for the worst case (one quad per
+       UTF-8 byte, an upper bound on codepoints) and submit only the range. */
     const uint32_t maxQuads =
-        (uint32_t)std::min<size_t>(utf8.size(), 65532u / 4u);
+        (uint32_t)std::min<size_t>(utf8.size() * (size_t)passes, 65532u / 4u);
     bgfx::TransientVertexBuffer tvb;
     bgfx::TransientIndexBuffer  tib;
     if (!bgfx::allocTransientBuffers(&tvb, impl.texLayout, maxQuads * 4,
@@ -300,7 +372,7 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
     const float invH = 1.f / (float)face->atlasH;
 
     float penX = position.x;
-    float penY = position.y + face->ascent;   // baseline
+    float penY = position.y + face->ascent;   /* baseline */
     uint32_t vi = 0, ii = 0;
 
     const char* s = utf8.data();
@@ -320,7 +392,7 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
         const Glyph* g = impl.getGlyph(*face, cp);
         if (!g) continue;
 
-        if (g->w > 0 && g->h > 0 && vi + 4 <= maxQuads * 4) {
+        if (g->w > 0 && g->h > 0) {
             float gx = std::floor(penX + g->xoff + 0.5f);
             float gy = std::floor(penY + g->yoff + 0.5f);
             float gw = (float)g->w;
@@ -330,27 +402,41 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
             float u1 = (g->x + g->w) * invW;
             float v1 = (g->y + g->h) * invH;
 
-            uint16_t base = (uint16_t)vi;
-            float p0x = gx,      p0y = gy;
-            float p1x = gx + gw, p1y = gy;
-            float p2x = gx + gw, p2y = gy + gh;
-            float p3x = gx,      p3y = gy + gh;
-            impl.rotPt(p0x, p0y); impl.rotPt(p1x, p1y);
-            impl.rotPt(p2x, p2y); impl.rotPt(p3x, p3y);
-            verts[vi++] = {p0x, p0y, col, u0, v0};
-            verts[vi++] = {p1x, p1y, col, u1, v0};
-            verts[vi++] = {p2x, p2y, col, u1, v1};
-            verts[vi++] = {p3x, p3y, col, u0, v1};
-            idx[ii++] = base;
-            idx[ii++] = (uint16_t)(base + 1);
-            idx[ii++] = (uint16_t)(base + 2);
-            idx[ii++] = base;
-            idx[ii++] = (uint16_t)(base + 2);
-            idx[ii++] = (uint16_t)(base + 3);
+            for (int pass = 0; pass < passes; ++pass) {
+                if (vi + 4 > maxQuads * 4) break;
+                const float dx = (float)pass * boldDx;
+
+                uint16_t base = (uint16_t)vi;
+                float p0x = gx + dx,      p0y = gy;
+                float p1x = gx + gw + dx, p1y = gy;
+                float p2x = gx + gw + dx, p2y = gy + gh;
+                float p3x = gx + dx,      p3y = gy + gh;
+
+                /* Shear about the baseline, so the glyph leans right above it. */
+                if (slant != 0.f) {
+                    p0x += (penY - p0y) * slant;
+                    p1x += (penY - p1y) * slant;
+                    p2x += (penY - p2y) * slant;
+                    p3x += (penY - p3y) * slant;
+                }
+
+                impl.rotPt(p0x, p0y); impl.rotPt(p1x, p1y);
+                impl.rotPt(p2x, p2y); impl.rotPt(p3x, p3y);
+                verts[vi++] = {p0x, p0y, col, u0, v0};
+                verts[vi++] = {p1x, p1y, col, u1, v0};
+                verts[vi++] = {p2x, p2y, col, u1, v1};
+                verts[vi++] = {p3x, p3y, col, u0, v1};
+                idx[ii++] = base;
+                idx[ii++] = (uint16_t)(base + 1);
+                idx[ii++] = (uint16_t)(base + 2);
+                idx[ii++] = base;
+                idx[ii++] = (uint16_t)(base + 2);
+                idx[ii++] = (uint16_t)(base + 3);
+            }
         }
         penX += g->xadvance;
     }
-    if (ii == 0) return;   // whitespace-only: nothing to submit
+    if (ii == 0) return;   /* whitespace-only: nothing to submit */
 
     bgfx::setTexture(0, impl.s_texColor, face->atlas);
     bgfx::setVertexBuffer(0, &tvb, 0, vi);

@@ -7,9 +7,19 @@
 
 namespace uilo {
 
-Slider::Slider(Modifier modifier, SliderOptions options, const std::string& name)
-    : m_options(options)
-{
+/*
+    Slider(Modifier modifier, SliderOptions options, const std::string& name):
+    - Params:   Modifier modifier, SliderOptions options,
+                const std::string& name
+    - Returns:  Slider
+    - Desc:     Constructs a slider and seats it at its configured default,
+                clamped into range, or at the minimum when no default was given.
+*/
+Slider::Slider(
+    Modifier modifier,
+    SliderOptions options,
+    const std::string& name
+) : m_options(options) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Slider;
@@ -18,6 +28,16 @@ Slider::Slider(Modifier modifier, SliderOptions options, const std::string& name
         : m_options.getMin();
 }
 
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Resolves the slider's bounds and, while a drag is running,
+                tracks the pointer. The button state is polled rather than
+                driven by an event so a release outside the window still ends
+                the drag, and the resize cursor is re-requested each frame
+                because UILO clears the request pool at the top of every one.
+*/
 void Slider::update(Rectf& parentBounds, float /*dt*/) {
     resize(parentBounds);
 
@@ -36,7 +56,19 @@ void Slider::update(Rectf& parentBounds, float /*dt*/) {
     }
 }
 
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the track, the filled portion up to the thumb, and the
+                thumb itself, in whichever orientation the options ask for. A
+                vertical slider fills from the bottom up, which is the direction
+                a level control is read in. The track's thickness is a fraction
+                of the cross axis when it is 1 or below and a pixel count
+                otherwise, so the same options work at any element size.
+*/
 void Slider::render() {
+    if (!m_modifier.getVisible()) { m_dirty = false; return; }
     if (!m_uiloRef) { m_dirty = false; return; }
     auto& renderer = m_uiloRef->getRenderer();
     const float scale = m_uiloRef->getScale();
@@ -60,17 +92,17 @@ void Slider::render() {
         const float trackW = m_bounds.size.x;
         const float hw     = resolveThumbHalfWidth();
 
-        // Background track
+        /* Background track. */
         renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
                                   trackRounding, 8, trackColor});
 
-        // Fill from left to thumb
+        /* Fill, from the left edge to the thumb. */
         const float fillW = hw + t * (trackW - 2.f * hw);
         if (fillW > 0.f)
             renderer.draw(RoundedRect{{trackX, trackY}, {fillW, trackH},
                                       trackRounding, 8, fillColor});
 
-        // Thumb
+        /* Thumb. */
         const float thumbCX = trackX + hw + t * (trackW - 2.f * hw);
         const float thumbHH = resolveThumbHalfHeight();
         const float thumbCY = m_bounds.position.y + m_bounds.size.y * 0.5f;
@@ -91,17 +123,17 @@ void Slider::render() {
         const float trackH = m_bounds.size.y;
         const float hh     = resolveThumbHalfHeight();
 
-        // Background track
+        /* Background track. */
         renderer.draw(RoundedRect{{trackX, trackY}, {trackW, trackH},
                                   trackRounding, 8, trackColor});
 
-        // Fill from bottom to thumb (vertical sliders are bottom-up).
+        /* Fill, from the bottom up. */
         const float fillH = hh + t * (trackH - 2.f * hh);
         if (fillH > 0.f)
             renderer.draw(RoundedRect{{trackX, trackY + (trackH - fillH)}, {trackW, fillH},
                                       trackRounding, 8, fillColor});
 
-        // Thumb
+        /* Thumb. */
         const float thumbHW = resolveThumbHalfWidth();
         const float thumbCX = m_bounds.position.x + m_bounds.size.x * 0.5f;
         const float thumbCY = trackY + trackH - hh - t * (trackH - 2.f * hh);
@@ -117,6 +149,13 @@ void Slider::render() {
     m_dirty = false;
 }
 
+/*
+    checkHover(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when the pointer is over the slider
+    - Desc:     Asks for the resize cursor along the slider's own axis while the
+                pointer is inside, so the control reads as draggable.
+*/
 bool Slider::checkHover(const Vec2f& mousePosition) {
     if (m_bounds.contains(mousePosition) && m_uiloRef) {
         const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
@@ -126,10 +165,19 @@ bool Slider::checkHover(const Vec2f& mousePosition) {
     return Element::checkHover(mousePosition);
 }
 
+/*
+    checkLeftClick(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when the slider took the click
+    - Desc:     Jumps the value to wherever the track was clicked and starts a
+                drag, so pressing and dragging are one gesture rather than
+                requiring the thumb to be grabbed exactly. A double click within
+                the usual window restores the configured default instead.
+*/
 bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
 
-    // Double-click within 350 ms snaps the slider back to its default.
+    /* Double click within the usual window restores the default. */
     const uint64_t now = SDL_GetTicks();
     const bool isDouble = (now - m_lastClickMs) < 350;
     m_lastClickMs = now;
@@ -149,7 +197,24 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
-bool Slider::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise*/, bool /*momentum*/) {
+/*
+    checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
+    - Params:   const Vec2f& mousePosition, float delta, bool precise,
+                bool momentum
+    - Returns:  bool -- true when the slider consumed the event
+    - Desc:     Adjusts the value by the wheel, accumulating the delta so a
+                stepped slider still responds to a trackpad whose individual
+                deltas are too small to cross an increment. Overscroll at either
+                end is discarded rather than banked, so reversing direction
+                moves the value immediately instead of first unwinding hidden
+                accumulation.
+*/
+bool Slider::checkScroll(
+    const Vec2f& mousePosition,
+    float delta,
+    bool /*precise*/,
+    bool /*momentum*/
+) {
     if (!m_bounds.contains(mousePosition)) return false;
     const float range = m_options.getMax() - m_options.getMin();
     const float step  = m_options.getStep() > 0.f
@@ -166,8 +231,8 @@ bool Slider::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise
     const float applied = m_value - before;
     m_scrollAccum += rawDelta - applied;
 
-    // If we've hit a boundary, discard overscroll in that direction so
-    // users don't need extra opposite scroll to "unwind" hidden accumulation.
+    /* At a boundary, drop the overscroll rather than banking it, so reversing
+       moves the value at once. */
     if ((m_value <= minV && m_scrollAccum < 0.f) ||
         (m_value >= maxV && m_scrollAccum > 0.f)) {
         m_scrollAccum = 0.f;
@@ -180,9 +245,35 @@ bool Slider::checkScroll(const Vec2f& mousePosition, float delta, bool /*precise
     return true;
 }
 
+/*
+    onDeactivate():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Ends any drag when focus moves elsewhere, so the thumb cannot
+                stay latched to the pointer after a click lands on something
+                else.
+*/
 void Slider::onDeactivate() { m_dragging = false; }
+
+
+/*
+    setValue(float value):
+    - Params:   float value
+    - Returns:  void
+    - Desc:     Sets the value programmatically, through the same clamping,
+                snapping and change-callback path a drag uses.
+*/
 void Slider::setValue(float value) { applyValue(value); }
 
+/*
+    valueFromMouseX(float mouseX):
+    - Params:   float mouseX
+    - Returns:  float -- the value that x position represents
+    - Desc:     Maps a window x onto the slider's range. The travel is measured
+                between the thumb's two extreme centres rather than the full
+                width, so dragging to either end puts the thumb's edge flush
+                with the track's rather than hanging past it.
+*/
 float Slider::valueFromMouseX(float mouseX) const {
     const float hw    = resolveThumbHalfWidth();
     const float left  = m_bounds.position.x + hw;
@@ -193,6 +284,15 @@ float Slider::valueFromMouseX(float mouseX) const {
     return m_options.getMin() + t * (m_options.getMax() - m_options.getMin());
 }
 
+/*
+    applyValue(float raw):
+    - Params:   float raw
+    - Returns:  void
+    - Desc:     The single place the value changes: clamps into range, snaps to
+                the step when one is set, and fires onValueChanged only when the
+                result actually differs. That guard is what lets a drag call
+                this every frame without flooding a handler.
+*/
 void Slider::applyValue(float raw) {
     float v = std::clamp(raw, m_options.getMin(), m_options.getMax());
     if (m_options.getStep() > 0.f) {
@@ -207,6 +307,15 @@ void Slider::applyValue(float raw) {
     if (m_options.getOnValueChanged()) m_options.getOnValueChanged()(m_value);
 }
 
+/*
+    resolveThumbHalfWidth():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Half the thumb's drawn width in render pixels. A circular thumb
+                with no size set falls back to a fraction of the element's cross
+                axis, so a slider given only a height still gets a proportionate
+                thumb.
+*/
 float Slider::resolveThumbHalfWidth() const {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     if (m_options.getThumbShape() == ThumbShape::Circle) {
@@ -218,6 +327,13 @@ float Slider::resolveThumbHalfWidth() const {
     return m_options.getThumbSize().x * scale * 0.5f;
 }
 
+/*
+    resolveThumbHalfHeight():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Half the thumb's drawn height, resolved the same way as the
+                width, against the other axis.
+*/
 float Slider::resolveThumbHalfHeight() const {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     if (m_options.getThumbShape() == ThumbShape::Circle) {
@@ -229,6 +345,13 @@ float Slider::resolveThumbHalfHeight() const {
     return m_options.getThumbSize().y * scale * 0.5f;
 }
 
+/*
+    valueFromMouseY(float mouseY):
+    - Params:   float mouseY
+    - Returns:  float -- the value that y position represents
+    - Desc:     Maps a window y onto the range for a vertical slider, inverted
+                so the top of the track is the maximum.
+*/
 float Slider::valueFromMouseY(float mouseY) const {
     const float hh     = resolveThumbHalfHeight();
     const float top    = m_bounds.position.y + hh;

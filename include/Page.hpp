@@ -16,10 +16,6 @@ class UILO;
 class Page {
 public:
     Page(Container* rootContainer, const std::string& name);
-
-    // Entry points for alternate renderers that walk the tree instead of
-    // drawing it (e.g. the Wt bridge). UILO itself reaches the members
-    // directly through friendship.
     Container* getRoot() const        { return m_rootContainer; }
     const std::string& getName() const { return m_name; }
 

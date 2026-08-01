@@ -49,11 +49,11 @@ class OS {
 public:
     OS() = delete;
 
-    // ---- Identity (compile-time) ----------------------------------------
+    /* Identity (compile-time) */
     static constexpr OSFamily family();
-    // "macOS", "Windows", "Linux", "Android", "iOS", "FreeBSD", "Web".
+    /* "macOS", "Windows", "Linux", "Android", "iOS", "FreeBSD", "Web". */
     static constexpr std::string_view name();
-    // "arm64", "x86_64", "x86", "arm", or "unknown".
+    /* "arm64", "x86_64", "x86", "arm", or "unknown". */
     static constexpr std::string_view architecture();
     static constexpr bool is64Bit();
 
@@ -65,59 +65,44 @@ public:
     static constexpr bool isWeb()     { return family() == OSFamily::Web; }
     static constexpr bool isDesktop();
 
-    // ---- Display ---------------------------------------------------------
-    // Real panel pixels per virtual pixel: physicalDisplaySize() divided by
-    // displaySize(). This is what to hand UILO::setScale() so a virtual pixel
-    // covers one physical pixel on screen at any desktop scaling.
-    //
-    // On a 13" MacBook Air at a 1470x956 desktop that is 2560/1470 = 1.74 -- not
-    // 1.0 (what the OS reports as its "content scale") and not 2.0 (the
-    // backing-store ratio, since macOS renders 2940x1912 and downscales it to
-    // the 2560x1664 panel).
-    //
-    // Never 0, and falls back to 1.0 when nothing can be determined, so it is
-    // always safe to pass straight to setScale().
+    /* Display. */
+    /* Real panel pixels per virtual pixel: physicalDisplaySize() divided by. */
     static float scale();
-    // Primary display in virtual points -- the space window sizes and mouse
-    // positions live in. 1470x956 in the example above.
+    /* Primary display in virtual points -- the space window sizes and mouse
+       positions live in. 1470x956 in the example above. */
     static Vec2u displaySize();
-    // Native pixel resolution of the panel itself: 2560x1664 in the example
-    // above. Zero if it cannot be determined.
+    /* Native pixel resolution of the panel itself: 2560x1664 in the example
+       above. Zero if it cannot be determined. */
     static Vec2u physicalDisplaySize();
-    // Backing-store pixels per virtual point, as the OS reports it: 2.0 on a
-    // retina panel. Note this is NOT scale() -- under a scaled HiDPI desktop the
-    // backing store is larger than the panel, so this over-reports what the
-    // display can actually resolve.
+    /* Backing-store pixels per virtual point, as the OS reports it: 2.0 on a
+       retina panel. */
     static float pixelDensity();
     static float refreshRate();
     static int   displayCount();
 
-    // ---- System ----------------------------------------------------------
+    /* System */
     static OSTheme theme();
     static bool prefersDarkMode() { return theme() == OSTheme::Dark; }
-    // Logical cores, including SMT. 0 if unknown.
+    /* Logical cores, including SMT. 0 if unknown. */
     static int cpuCount();
-    // Total system RAM in MiB. 0 if unknown.
+    /* Total system RAM in MiB. 0 if unknown. */
     static int systemRamMB();
 
-    // ---- Paths -----------------------------------------------------------
-    // Directory the executable lives in, with a trailing separator. Useful for
-    // locating assets relative to the binary instead of the working directory.
+    /* Paths. */
+    /* Directory the executable lives in, with a trailing separator. */
     static std::string executableDirectory();
-    // Per-user, per-application directory for writable state, created if
-    // missing. Empty on failure.
+    /* Per-user, per-application directory for writable state, created if
+       missing. Empty on failure. */
     static std::string preferencesDirectory(const std::string& organization,
                                             const std::string& application);
 };
 
 
-// ---------------------------------------------------------------------------
-// Compile-time identity
-// ---------------------------------------------------------------------------
+/* Compile-time identity */
 constexpr OSFamily OS::family() {
 #if defined(__EMSCRIPTEN__)
     return OSFamily::Web;
-#elif defined(__ANDROID__)              // must precede __linux__, which it also defines
+#elif defined(__ANDROID__)   /* must precede __linux__, which it also defines */
     return OSFamily::Android;
 #elif defined(__APPLE__)
 #  if defined(UILO_OS_IPHONE)

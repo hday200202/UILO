@@ -3,6 +3,18 @@
 #include "elements/Elements.hpp"
 #include "../Page.hpp"
 
+/*
+    Factory.hpp:
+    - Desc: Lowercase factory functions, one per element type, each returning a
+            heap-allocated element. Allocation is deliberate and not a leak: an
+            element is owned by the UILO it is bound to, which registers it in its
+            element pool and deletes it at shutdown, so a tree reads as a nested
+            declaration without anyone tracking lifetimes.
+    - Every factory takes the same shape -- Modifier, then the type's Options,
+      then children where the type has them, then an optional name -- so one
+      spelling carries across the whole library.
+*/
+
 namespace uilo {
 
 inline Column* column(
@@ -26,11 +38,11 @@ inline Canvas* canvas(
     const std::string& name = ""
 ) { return new Canvas(modifier, options, children, name); }
 
-// freeColumn / freeRow build a normal Column/Row but mark the result as
-// floating: it lives outside the page layout flow and is positioned in
-// window space by UILO::addFloating(). Width and height come from the
-// Modifier (use the same _px / _pct sugar as regular layout); position
-// is set via .setPosition(Dimension x, Dimension y) on the FreeElement.
+// freeColumn and freeRow build an ordinary Column or Row but mark the result as
+// floating, so it lives outside the page's layout flow and is positioned in
+// window space by UILO::addFloating(). Size still comes from the Modifier with
+// the usual _px and _pct sugar; the position is set with .setPosition() on the
+// returned FreeElement.
 struct FreeElement {
     Element*  element   = nullptr;
     Dimension xPos      = 0_px;
@@ -138,5 +150,11 @@ inline DatePicker* datepicker(
     DatePickerOptions options = {},
     const std::string& name = ""
 ) { return new DatePicker(modifier, options, name); }
+
+inline DateField* datefield(
+    Modifier modifier = {},
+    DateFieldOptions options = {},
+    const std::string& name = ""
+) { return new DateField(modifier, options, name); }
 
 }

@@ -1,10 +1,12 @@
-// DatePicker as a date field: a button that opens a calendar popup and shows
-// whatever you pick -- the same shape as a dropdown, a header that reflects the
-// current value and a panel that drops out of it.
+// DateField: a date input in one element. The field shows the current value and
+// opens a calendar popup when clicked; picking a date writes it back.
 //
-// The picker is not part of the page tree. open() gives it its own full-window
-// backdrop and centres it, so it can't also be a child somewhere else -- keep
-// the pointer and trigger it from the field.
+// It adapts to the size it is given -- give it room for the text and it shows
+// icon, value and chevron; make it squarer and it drops to just the icon. That
+// is the whole difference between the fields below.
+//
+// The bare DatePicker is still there underneath (getPicker()) for anything that
+// wants the calendar without the field.
 
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
@@ -13,14 +15,11 @@
 
 using namespace uilo;
 
-float ROUNDING = 8.f;
-
 static Palette makeDarkPalette() {
     Palette p;
     p.set("app.bg",     { 33,  35,  47, 255});
     p.set("panel",      { 44,  47,  60, 255});
     p.set("panelAlt",   { 55,  58,  74, 255});
-    p.set("field.hover",{ 66,  70,  88, 255});
     p.set("text",       {180, 190, 220, 255});
     p.set("textMuted",  {130, 138, 170, 255});
     p.set("accent",     {151, 120, 206, 255});
@@ -28,11 +27,29 @@ static Palette makeDarkPalette() {
     return p;
 }
 
-Container* buildDateField(UILO& ui);
+static Element* caption(const std::string& s) {
+    return text(
+        Modifier()
+            .setHeight(26_px),
+        TextOptions()
+            .setContent(s)
+            .setCharSize(14)
+            .setColorRole("textMuted")
+    );
+}
+
+static Element* gap(Dimension height) {
+    return spacer(
+        Modifier()
+            .setHeight(height)
+    );
+}
+
+Container* buildRoot();
 
 int main() {
     Renderer renderer;
-    if (!renderer.init(1280, 720, "DatePicker", 16)) {
+    if (!renderer.init(1280, 720, "DateField", 16)) {
         std::fprintf(stderr, "Failed to initialize renderer\n");
         return 1;
     }
@@ -41,7 +58,7 @@ int main() {
     ui.setRenderer(renderer);
     ui.setScale(OS::scale());
     ui.setPalette(makeDarkPalette());
-    ui.addPage(page(buildDateField(ui), "main_page"));
+    ui.addPage(page(buildRoot(), "main_page"));
     ui.setPage("main_page");
 
     while (ui.isRunning()) {
@@ -56,64 +73,116 @@ int main() {
     return 0;
 }
 
-Container* buildDateField(UILO& ui) {
-    // The field's label. Held so the picker's callback can write the chosen
-    // date back into it -- this is what makes the field read like a dropdown.
-    Text* label = text(
-        Modifier().setAlign(Align::Left | Align::CenterY),
-        TextOptions()
-            .setContent("Pick a date")
-            .setColorRole("text")
-            .setCharSize(16)
-            .setTextAlignY(Align::CenterY));
+Container* buildRoot() {
+    // The whole wiring for a date input: no UILO reference, no popup to keep
+    // hold of, no label to write back into.
+    auto* plain = datefield(
+        Modifier()
+            .setWidth(260_px)
+            .setHeight(48_px),
+        DateFieldOptions()
+            .setOnDateChanged([](const Date& d) {
+                std::printf("picked %s\n", DateAndTime::toISO(d).c_str());
+            })
+    );
 
-    // The popup. closeOnSelect makes one click settle it, exactly like choosing
-    // a dropdown item; the callback fills the label in.
-    DatePicker* picker = datepicker(
-        Modifier(),
-        DatePickerOptions()
-            .setCloseOnSelect(true)
-            .setShowYearNavigation(true)
-            .setOnDateSelected([label](const Date& d) {
-                label->setString(DateAndTime::format(d, "MMM D, YYYY"));
-            }));
+    // Range mode is a picker option, and the field shows both ends once the
+    // span closes.
+    auto* range = datefield(
+        Modifier()
+            .setWidth(260_px)
+            .setHeight(48_px),
+        DateFieldOptions()
+            .setPlaceholder("Pick a range")
+            .setPickerOptions(
+                DatePickerOptions()
+                    .setMode(DatePickerMode::Range)
+                    .setFirstDayOfWeek(Weekday::Monday)
+            )
+            .setOnRangeChanged([](const Date& a, const Date& b) {
+                std::printf("range %s .. %s (%d days)\n",
+                            DateAndTime::toISO(a).c_str(),
+                            DateAndTime::toISO(b).c_str(),
+                            DateAndTime::daysBetween(a, b) + 1);
+            })
+    );
+
+    // Square, so the same widget comes out as an icon button. Nothing here says
+    // "icon only" -- it falls out of the aspect ratio.
+    auto* compact = datefield(
+        Modifier()
+            .setWidth(48_px)
+            .setHeight(48_px),
+        DateFieldOptions()
+            .setInitialDate(DateAndTime::today())
+            .setOnDateChanged([](const Date& d) {
+                std::printf("compact picked %s\n", DateAndTime::toISO(d).c_str());
+            })
+    );
+
+    // Starts with a value, spells the month out, and turns off year navigation
+    // in its popup.
+    auto* preset = datefield(
+        Modifier()
+            .setWidth(300_px)
+            .setHeight(44_px),
+        DateFieldOptions()
+            .setFormat("dddd, MMMM D, YYYY")
+            .setCharSize(15)
+            .setInitialDate(DateAndTime::addDays(DateAndTime::today(), 14))
+            .setLabelAspectThreshold(4.f)
+            .setPickerOptions(
+                DatePickerOptions()
+                    .setShowYearNavigation(false)
+            )
+    );
 
     return column(
         Modifier(),
-        ColumnOptions().setColorRole("app.bg"),
-        contains{
+        ColumnOptions()
+            .setColorRole("app.bg"),
+        contains {
+            // Explicit height, centred: a percent-height column here would share
+            // the window with the spacers instead of taking what it needs.
             column(
-                Modifier().setWidth(280_px).setAlign(Align::CenterX | Align::CenterY),
+                Modifier()
+                    .setWidth(320_px)
+                    .setHeight(400_px)
+                    .setAlign(Align::CenterX | Align::CenterY),
                 ColumnOptions(),
-                contains{
-                    text(Modifier().setHeight(28_px),
-                         TextOptions().setContent("Date").setCharSize(14)
-                                      .setColorRole("textMuted")),
-
-                    // The field itself: a calendar icon, the value, and a
-                    // chevron pushed to the right by the percent spacer. The
-                    // whole row is the click target, so opening the popup is one
-                    // handler on the row -- no inner button to fight with.
-                    row(
+                contains {
+                    text(
                         Modifier()
-                            .setHeight(48_px)
-                            .setOnLeftClick([picker, &ui](Element*) { picker->open(ui); })
-                            .setOnHoverEnter([](Row* r) { r->getOptions().setColorRole("field.hover"); })
-                            .setOnHoverExit ([](Row* r) { r->getOptions().setColorRole("panelAlt"); }),
-                        RowOptions().setColorRole("panelAlt").setRounding(ROUNDING),
-                        contains{
-                            spacer(Modifier().setWidth(14_px)),
-                            icon(Modifier().setWidth(20_px).setAlign(Align::CenterY),
-                                 IconOptions().setIcon(Resources::icons::calendar)
-                                              .setColorRole("textMuted")),
-                            spacer(Modifier().setWidth(12_px)),
-                            label,
-                            spacer(Modifier().setWidth(100_pct)),
-                            icon(Modifier().setWidth(20_px).setAlign(Align::CenterY),
-                                 IconOptions().setIcon(Resources::icons::chevron_down)
-                                              .setColorRole("textMuted")),
-                            spacer(Modifier().setWidth(14_px))
-                        })
-                })
-        }, "root");
+                            .setHeight(40_px),
+                        TextOptions()
+                            .setContent("uilo::DateField")
+                            .setCharSize(22)
+                            .setBold(true)
+                            .setColorRole("text")
+                    ),
+
+                    gap(12_px),
+
+                    caption("Default"),
+                    plain,
+
+                    gap(18_px),
+
+                    caption("Range mode"),
+                    range,
+
+                    gap(18_px),
+
+                    caption("Square: icon only, same widget"),
+                    compact,
+
+                    gap(18_px),
+
+                    caption("Preset value, long format"),
+                    preset
+                }
+            )
+        },
+        "root"
+    );
 }

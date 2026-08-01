@@ -7,18 +7,46 @@
 
 namespace uilo {
 
-Waveform::Waveform(Modifier modifier, WaveformOptions options,
-                   const std::string& name)
-    : m_options(options)
-{
+/*
+    Waveform(Modifier modifier, WaveformOptions options, const std::string& name):
+    - Params:   Modifier modifier, WaveformOptions options,
+                const std::string& name
+    - Returns:  Waveform
+    - Desc:     Constructs an empty waveform from a modifier and its options,
+                and tags it as a Waveform. Sample data arrives separately
+                through setSamples.
+*/
+Waveform::Waveform(
+    Modifier modifier,
+    WaveformOptions options,
+    const std::string& name
+) : m_options(options) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Waveform;
 }
 
-void Waveform::setSamples(const float* const* channels,
-                          std::size_t numChannels,
-                          std::size_t numFrames) {
+
+/*
+    setSamples(...):
+    - Params:   const float* const* channels, std::size_t numChannels,
+                std::size_t numFrames
+    - Returns:  void
+    - Desc:     Copies numFrames samples from each of numChannels planar
+                buffers, which matches miniaudio's deinterleaved float** layout.
+                The data is copied into the element, so the caller's buffers may
+                be freed immediately afterwards. A null pointer or a zero count
+                clears the display. A null individual channel is filled with
+                silence rather than skipped, so the channel count stays honest.
+                Any existing visible range is clamped into the new buffer
+                instead of being reset, so re-supplying data does not throw away
+                where the user was looking.
+*/
+void Waveform::setSamples(
+    const float* const* channels,
+    std::size_t numChannels,
+    std::size_t numFrames
+) {
     if (!channels || numChannels == 0 || numFrames == 0) {
         m_samples.clear();
         m_numChannels = 0;
@@ -29,6 +57,7 @@ void Waveform::setSamples(const float* const* channels,
         m_dirty       = true;
         return;
     }
+
     m_samples.resize(numChannels * numFrames);
     for (std::size_t c = 0; c < numChannels; ++c) {
         if (channels[c])
@@ -38,6 +67,7 @@ void Waveform::setSamples(const float* const* channels,
             std::memset(m_samples.data() + c * numFrames, 0,
                         numFrames * sizeof(float));
     }
+
     m_numChannels = numChannels;
     m_numFrames   = numFrames;
     if (m_rangeStart >= numFrames) m_rangeStart = 0;
@@ -47,6 +77,17 @@ void Waveform::setSamples(const float* const* channels,
     m_dirty      = true;
 }
 
+
+/*
+    setRange(std::size_t firstFrame, std::size_t frameCount):
+    - Params:   std::size_t firstFrame, std::size_t frameCount
+    - Returns:  void
+    - Desc:     Restricts the rendered region to frameCount frames from
+                firstFrame, clamped into the buffer. A frameCount of 0 shows the
+                whole buffer. Also resets the high-precision shadow of the
+                range, so a later zoom starts from exactly what was asked for
+                here rather than from where a previous gesture had drifted to.
+*/
 void Waveform::setRange(std::size_t firstFrame, std::size_t frameCount) {
     if (m_numFrames == 0) {
         m_rangeStart = 0;
@@ -57,12 +98,29 @@ void Waveform::setRange(std::size_t firstFrame, std::size_t frameCount) {
             ? 0
             : std::min(frameCount, m_numFrames - m_rangeStart);
     }
+
     m_rangeStartD = (double)m_rangeStart;
     m_rangeCountD = (double)m_rangeCount;
     m_peaksDirty = true;
     m_dirty      = true;
 }
 
+
+/*
+    zoomAt(float anchorNorm, float factor):
+    - Params:   float anchorNorm -- 0 at the left edge, 1 at the right,
+                float factor -- above 1 zooms in, below 1 zooms out
+    - Returns:  void
+    - Desc:     Zooms the visible range about a normalised position across the
+                widget, keeping the sample under that position under it
+                afterwards, clamped at the buffer ends. The range is held as
+                doubles and only rounded when the integer fields the peak
+                sampler reads are populated: a trackpad delivers many sub-frame
+                momentum ticks, and rounding each one to whole frames makes the
+                visible window wobble. The window will not shrink below a few
+                frames, so zooming in without limit cannot collapse it to
+                nothing.
+*/
 void Waveform::zoomAt(float anchorNorm, float factor) {
     if (m_numFrames == 0 || factor <= 0.f) return;
     anchorNorm = std::clamp(anchorNorm, 0.f, 1.f);
@@ -71,18 +129,15 @@ void Waveform::zoomAt(float anchorNorm, float factor) {
     const double curCnt  = (m_rangeCountD > 0.0) ? m_rangeCountD : total;
     const double anchorF = m_rangeStartD + (double)anchorNorm * curCnt;
 
-    // factor > 1 -> zoom in -> visible window shrinks.
     double newCnt = curCnt / (double)factor;
     constexpr double kMinFrames = 8.0;
     newCnt = std::clamp(newCnt, kMinFrames, total);
 
     double newStart = anchorF - (double)anchorNorm * newCnt;
-    if (newStart < 0.0)                    newStart = 0.0;
-    if (newStart + newCnt > total)         newStart = total - newCnt;
+    if (newStart < 0.0)            newStart = 0.0;
+    if (newStart + newCnt > total) newStart = total - newCnt;
 
-    // Keep precise state; only snap when populating the size_t fields that
-    // the peak sampler reads. Without the doubles, sub-frame momentum ticks
-    // each round to an int and the visible window wobbles.
+    /* Precise state stays in the doubles; the integer fields are derived. */
     m_rangeStartD = newStart;
     m_rangeCountD = (newCnt >= total) ? 0.0 : newCnt;
     const std::size_t start = (std::size_t)std::llround(newStart);
@@ -94,6 +149,15 @@ void Waveform::zoomAt(float anchorNorm, float factor) {
     m_dirty      = true;
 }
 
+
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Resolves the element's bounds and invalidates the cached peaks
+                when the size changed, since the column count is derived from
+                the width.
+*/
 void Waveform::update(Rectf& parentBounds, float dt) {
     (void)dt;
     Vec2f oldSize = m_bounds.size;
@@ -104,6 +168,23 @@ void Waveform::update(Rectf& parentBounds, float dt) {
     }
 }
 
+
+/*
+    rebuildPeaks():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Bins the visible range of samples into per-column min/max pairs,
+                which is what makes drawing independent of how long the
+                recording is. The column count comes from the options, or from
+                the widget's pixel width times the resolution, and is capped at
+                the number of frames available so a short selection is never
+                over-sampled. Each column takes a slice of the range computed
+                from its fractional position, which distributes the remainder
+                evenly instead of piling it on the last column, and every slice
+                is forced to at least one frame so no column is left empty.
+                Under SumMono the channels are averaged into a single set of
+                peaks.
+*/
 void Waveform::rebuildPeaks() {
     m_peaks.clear();
     m_peakChannels   = 0;
@@ -134,8 +215,6 @@ void Waveform::rebuildPeaks() {
     m_peakChannels = outChannels;
     m_peakColumns  = cols;
 
-    // For each output column, scan its slice of input frames and record
-    // (min,max). Slice size is total/cols, distributed with remainder.
     for (int col = 0; col < cols; ++col) {
         std::size_t s0 = first + (std::size_t)((double)total * (double)col       / (double)cols);
         std::size_t s1 = first + (std::size_t)((double)total * (double)(col + 1) / (double)cols);
@@ -171,6 +250,22 @@ void Waveform::rebuildPeaks() {
     }
 }
 
+
+/*
+    renderChannelStrip(std::size_t ch, Rectf strip):
+    - Params:   std::size_t ch, Rectf strip
+    - Returns:  void
+    - Desc:     Draws one channel's cached peaks into a rectangle, in whichever
+                of the three styles the options ask for, batched into a single
+                call. Bars draws a vertical min-to-max line per column and is
+                widened to a visible minimum so silence still reads as a centre
+                line. Filled draws from the baseline to the larger of the two
+                peaks with a bar wide enough to touch its neighbours, which is
+                what makes a solid envelope out of lines. Line joins one signed
+                value per column into a polyline. A per-channel colour override
+                applies under Stacked and Overlay; SumMono has collapsed the
+                channels and keeps the base colour.
+*/
 void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
     if (m_peakColumns <= 0) return;
     auto& renderer = m_uiloRef->getRenderer();
@@ -179,8 +274,7 @@ void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
     const float midY   = strip.position.y + strip.size.y * 0.5f;
     const float halfH  = strip.size.y * 0.5f;
     const float thick  = std::max(0.5f, m_options.getLineThickness());
-    // Per-channel color override (alpha==0 sentinel falls back to base).
-    // Only honored for Stacked / Overlay layouts; SumMono uses base color.
+
     Color color = resolveColor(m_options.getColorRole(), m_options.getColor());
     if (m_options.getLayout() != WaveformLayout::SumMono) {
         if (ch == 0 && m_options.getLeftChannelColor().a  != 0)
@@ -210,8 +304,6 @@ void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
             lines.push_back(Line{{x, y0}, {x, y1}, thick, color});
         }
     } else if (style == WaveformStyle::Filled) {
-        // Vertical bar from baseline to the signed peak, fat enough to
-        // touch neighbouring columns — gives a solid filled envelope.
         lines.reserve((std::size_t)m_peakColumns);
         const float barThick = std::max(thick, colW + 1.f);
         for (int col = 0; col < m_peakColumns; ++col) {
@@ -225,8 +317,7 @@ void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
             if (std::abs(y - midY) < 0.5f) y = midY + (v >= 0.f ? -0.5f : 0.5f);
             lines.push_back(Line{{x, midY}, {x, y}, barThick, color});
         }
-    } else { // WaveformStyle::Line
-        // Continuous polyline through one signed value per column.
+    } else {
         lines.reserve((std::size_t)std::max(0, m_peakColumns - 1));
         auto pointAt = [&](int col) {
             float mn = m_peaks[base + (std::size_t)col * 2 + 0] * gain;
@@ -248,8 +339,21 @@ void Waveform::renderChannelStrip(std::size_t ch, Rectf strip) {
     renderer.drawLines(lines.data(), lines.size());
 }
 
+
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the background, then the channels, clipped to the widget's
+                own rounded bounds so peaks never leak across the corner radius.
+                The peaks are rebuilt here when stale, which is also where a
+                size change first takes effect. Under Stacked each channel gets
+                an equal horizontal slice of the height; Overlay draws them all
+                at full height; SumMono draws the one averaged set.
+*/
 void Waveform::render() {
-    if (!m_uiloRef) { m_dirty = false; return; }
+    if (!m_modifier.getVisible()) { m_dirty = false; return; }
+    if (!m_uiloRef)               { m_dirty = false; return; }
     if (m_bounds.size.x <= 0.f || m_bounds.size.y <= 0.f) {
         m_dirty = false;
         return;
@@ -258,7 +362,6 @@ void Waveform::render() {
     auto& renderer = m_uiloRef->getRenderer();
     const float scale = m_uiloRef->getScale();
 
-    // Background
     const Color bg = resolveColor(m_options.getBackgroundColorRole(), m_options.getBackgroundColor());
     if (bg.a > 0) {
         const float r = m_options.getRounding() * scale;
@@ -268,8 +371,6 @@ void Waveform::render() {
             renderer.draw(RoundedRect{m_bounds.position, m_bounds.size, r, 8u, bg});
     }
 
-    // Clip drawing to the (optionally rounded) widget bounds so peaks
-    // never leak across the corner radius.
     const float r = m_options.getRounding() * scale;
     renderer.pushRoundClip(m_bounds, r);
 

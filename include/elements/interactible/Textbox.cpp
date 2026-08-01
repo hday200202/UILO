@@ -1,4 +1,5 @@
 #include "Textbox.hpp"
+#include "../../utils/Resources.hpp"
 #include "../../UILO.hpp"
 #include "../../renderer/Renderer.hpp"
 
@@ -9,10 +10,17 @@
 
 namespace uilo {
 
-// ---------------------------------------------------------------------------
-// UTF-8 / UTF-32 helpers
-// ---------------------------------------------------------------------------
+/* UTF-8 / UTF-32 helpers */
 
+/*
+    u32ToUtf8(const std::u32string& s):
+    - Params:   const std::u32string& s
+    - Returns:  std::string
+    - Desc:     Encodes UTF-32 to UTF-8. The text is held as UTF-32 so an index
+                is a codepoint rather than a byte, which is what makes cursor
+                movement and selection arithmetic simple; the renderer takes
+                UTF-8, so a conversion happens at the boundary.
+*/
 static std::string u32ToUtf8(const std::u32string& s) {
     std::string r;
     r.reserve(s.size());
@@ -36,6 +44,13 @@ static std::string u32ToUtf8(const std::u32string& s) {
     return r;
 }
 
+/*
+    utf8ToU32(const std::string& s):
+    - Params:   const std::string& s
+    - Returns:  std::u32string
+    - Desc:     Decodes UTF-8 to UTF-32. A truncated sequence at the end of the
+                input is skipped rather than producing a partial codepoint.
+*/
 static std::u32string utf8ToU32(const std::string& s) {
     std::u32string r;
     size_t i = 0;
@@ -67,18 +82,30 @@ static std::u32string utf8ToU32(const std::string& s) {
     return r;
 }
 
+/*
+    isWordChar(char32_t c):
+    - Params:   char32_t c
+    - Returns:  bool
+    - Desc:     Whether a codepoint counts as part of a word for the ctrl-arrow
+                jumps. Everything above ASCII is treated as a word character, so
+                accented and non-Latin text is not split into fragments.
+*/
 static bool isWordChar(char32_t c) {
     return (c >= U'a' && c <= U'z') || (c >= U'A' && c <= U'Z') ||
            (c >= U'0' && c <= U'9') || c == U'_' || c > 127u;
 }
 
+/*
+    shouldWrap(const TextboxOptions& opts):
+    - Params:   const TextboxOptions& opts
+    - Returns:  bool
+    - Desc:     Whether soft wrapping is active. Password mode never wraps,
+                since the masked string has no words to break on.
+*/
 static bool shouldWrap(const TextboxOptions& opts) {
     return opts.getMultiline() && opts.getWrap() && !opts.getPasswordMode();
 }
 
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
 
 Textbox::Textbox(Modifier modifier, TextboxOptions options, const std::string& name)
     : m_options(std::move(options))
@@ -88,23 +115,181 @@ Textbox::Textbox(Modifier modifier, TextboxOptions options, const std::string& n
     m_type     = ElementType::TextBox;
 }
 
-// ---------------------------------------------------------------------------
-// Geometry helpers
-// ---------------------------------------------------------------------------
 
+/*
+    autoGrows():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether the box grows with its content instead of filling its
+                slot.
+*/
+bool Textbox::autoGrows() const {
+    /* A pixel height is a starting height the box may grow past -- the
+       chat-input shape. */
+    return m_options.getMultiline()
+        && m_options.getWrap()
+        && !m_modifier.getHeight().percent;
+}
+
+
+/*
+    maxScrollY(int lineCount, float lh):
+    - Params:   int lineCount, float lh
+    - Returns:  float
+    - Desc:     How far the view may scroll vertically. A growing box only has
+                something to scroll once maxResizeLines has capped it; a fill
+                box scrolls whatever does not fit.
+*/
+float Textbox::maxScrollY(int lineCount, float lh) const {
+    const int ml = m_options.getMaxResizeLines();
+    if (autoGrows()) {
+        /* The box grew to fit, so there is only something to scroll once
+           maxResizeLines has capped it. */
+        return (ml > 0 && lineCount > ml)
+             ? static_cast<float>(lineCount - ml) * lh : 0.f;
+    }
+    /* Fixed slot: whatever does not fit is scrollable. */
+    return std::max(0.f, static_cast<float>(lineCount) * lh - textArea().size.y);
+}
+
+
+/*
+    resolvedFontPath():
+    - Params:   none
+    - Returns:  std::string
+    - Desc:     The font to load, resolved the same way Text resolves one: a
+                registered name becomes its path, a plain path is handed back
+                unchanged.
+*/
+std::string Textbox::resolvedFontPath() const {
+    /* Same resolution Text uses: a registered name becomes its path, a plain
+       path is handed back unchanged. */
+    return std::string(Resources::get().fontRegistry().resolve(m_options.getFontPath()));
+}
+
+/*
+    gutterWidth():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Width of the line-number gutter, 0 when it is off or the box is
+                single line. Reads a cached value, since the real width needs
+                the font.
+*/
+float Textbox::gutterWidth() const {
+    if (!m_options.getShowLineNumbers() || !m_options.getMultiline()) return 0.f;
+    return m_gutterWidth;
+}
+
+/*
+    textArea():
+    - Params:   none
+    - Returns:  Rectf
+    - Desc:     The rectangle the text actually occupies: the bounds less the
+                padding and the gutter. Everything else -- the caret, hit
+                testing, wrap width, scrolling -- is measured against this, so
+                insetting it here is all the gutter needs to be accounted for
+                everywhere.
+*/
 Rectf Textbox::textArea() const {
     const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float pl = m_options.getPaddingLeft()   * scale;
     const float pr = m_options.getPaddingRight()  * scale;
     const float pt = m_options.getPaddingTop()    * scale;
     const float pb = m_options.getPaddingBottom() * scale;
+    const float gw = gutterWidth();
     return Rectf{
-        { m_bounds.position.x + pl, m_bounds.position.y + pt },
-        { std::max(0.f, m_bounds.size.x - pl - pr),
+        { m_bounds.position.x + pl + gw, m_bounds.position.y + pt },
+        { std::max(0.f, m_bounds.size.x - pl - pr - gw),
           std::max(0.f, m_bounds.size.y - pt - pb) }
     };
 }
 
+/*
+    gutterArea():
+    - Params:   none
+    - Returns:  Rectf
+    - Desc:     The strip the line numbers are drawn in, to the left of the text
+                area.
+*/
+Rectf Textbox::gutterArea() const {
+    const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float pl = m_options.getPaddingLeft()   * scale;
+    const float pt = m_options.getPaddingTop()    * scale;
+    const float pb = m_options.getPaddingBottom() * scale;
+    return Rectf{
+        { m_bounds.position.x + pl, m_bounds.position.y + pt },
+        { gutterWidth(), std::max(0.f, m_bounds.size.y - pt - pb) }
+    };
+}
+
+/*
+    recomputeGutterWidth(Renderer& renderer, float pxH):
+    - Params:   Renderer& renderer, float pxH
+    - Returns:  void
+    - Desc:     Measures the gutter from the widest line number it will have to
+                show, at the line-number character size, plus padding and
+                whatever slack bold needs. Cached because textArea() is const
+                and called from everywhere, and the measurement needs a
+                renderer.
+*/
+void Textbox::recomputeGutterWidth(Renderer& renderer, float pxH) {
+    if (!m_options.getShowLineNumbers() || !m_options.getMultiline()) {
+        m_gutterWidth = 0.f;
+        return;
+    }
+
+    size_t lines = 1;
+    for (char32_t c : m_text) if (c == U'\n') ++lines;
+
+    int digits = 1;
+    for (size_t n = lines; n >= 10; n /= 10) ++digits;
+    digits = std::max(digits, std::max(1, m_options.getLineNumberMinDigits()));
+
+    const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float lnPxH = m_options.hasLineNumberCharSize()
+        ? static_cast<float>(m_options.getLineNumberCharSize()) * scale
+        : pxH;
+
+    Font font = renderer.loadFont(resolvedFontPath());
+    float digitW = lnPxH * 0.6f;
+    if (font.valid()) {
+        const TextMetrics m = renderer.measureText("0", font, lnPxH);
+        if (m.size.x > 0.f) digitW = m.size.x;
+    }
+
+    /* Bold re-draws each glyph nudged sideways, so a bold gutter is a shade
+       wider than the measured digits and would otherwise clip its last column. */
+    const float boldPad = m_options.getLineNumberBold()
+                       || m_options.getCurrentLineNumberBold()
+        ? std::max(1.f, lnPxH * 0.04f) : 0.f;
+
+    const float pad = m_options.getLineNumberPadding() * scale;
+    m_gutterWidth = digitW * static_cast<float>(digits) + boldPad + pad * 2.f;
+}
+
+/*
+    logicalLineOfCursor():
+    - Params:   none
+    - Returns:  size_t
+    - Desc:     Which logical line the cursor is on, counting hard newlines
+                only, so a soft-wrapped line counts once.
+*/
+size_t Textbox::logicalLineOfCursor() const {
+    size_t line = 0;
+    const size_t end = std::min(m_cursorPos, m_text.size());
+    for (size_t i = 0; i < end; ++i)
+        if (m_text[i] == U'\n') ++line;
+    return line;
+}
+
+/*
+    lineHeight():
+    - Params:   none
+    - Returns:  float
+    - Desc:     Height of one line. Uses the font's real ascent, descent and gap
+                once the font has loaded, and falls back to an estimate from the
+                character size before then.
+*/
 float Textbox::lineHeight() const {
     if (m_lineHeightCache > 0.f) return m_lineHeightCache;
     const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
@@ -113,12 +298,27 @@ float Textbox::lineHeight() const {
     return static_cast<float>(cs) * scale * 1.2f;
 }
 
+/*
+    displayText():
+    - Params:   none
+    - Returns:  std::u32string
+    - Desc:     The text as it should appear, which is a run of asterisks in
+                password mode and the text itself otherwise.
+*/
 std::u32string Textbox::displayText() const {
     if (m_options.getPasswordMode() && !m_text.empty())
         return std::u32string(m_text.size(), U'*');
     return m_text;
 }
 
+/*
+    charScreenPos(size_t idx):
+    - Params:   size_t idx
+    - Returns:  Vec2f
+    - Desc:     Where a text index sits on screen. The index is mapped through
+                the soft wrap table first when wrapping is on, since inserted
+                breaks make display and text indices diverge.
+*/
 Vec2f Textbox::charScreenPos(size_t idx) const {
     if (m_charPositions.empty()) return m_textOrigin;
     const size_t dispIdx = shouldWrap(m_options) ? textToDisplay(idx) : idx;
@@ -127,12 +327,23 @@ Vec2f Textbox::charScreenPos(size_t idx) const {
     return { m_textOrigin.x + rel.x, m_textOrigin.y + rel.y };
 }
 
+/*
+    hitTestChar(Vec2f screenPos):
+    - Params:   Vec2f screenPos
+    - Returns:  size_t
+    - Desc:     The text index nearest a screen position, used to place the
+                cursor on a click or drag. Resolved in two passes -- first the
+                visual line, then the closest boundary along it -- so clicking
+                past the end of a short line lands at that line's end rather
+                than on whatever character happens to be nearest in a straight
+                line.
+*/
 size_t Textbox::hitTestChar(Vec2f screenPos) const {
     if (m_charPositions.empty() || !m_uiloRef) return 0;
     const float lh      = std::max(1.f, lineHeight());
     const size_t dispN  = m_charPositions.size();
 
-    // Pass 1: find which visual line the click is on
+    /* Pass 1: find which visual line the click is on */
     float bestLineY    = m_textOrigin.y;
     float bestLineDist = std::numeric_limits<float>::max();
     for (size_t i = 0; i < dispN; ++i) {
@@ -142,7 +353,7 @@ size_t Textbox::hitTestChar(Vec2f screenPos) const {
         if (dy < bestLineDist) { bestLineDist = dy; bestLineY = cy; }
     }
 
-    // Pass 2: nearest x on that line
+    /* Pass 2: nearest x on that line */
     size_t best = 0;
     float bestXDist = std::numeric_limits<float>::max();
     for (size_t i = 0; i < dispN; ++i) {
@@ -156,10 +367,16 @@ size_t Textbox::hitTestChar(Vec2f screenPos) const {
     return shouldWrap(m_options) ? displayToText(best) : best;
 }
 
-// ---------------------------------------------------------------------------
-// Rebuilds — require a live renderer & font
-// ---------------------------------------------------------------------------
 
+/*
+    rebuildSfText():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Rebuilds everything derived from the text: the line height, the
+                gutter width, the wrapped display string and the per-character
+                positions. The gutter is measured before wrapping because it
+                takes width off the text area and so changes where lines break.
+*/
 void Textbox::rebuildSfText() {
     m_textDirty = false;
     m_charPositions.clear();
@@ -167,23 +384,29 @@ void Textbox::rebuildSfText() {
     m_displayU32.clear();
     m_wrappedDisplay.clear();
 
-    if (!m_uiloRef) return;
+    /* Bailing out before the font is available leaves the metrics unbuilt, so
+       the rebuild has to stay pending. */
+    if (!m_uiloRef) { m_textDirty = true; return; }
     auto& renderer = m_uiloRef->getRenderer();
-    Font font = renderer.loadFont(m_options.getFontPath());
-    if (!font.valid()) return;
+    Font font = renderer.loadFont(resolvedFontPath());
+    if (!font.valid()) { m_textDirty = true; return; }
 
     const float scale = m_uiloRef->getScale();
     const unsigned int cs = m_options.hasCharSize() ? m_options.getCharSize()
                                                      : std::max(1u, m_autoCharSize);
     const float pxH = static_cast<float>(cs) * scale;
 
-    // Cache real line height from the font.
+    /* Cache real line height from the font. */
     {
         TextMetrics ref = renderer.measureText("A", font, pxH);
         m_lineHeightCache = ref.lineHeight();
     }
 
-    // Build display (UTF-32) — wrapped or raw.
+    /* Before wrapping: the gutter takes width off the text area, so the wrap
+       width depends on it. */
+    recomputeGutterWidth(renderer, pxH);
+
+    /* Build display (UTF-32) — wrapped or raw. */
     if (shouldWrap(m_options)) {
         rebuildWrapped();
         m_lastWrapWidth = textArea().size.x;
@@ -197,13 +420,23 @@ void Textbox::rebuildSfText() {
     if (m_charPositions.empty()) m_charPositions.push_back({0.f, 0.f});
 }
 
-// Build m_displayU32 (with soft '\n's) and m_softWrapAt from m_text.
+/* Build m_displayU32 (with soft '\n's) and m_softWrapAt from m_text. */
+/*
+    rebuildWrapped():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Builds the display string with soft breaks inserted, and records
+                the text indices they were inserted at so display and text
+                positions can be mapped back and forth. Breaks on word
+                boundaries where it can and mid-word when a single word is wider
+                than the line.
+*/
 void Textbox::rebuildWrapped() {
     m_softWrapAt.clear();
     m_displayU32.clear();
     if (!m_uiloRef) { m_displayU32 = m_text; m_wrappedDisplay = u32ToUtf8(m_displayU32); return; }
     auto& renderer = m_uiloRef->getRenderer();
-    Font font = renderer.loadFont(m_options.getFontPath());
+    Font font = renderer.loadFont(resolvedFontPath());
     if (!font.valid()) {
         m_displayU32 = m_text;
         m_wrappedDisplay = u32ToUtf8(m_displayU32);
@@ -253,7 +486,7 @@ void Textbox::rebuildWrapped() {
             while (wordEnd < pEnd && src[wordEnd] != U' ') ++wordEnd;
             size_t tokenEnd = wordEnd;
             while (tokenEnd < pEnd && src[tokenEnd] == U' ') ++tokenEnd;
-            if (tokenEnd == j) ++tokenEnd; // stall guard
+            if (tokenEnd == j) ++tokenEnd;   /* stall guard */
 
             std::u32string token(src.begin() + (std::ptrdiff_t)j,
                                  src.begin() + (std::ptrdiff_t)tokenEnd);
@@ -305,14 +538,23 @@ void Textbox::rebuildWrapped() {
     m_wrappedDisplay = u32ToUtf8(m_displayU32);
 }
 
+/*
+    computeTextOrigin():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Works out where the text block is drawn, from the alignment and
+                the scroll offset. A growing box asking to be centred is the
+                auto-grow case, so it centres against the height it was built at
+                rather than the height it has now -- otherwise its first line
+                would drift down as lines were added.
+*/
 void Textbox::computeTextOrigin() {
     if (m_charPositions.empty()) { m_textOrigin = textArea().position; return; }
     const Rectf area = textArea();
     const float lh   = lineHeight();
 
-    // Total height = (lines) * lh (excluding gap on the last line, but lh already
-    // includes lineGap which is fine for centering)
-    // Total width  = max x across all character positions (approx text bbox width)
+    /* Total height = (lines) * lh (excluding gap on the last line, but lh
+       already includes lineGap which is fine for centering) Total width = max. */
     float maxX = 0.f, maxY = 0.f;
     for (auto& p : m_charPositions) {
         if (p.x > maxX) maxX = p.x;
@@ -329,9 +571,12 @@ void Textbox::computeTextOrigin() {
     else
         ox = area.position.x - m_scrollOffsetX;
 
-    // Vertical: multiline always top-anchors (auto-grow); single-line respects align.
+    /* Vertical. */
+    const Align alignY = m_options.getTextAlignY();
     float oy;
-    if (m_options.getMultiline()) {
+    if (autoGrows() && hasAlign(alignY, Align::CenterY)) {
+        /* The box grows with its content, so centring against the height it
+           has now would drift the first line downwards as lines are added. */
         const float sc          = m_uiloRef ? m_uiloRef->getScale() : 1.f;
         const float ptS         = m_options.getPaddingTop()    * sc;
         const float pbS         = m_options.getPaddingBottom() * sc;
@@ -341,9 +586,9 @@ void Textbox::computeTextOrigin() {
                                 : lh;
         const float topOffset = (initAreaH - lh) * 0.5f;
         oy = area.position.y + topOffset - m_scrollOffsetY;
-    } else if (hasAlign(m_options.getTextAlignY(), Align::CenterY)) {
+    } else if (hasAlign(alignY, Align::CenterY)) {
         oy = area.position.y + (area.size.y - totalH) * 0.5f - m_scrollOffsetY;
-    } else if (hasAlign(m_options.getTextAlignY(), Align::Bottom)) {
+    } else if (hasAlign(alignY, Align::Bottom)) {
         oy = area.position.y + (area.size.y - totalH) - m_scrollOffsetY;
     } else {
         oy = area.position.y - m_scrollOffsetY;
@@ -352,6 +597,14 @@ void Textbox::computeTextOrigin() {
     m_textOrigin = { std::round(ox), std::round(oy) };
 }
 
+/*
+    ensureCursorVisible():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Scrolls just enough to bring the cursor inside the text area, on
+                whichever axis it left. Called only when the cursor actually
+                moved, so typing does not fight a user's own scrolling.
+*/
 void Textbox::ensureCursorVisible() {
     if (m_charPositions.empty()) return;
     const Rectf area = textArea();
@@ -383,6 +636,13 @@ void Textbox::ensureCursorVisible() {
     }
 }
 
+/*
+    textToDisplay(size_t textIdx):
+    - Params:   size_t textIdx
+    - Returns:  size_t
+    - Desc:     Maps a text index to its position in the wrapped display string,
+                adding one for each soft break inserted before it.
+*/
 size_t Textbox::textToDisplay(size_t textIdx) const {
     size_t extra = 0;
     for (size_t wrapPos : m_softWrapAt) {
@@ -392,6 +652,12 @@ size_t Textbox::textToDisplay(size_t textIdx) const {
     return textIdx + extra;
 }
 
+/*
+    displayToText(size_t dispIdx):
+    - Params:   size_t dispIdx
+    - Returns:  size_t
+    - Desc:     The inverse mapping, from a display index back to the text.
+*/
 size_t Textbox::displayToText(size_t dispIdx) const {
     size_t extra = 0;
     for (size_t wrapPos : m_softWrapAt) {
@@ -401,14 +667,25 @@ size_t Textbox::displayToText(size_t dispIdx) const {
     return dispIdx >= extra ? dispIdx - extra : 0;
 }
 
-// ---------------------------------------------------------------------------
-// Selection / cursor helpers
-// ---------------------------------------------------------------------------
 
+/*
+    hasSelection():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether anything is selected, which is simply the cursor and the
+                anchor sitting at different positions.
+*/
 bool Textbox::hasSelection() const {
     return m_cursorPos != m_anchorPos;
 }
 
+/*
+    deleteSelection():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Removes the selected range and collapses the cursor to where it
+                began.
+*/
 void Textbox::deleteSelection() {
     const size_t lo = std::min(m_cursorPos, m_anchorPos);
     const size_t hi = std::max(m_cursorPos, m_anchorPos);
@@ -420,12 +697,26 @@ void Textbox::deleteSelection() {
         m_options.getOnStringChanged()(getString());
 }
 
+/*
+    resetBlink():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Shows the caret and restarts its blink timer, so it is solid at
+                the moment of any edit or cursor move rather than possibly mid-
+                blink.
+*/
 void Textbox::resetBlink() {
     m_blinkTimer    = 0.f;
     m_cursorVisible = true;
     m_dirty = true;
 }
 
+/*
+    lineStart(size_t pos):
+    - Params:   size_t pos
+    - Returns:  size_t
+    - Desc:     Index of the first character on the line containing a position.
+*/
 size_t Textbox::lineStart(size_t pos) const {
     if (pos == 0) return 0;
     size_t i = pos;
@@ -433,12 +724,27 @@ size_t Textbox::lineStart(size_t pos) const {
     return i;
 }
 
+/*
+    lineEnd(size_t pos):
+    - Params:   size_t pos
+    - Returns:  size_t
+    - Desc:     Index just past the last character on the line containing a
+                position.
+*/
 size_t Textbox::lineEnd(size_t pos) const {
     size_t i = pos;
     while (i < m_text.size() && m_text[i] != U'\n') ++i;
     return i;
 }
 
+/*
+    wordLeft(size_t pos):
+    - Params:   size_t pos
+    - Returns:  size_t
+    - Desc:     The next word boundary to the left, skipping any run of
+                separators first so a ctrl-left from after a space lands at the
+                start of the previous word rather than on the space.
+*/
 size_t Textbox::wordLeft(size_t pos) const {
     if (pos == 0) return 0;
     size_t i = pos - 1;
@@ -447,6 +753,13 @@ size_t Textbox::wordLeft(size_t pos) const {
     return i;
 }
 
+/*
+    wordRight(size_t pos):
+    - Params:   size_t pos
+    - Returns:  size_t
+    - Desc:     The next word boundary to the right, by the mirror of the same
+                rule.
+*/
 size_t Textbox::wordRight(size_t pos) const {
     size_t i = pos;
     const size_t n = m_text.size();
@@ -455,14 +768,27 @@ size_t Textbox::wordRight(size_t pos) const {
     return i;
 }
 
-// ---------------------------------------------------------------------------
-// Public string API
-// ---------------------------------------------------------------------------
+/* Public string API */
 
+/*
+    getString():
+    - Params:   none
+    - Returns:  std::string
+    - Desc:     The current text as UTF-8. This is the real text, not the masked
+                or soft-wrapped display form.
+*/
 std::string Textbox::getString() const {
     return u32ToUtf8(m_text);
 }
 
+/*
+    setString(const std::string& s):
+    - Params:   const std::string& s
+    - Returns:  void
+    - Desc:     Replaces the text and clamps the cursor and anchor into the new
+                length, so a shorter string cannot leave them dangling past the
+                end.
+*/
 void Textbox::setString(const std::string& s) {
     m_text      = utf8ToU32(s);
     m_cursorPos = m_anchorPos = std::min(m_cursorPos, m_text.size());
@@ -470,10 +796,20 @@ void Textbox::setString(const std::string& s) {
     m_scrollOffsetX = m_scrollOffsetY = 0.f;
 }
 
-// ---------------------------------------------------------------------------
-// update
-// ---------------------------------------------------------------------------
 
+/*
+    update(Rectf& parentBounds, float dt):
+    - Params:   Rectf& parentBounds, float dt
+    - Returns:  void
+    - Desc:     Resolves bounds, rebuilds the text when anything it depends on
+                has moved, sizes the box, advances the caret blink and services
+                a drag selection. Height is handled one of two ways: a pixel-
+                sized box grows with its content and publishes that height back
+                to its parent, while a percent-sized one fills the slot it was
+                given and scrolls instead -- growing the latter would mean
+                rewriting its declared height to pixels, which would sever it
+                from the layout and stop it tracking a window resize.
+*/
 void Textbox::update(Rectf& parentBounds, float dt) {
     resize(parentBounds);
 
@@ -494,7 +830,7 @@ void Textbox::update(Rectf& parentBounds, float dt) {
         m_scrollOffsetX = m_scrollOffsetY = 0.f;
     }
 
-    // Re-wrap if the available text width has changed.
+    /* Re-wrap if the available text width has changed. */
     if (shouldWrap(m_options)) {
         const float wrapW = textArea().size.x;
         if (std::abs(wrapW - m_lastWrapWidth) > 0.5f) m_textDirty = true;
@@ -505,8 +841,8 @@ void Textbox::update(Rectf& parentBounds, float dt) {
         rebuildSfText();
     }
 
-    // Auto-height for multiline+wrap
-    if (m_options.getMultiline() && m_options.getWrap()) {
+    /* Height: grow to fit the content, or fill the slot the parent gave us. */
+    if (autoGrows()) {
         if (!m_initialHeightSet) {
             m_initialHeight    = m_bounds.size.y / scale;
             m_initialHeightSet = true;
@@ -522,19 +858,24 @@ void Textbox::update(Rectf& parentBounds, float dt) {
                                ? static_cast<float>(ml) * lh + pt + pb : wantedH;
         m_bounds.size.y = std::max(m_initialHeight * scale, clampedH);
 
-        // Clamp vertical scroll so empty lines never appear below the text
-        // after the user deletes content.
-        const float maxScroll = (ml > 0 && lineCount > ml)
-                                ? static_cast<float>(lineCount - ml) * lh
-                                : 0.f;
-        m_scrollOffsetY = std::max(0.f, std::min(m_scrollOffsetY, maxScroll));
+        /* Clamp vertical scroll so empty lines never appear below the text
+           after the user deletes content. */
+        m_scrollOffsetY = std::max(0.f, std::min(m_scrollOffsetY, maxScrollY(lineCount, lh)));
 
+        /* Publish the grown height back so the parent reserves room for it. */
         const float unscaled = m_bounds.size.y / scale;
         if (m_modifier.getHeight().value != unscaled)
             m_modifier.setHeight(Dimension{unscaled, false});
+    } else if (m_options.getMultiline()) {
+        /* Filling a percent slot: resize() already sized us to it, so leave
+           the bounds alone and just keep the scroll offset inside the new. */
+        int lineCount = 1;
+        for (char c : m_wrappedDisplay) if (c == '\n') ++lineCount;
+        m_scrollOffsetY = std::max(0.f,
+            std::min(m_scrollOffsetY, maxScrollY(lineCount, lineHeight())));
     }
 
-    // Drag-select
+    /* Drag-select */
     if (m_mouseDown) {
         float mx, my;
         uint32_t btns = SDL_GetMouseState(&mx, &my);
@@ -576,16 +917,25 @@ void Textbox::update(Rectf& parentBounds, float dt) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// render
-// ---------------------------------------------------------------------------
 
+/*
+    render():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Draws the background and focus outline, the line-number gutter,
+                then the selection, the text and the caret, all clipped to the
+                text area. The placeholder replaces the text when the box is
+                empty and unfocused. The caret is clamped so its full width
+                stays inside the area: centred on the insertion point it would
+                otherwise be sliced in half at the start of every line.
+*/
 void Textbox::render() {
+    if (!m_modifier.getVisible()) { m_dirty = false; return; }
     m_dirty = false;
     if (!m_uiloRef) return;
     auto& renderer = m_uiloRef->getRenderer();
 
-    // Background + optional outline
+    /* Background + optional outline */
     const float bgScale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     const float rounding = m_options.getRounding() * bgScale;
     Color bg = resolveColor(m_options.getBackgroundColorRole(), m_options.getBackgroundColor());
@@ -601,13 +951,15 @@ void Textbox::render() {
         renderer.draw(Rect{m_bounds.position, m_bounds.size, bg, outline, outlineT});
     }
 
-    Font font = renderer.loadFont(m_options.getFontPath());
+    Font font = renderer.loadFont(resolvedFontPath());
     if (!font.valid()) return;
 
     const float scale = m_uiloRef->getScale();
     const unsigned int cs = m_options.hasCharSize() ? m_options.getCharSize()
                                                     : std::max(1u, m_autoCharSize);
     const float pxH = (float)cs * scale;
+
+    renderLineNumbers(renderer, pxH);
 
     const Rectf area = textArea();
     renderer.pushScissor(area);
@@ -633,10 +985,11 @@ void Textbox::render() {
                     origin.y += (area.size.y - pm.size.y);
             }
             renderer.drawText(ph, { std::round(origin.x), std::round(origin.y) },
-                              font, pxH, textColor);
+                              font, pxH, textColor,
+                              TextStyle{m_options.getBold(), m_options.getItalic()});
         }
     } else {
-        // Selection rects (per character; newline fills to area right edge).
+        /* Selection rects (per character; newline fills to area right edge). */
         const float lh = lineHeight();
         if (m_focused && hasSelection()) {
             const size_t lo = std::min(m_cursorPos, m_anchorPos);
@@ -663,16 +1016,26 @@ void Textbox::render() {
         }
 
         if (!m_wrappedDisplay.empty()) {
-            renderer.drawText(m_wrappedDisplay, m_textOrigin, font, pxH, textColor);
+            renderer.drawText(m_wrappedDisplay, m_textOrigin, font, pxH, textColor,
+                              TextStyle{m_options.getBold(), m_options.getItalic()});
         }
 
-        // Caret
+        /* Caret */
         if (m_focused && m_cursorVisible) {
             Vec2f cp = charScreenPos(m_cursorPos);
+            const float cw    = std::max(1.f, m_options.getCursorWidth() * scale);
+            const float halfW = cw * 0.5f;
+
+            /* The caret is centred on the insertion point, so at either edge
+               of the text area half of it would fall outside the scissor. */
+            const float minX = area.position.x + halfW;
+            const float maxX = area.position.x + area.size.x - halfW;
+            const float cx   = std::round(std::clamp(cp.x, minX, std::max(minX, maxX)));
+
             renderer.draw(Line{
-                { cp.x, cp.y },
-                { cp.x, cp.y + lh },
-                m_options.getCursorWidth() * scale,
+                { cx, cp.y },
+                { cx, cp.y + lh },
+                cw,
                 resolveColor(m_options.getCursorColorRole(), m_options.getCursorColor()) });
         }
     }
@@ -680,10 +1043,114 @@ void Textbox::render() {
     renderer.popScissor();
 }
 
-// ---------------------------------------------------------------------------
-// Input events
-// ---------------------------------------------------------------------------
+/*
+    renderLineNumbers(Renderer& renderer, float pxH):
+    - Params:   Renderer& renderer, float pxH
+    - Returns:  void
+    - Desc:     Draws the gutter and one number per logical line, so a soft-
+                wrapped line is numbered once and its continuation rows are left
+                blank. Numbers may be smaller than the body text, in which case
+                they are baseline-aligned with it rather than sitting at the top
+                of the line box. The cursor's line can take its own colour and
+                style.
+*/
+void Textbox::renderLineNumbers(Renderer& renderer, float pxH) {
+    if (gutterWidth() <= 0.f) return;
 
+    Font font = renderer.loadFont(resolvedFontPath());
+    if (!font.valid()) return;
+
+    const Rectf gutter = gutterArea();
+    const Color gbg = resolveColor(m_options.getLineNumberBackgroundColorRole(),
+                                   m_options.getLineNumberBackgroundColor());
+    if (gbg.a > 0)
+        renderer.draw(Rect{gutter.position, gutter.size, gbg});
+
+    const Color base = resolveColor(m_options.getLineNumberColorRole(),
+                                    m_options.getLineNumberColor());
+    const Color currentLit = m_options.getCurrentLineNumberColor();
+    const bool  hasCurrent = currentLit.a > 0
+                          || !m_options.getCurrentLineNumberColorRole().empty();
+    const Color current = hasCurrent
+        ? resolveColor(m_options.getCurrentLineNumberColorRole(), currentLit)
+        : base;
+
+    const float scale  = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float pad    = m_options.getLineNumberPadding() * scale;
+    const float lh     = lineHeight();
+    const size_t curLine = logicalLineOfCursor();
+
+    const TextStyle baseStyle{m_options.getLineNumberBold(),
+                              m_options.getLineNumberItalic()};
+    const TextStyle curStyle {m_options.getCurrentLineNumberBold(),
+                              m_options.getCurrentLineNumberItalic()};
+
+    /* Numbers may be drawn smaller than the editor text. */
+    const float lnPxH = m_options.hasLineNumberCharSize()
+        ? static_cast<float>(m_options.getLineNumberCharSize()) * scale
+        : pxH;
+    float baselineShift = 0.f;
+    if (lnPxH != pxH) {
+        const float mainAsc = renderer.measureText("0", font, pxH).ascent;
+        const float lnAsc   = renderer.measureText("0", font, lnPxH).ascent;
+        baselineShift = mainAsc - lnAsc;
+    }
+
+    renderer.pushScissor(gutter);
+
+    /* One number per logical line, placed at the y of that line's first display
+       row, so a soft-wrapped line is numbered once rather than per row. */
+    size_t line = 0;
+    size_t textIdx = 0;
+    const size_t n = m_text.size();
+    while (true) {
+        const Vec2f p = charScreenPos(textIdx);
+
+        if (p.y + lh >= gutter.position.y && p.y <= gutter.position.y + gutter.size.y) {
+            const bool        isCur = (line == curLine);
+            const TextStyle   style = isCur ? curStyle : baseStyle;
+            const std::string label = std::to_string(line + 1);
+            const TextMetrics m     = renderer.measureText(label, font, lnPxH);
+
+            /* Bold widens the drawn run without changing the measurement, so a
+               right-aligned bold number needs that slack or it overhangs. */
+            const float boldPad = style.bold ? std::max(1.f, lnPxH * 0.04f) : 0.f;
+
+            float x;
+            if (hasAlign(m_options.getLineNumberAlign(), Align::Right))
+                x = gutter.position.x + gutter.size.x - pad - m.size.x - boldPad;
+            else if (hasAlign(m_options.getLineNumberAlign(), Align::CenterX))
+                x = gutter.position.x + (gutter.size.x - m.size.x - boldPad) * 0.5f;
+            else
+                x = gutter.position.x + pad;
+
+            renderer.drawText(label,
+                              { std::round(x), std::round(p.y + baselineShift) },
+                              font, lnPxH,
+                              isCur ? current : base,
+                              style);
+        }
+
+        /* Advance to the character after the next hard newline. */
+        size_t nl = textIdx;
+        while (nl < n && m_text[nl] != U'\n') ++nl;
+        if (nl >= n) break;
+        textIdx = nl + 1;
+        ++line;
+    }
+
+    renderer.popScissor();
+}
+
+
+/*
+    checkLeftClick(const Vec2f& mousePos):
+    - Params:   const Vec2f& mousePos
+    - Returns:  bool -- true when the click landed on the box
+    - Desc:     Takes focus and places the cursor where the click landed,
+                extending the selection instead when shift is held. Also arms a
+                drag, so a press and sweep selects a range.
+*/
 bool Textbox::checkLeftClick(const Vec2f& mousePos) {
     if (!m_bounds.contains(mousePos)) return false;
     m_uiloRef->setCurrInteractible(this);
@@ -700,12 +1167,25 @@ bool Textbox::checkLeftClick(const Vec2f& mousePos) {
     return true;
 }
 
+/*
+    checkHover(const Vec2f& mousePos):
+    - Params:   const Vec2f& mousePos
+    - Returns:  bool -- true when the pointer is over the box
+    - Desc:     Asks for the text cursor while the pointer is inside.
+*/
 bool Textbox::checkHover(const Vec2f& mousePos) {
     if (m_bounds.contains(mousePos) && m_uiloRef)
         m_uiloRef->requestCursor(CursorType::Text, 1);
     return Element::checkHover(mousePos);
 }
 
+/*
+    onDeactivate():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Releases focus when something else is clicked, ending any drag
+                and hiding the caret.
+*/
 void Textbox::onDeactivate() {
     m_focused       = false;
     m_cursorVisible = false;
@@ -714,16 +1194,30 @@ void Textbox::onDeactivate() {
     m_dirty = true;
 }
 
+/*
+    checkScroll(const Vec2f& mousePos, float delta, bool precise, bool momentum):
+    - Params:   const Vec2f& mousePos, float delta, bool precise,
+                bool momentum
+    - Returns:  bool -- true when the box consumed the event
+    - Desc:     Scrolls a multiline box by whole lines, snapping the offset to a
+                line so text never sits half-clipped. Declines when nothing
+                overflows, which lets a wheel over a short editor scroll the
+                page behind it instead.
+*/
 bool Textbox::checkScroll(const Vec2f& mousePos, float delta, bool /*precise*/, bool /*momentum*/) {
     if (!m_bounds.contains(mousePos)) return false;
     if (!m_options.getMultiline()) return false;
-    const int ml = m_options.getMaxResizeLines();
-    if (ml <= 0) return false;
+
+    const float lh = lineHeight();
+    if (lh <= 0.f) return false;
     int lineCount = 1;
     for (char c : m_wrappedDisplay) if (c == '\n') ++lineCount;
-    if (lineCount <= ml) return false;
-    const float lh        = lineHeight();
-    const float maxScroll = static_cast<float>(lineCount - ml) * lh;
+
+    /* Nothing overflowing means nothing to scroll, and the event belongs to
+       whatever is behind -- a page that scrolls past a short editor. */
+    const float maxScroll = maxScrollY(lineCount, lh);
+    if (maxScroll <= 0.f) return false;
+
     m_scrollAccum -= delta * lh;
     const float target = std::max(0.f, std::min(m_scrollOffsetY + m_scrollAccum, maxScroll));
     const float snapped = std::round(target / lh) * lh;
@@ -735,10 +1229,15 @@ bool Textbox::checkScroll(const Vec2f& mousePos, float delta, bool /*precise*/, 
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Text/key input
-// ---------------------------------------------------------------------------
 
+/*
+    handleTextInput(char32_t c):
+    - Params:   char32_t c
+    - Returns:  void
+    - Desc:     Inserts a typed codepoint, replacing the selection first.
+                Control characters are ignored here; the ones that mean
+                something arrive through handleKeyInput instead.
+*/
 void Textbox::handleTextInput(char32_t c) {
     if (!m_focused) return;
     if (c < 32u || c == 127u) return;
@@ -755,6 +1254,49 @@ void Textbox::handleTextInput(char32_t c) {
         m_options.getOnStringChanged()(getString());
 }
 
+/*
+    insertTab():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Inserts one indent as spaces. Tab always inserts spaces rather
+                than a literal tab character, because the renderer has no tab-
+                advance logic and a real one would draw as a missing-glyph box.
+                Ignored on a single-line box, where indenting means nothing.
+*/
+void Textbox::insertTab() {
+    /* A single-line box is a field, not an editor: indenting it makes no
+       sense, and swallowing Tab there would also take away the key a future. */
+    if (!m_options.getMultiline()) return;
+
+    const int width = std::max(1, m_options.getTabWidth());
+    if (hasSelection()) deleteSelection();
+
+    const int maxLen = m_options.getMaxLength();
+    int room = width;
+    if (maxLen > 0) {
+        room = std::min(width, maxLen - static_cast<int>(m_text.size()));
+        if (room <= 0) return;
+    }
+
+    m_text.insert(m_cursorPos, static_cast<size_t>(room), U' ');
+    m_cursorPos += static_cast<size_t>(room);
+    m_anchorPos  = m_cursorPos;
+    m_textDirty  = true;
+    m_needsCursorScroll = true;
+    resetBlink();
+    if (m_options.getOnStringChanged()) m_options.getOnStringChanged()(getString());
+}
+
+/*
+    handleKeyInput(SDL_Keycode key, bool shift, bool ctrl):
+    - Params:   SDL_Keycode key, bool shift, bool ctrl
+    - Returns:  void
+    - Desc:     Handles every key that is not plain typing: cursor movement with
+                the arrows, Home and End, word jumps with ctrl, deletion, Tab,
+                Enter, Escape, and the clipboard and select-all shortcuts. Shift
+                extends the selection by leaving the anchor where it is; without
+                it the anchor follows the cursor and the selection collapses.
+*/
 void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) {
     if (!m_focused) return;
 
@@ -817,6 +1359,10 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) {
             }
             resetBlink();
             if (m_options.getOnStringChanged()) m_options.getOnStringChanged()(getString());
+            break;
+        case SDLK_TAB:
+            insertTab();
+            m_preferredX = charScreenPos(m_cursorPos).x;
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:

@@ -1,15 +1,19 @@
 #include "RendererImpl.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
-#define STBI_NO_STDIO   // we'll feed a buffer; actually keep stdio for stbi_load
+#define STBI_NO_STDIO   /* we'll feed a buffer; actually keep stdio for stbi_load */
 #undef  STBI_NO_STDIO
 #include "stb_image.h"
 
 namespace uilo {
 
-// applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in
-// RendererImpl.hpp.
-
+/*
+    loadTexture(const std::string& path):
+    - Params:   const std::string& path
+    - Returns:  Texture
+    - Desc:     applyScissor / scissorEmpty / clip-uniform helpers are
+                shared inlines in RendererImpl.hpp.
+*/
 Texture Renderer::loadTexture(const std::string& path) {
     auto& impl = *m_impl;
     auto it = impl.textureCache.find(path);
@@ -25,7 +29,8 @@ Texture Renderer::loadTexture(const std::string& path) {
         return invalid;
     }
 
-    // bgfx::TextureFormat::RGBA8 expects RGBA bytes (matches stb_image's req_comp=4)
+    /* bgfx::TextureFormat::RGBA8 expects RGBA bytes (matches stb_image's
+       req_comp=4) */
     const bgfx::Memory* mem = bgfx::copy(pixels, (uint32_t)(w * h * 4));
     stbi_image_free(pixels);
 
@@ -44,6 +49,15 @@ Texture Renderer::loadTexture(const std::string& path) {
     return tex;
 }
 
+/*
+    loadImagePixels(...):
+    - Params:   const std::string& path, std::vector<uint8_t>& outRgba,
+                uint32_t& outWidth, uint32_t& outHeight
+    - Returns:  bool
+    - Desc:     Decodes an image file into a CPU-side RGBA8 buffer without
+                creating a texture, which is what backs Image's get and set
+                pixel access.
+*/
 bool Renderer::loadImagePixels(const std::string& path, std::vector<uint8_t>& outRgba,
                                uint32_t& outWidth, uint32_t& outHeight) {
     int w = 0, h = 0, comp = 0;
@@ -60,10 +74,17 @@ bool Renderer::loadImagePixels(const std::string& path, std::vector<uint8_t>& ou
     return true;
 }
 
+/*
+    createTexture(uint16_t width, uint16_t height):
+    - Params:   uint16_t width, uint16_t height
+    - Returns:  Texture
+    - Desc:     Creates an empty mutable RGBA8 texture, for content the
+                application updates itself rather than loading from a file.
+*/
 Texture Renderer::createTexture(uint16_t width, uint16_t height) {
     if (width == 0 || height == 0) return Texture{};
-    // mem == nullptr makes the texture mutable (bgfx only allows
-    // updateTexture2D on textures created without initial contents).
+    /* mem == nullptr makes the texture mutable (bgfx only allows
+       updateTexture2D on textures created without initial contents). */
     bgfx::TextureHandle th = bgfx::createTexture2D(
         width, height, false, 1,
         bgfx::TextureFormat::RGBA8,
@@ -77,6 +98,13 @@ Texture Renderer::createTexture(uint16_t width, uint16_t height) {
     return tex;
 }
 
+/*
+    updateTexture(const Texture& tex, const uint8_t* rgba):
+    - Params:   const Texture& tex, const uint8_t* rgba
+    - Returns:  none
+    - Desc:     Uploads a full RGBA8 buffer into a texture created by
+                createTexture.
+*/
 void Renderer::updateTexture(const Texture& tex, const uint8_t* rgba) {
     if (!tex.valid() || !rgba) return;
     const bgfx::Memory* mem =
@@ -85,14 +113,31 @@ void Renderer::updateTexture(const Texture& tex, const uint8_t* rgba) {
     bgfx::updateTexture2D(th, 0, 0, 0, 0, tex.width, tex.height, mem);
 }
 
+/*
+    destroyTexture(Texture& tex):
+    - Params:   Texture& tex
+    - Returns:  none
+    - Desc:     Destroys a texture and invalidates the handle. Only textures the
+                caller owns should be passed: a path-cached one belongs to the
+                renderer and is shared.
+*/
 void Renderer::destroyTexture(Texture& tex) {
     if (!tex.valid()) return;
     bgfx::TextureHandle h{ tex.handle };
     bgfx::destroy(h);
     tex.handle = UINT16_MAX;
-    // (We don't bother removing from cache; it'll be cleared on shutdown.)
+    /* (We don't bother removing from cache; it'll be cleared on shutdown.) */
 }
 
+/*
+    drawImage(...):
+    - Params:   const Rectf& dst, const Texture& tex, Color tint, Rectf uv,
+                bool flipH, bool flipV, bool clipEllipse
+    - Returns:  none
+    - Desc:     Draws a texture into a rectangle, with a tint, a source sub-
+                rectangle, optional horizontal and vertical flips, and an
+                optional elliptical mask for a round avatar.
+*/
 void Renderer::drawImage(const Rectf& dst, const Texture& tex,
                           Color tint, Rectf uv,
                           bool flipH, bool flipV,
@@ -148,10 +193,16 @@ void Renderer::drawImage(const Rectf& dst, const Texture& tex,
     bgfx::submit(currentViewId(), impl.texProgram);
 }
 
-// ---------------------------------------------------------------------------
-//  drawGlass — sample the blurred backdrop (built in the previous frame)
-//  and overlay tint + edge highlight via the fs_glass shader.
-// ---------------------------------------------------------------------------
+/*
+    drawGlass(const Rectf& dst, const Material& mat, Color baseColor):
+    - Params:   const Rectf& dst, const Material& mat, Color baseColor
+    - Returns:  none
+    - Desc:     ------------------------------------------------------------
+                --------------- drawGlass — sample the blurred backdrop
+                (built in the previous frame) and overlay tint + edge
+                highlight via the fs_glass shader. -------------------------
+                --------------------------------------------------
+*/
 void Renderer::drawGlass(const Rectf& dst, const Material& mat,
                          Color baseColor) {
     if (mat.kind == Material::Kind::None) return;
@@ -161,11 +212,7 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
     if (scissorEmpty(impl))                return;
     if (dst.size.x <= 0.f || dst.size.y <= 0.f) return;
 
-    // Mark glass-presence so the next frame switches back to the FB
-    // pipeline. When this frame is in bypass mode (the predictor said
-    // no glass), there's no sceneFB to defer into and no blur ladder
-    // to feed — draw a flat tint as a one-frame visual fallback while
-    // the FB path comes back online next frame.
+    /* Mark glass-presence so the next frame switches back to the FB pipeline. */
     impl.hadGlassThisFrame = true;
     if (impl.bypassSceneFb) {
         Rect r;
@@ -176,9 +223,8 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
         return;
     }
 
-    // Defer until endFrame so the blur ladder runs over a sceneFB that
-    // doesn't contain any glass elements. During the replay pass we set
-    // replayingGlass=true and re-enter here to actually submit.
+    /* Defer until endFrame so the blur ladder runs over a sceneFB that doesn't
+       contain any glass elements. */
     if (!impl.replayingGlass) {
         Impl::DeferredGlass d;
         d.dst        = dst;
@@ -195,9 +241,8 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
 
     if (!bgfx::isValid(impl.blurFB_B))     return;
 
-    // Backdrop UV: map the element's screen-space rect into the half-res
-    // blur target's UV space. blurColorB shares aspect ratio with the
-    // window (just at half resolution), so plain windowSize works.
+    /* Backdrop UV: map the element's screen-space rect into the half-res blur
+       target's UV space. */
     const float W = (float)m_lastWidth;
     const float H = (float)m_lastHeight;
     if (W <= 0.f || H <= 0.f) return;
@@ -205,20 +250,18 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
     float x = dst.position.x, y = dst.position.y;
     float w = dst.size.x,     h = dst.size.y;
 
-    // Some renderers (GL/ES) put the FB origin at the bottom-left; we need
-    // to flip V when sampling our offscreen blur target.
+    /* Some renderers (GL/ES) put the FB origin at the bottom-left; we need to
+       flip V when sampling our offscreen blur target. */
     const bool flipV = bgfx::getCaps()->originBottomLeft;
     float u0 = x / W,         u1 = (x + w) / W;
     float v0 = y / H,         v1 = (y + h) / H;
     if (flipV) { v0 = 1.f - v0; v1 = 1.f - v1; }
 
-    // v_color0 is packed with local 0..1 coords (in .rg via the .r/.g
-    // bytes). The fragment shader reads it as a float vec4 normalised to
-    // 0..1, so 0->0.0 and 255->1.0 — i.e. plain colour encoding works.
+    /* v_color0 is packed with local 0..1 coords (in .rg via the .r/.g bytes). */
     auto pack01 = [](float a, float b) -> uint32_t {
         uint8_t ra = (uint8_t)std::clamp(a * 255.f, 0.f, 255.f);
         uint8_t rb = (uint8_t)std::clamp(b * 255.f, 0.f, 255.f);
-        // ABGR layout (see packColor): r=byte0, g=byte1, b=byte2, a=byte3.
+        /* ABGR layout (see packColor): r=byte0, g=byte1, b=byte2, a=byte3. */
         return (uint32_t)0xff000000u | (uint32_t)rb << 8 | (uint32_t)ra;
     };
 
@@ -236,9 +279,9 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
     std::memcpy(tvb.data, verts, sizeof(verts));
     std::memcpy(tib.data, idx,   sizeof(idx));
 
-    // ---- Uniforms ----
+    /* Uniforms */
     const float params[4] = {
-        mat.opacity,                  // x = body opacity
+        mat.opacity,   /* x = body opacity */
         mat.saturation,
         mat.brightness,
         mat.edgeHighlight,
@@ -249,24 +292,20 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
         mat.tint.b / 255.f,
         mat.tint.a / 255.f,
     };
-    // Refraction is authored in pixels; convert to UV units of the
-    // (full-window) blur target so the shader can offset v_texcoord0
-    // directly. Use the smaller axis so the bend reads similarly on
-    // wide and tall panels.
+    /* Refraction is authored in pixels; convert to UV units of the
+       (full-window) blur target so the shader can offset v_texcoord0 directly. */
     const float refractUv = mat.refraction / std::max(1.f, std::min(W, H));
     const float rect[4] = {
-        mat.cornerRadius,     // x = corner radius (px)
-        w * 0.5f,             // y = half width  (px)
-        h * 0.5f,             // z = half height (px)
-        refractUv,            // w = refraction strength (UV units)
+        mat.cornerRadius,   /* x = corner radius (px) */
+        w * 0.5f,   /* y = half width  (px) */
+        h * 0.5f,   /* z = half height (px) */
+        refractUv,   /* w = refraction strength (UV units) */
     };
     bgfx::setUniform(impl.u_glassParams, params);
     bgfx::setUniform(impl.u_glassTint,   tintRgba);
     bgfx::setUniform(impl.u_glassRect,   rect);
-    // Per-kind animation block: x=kind, y=time, z=speed, w=strength
-    // For Material::Blur the w slot is repurposed to carry the per-element
-    // blur radius (in pixels) instead — that kind isn't animated, so the
-    // overload is safe.
+    /* Per-kind animation block: x=kind, y=time, z=speed, w=strength For
+       Material::Blur the w slot is repurposed to carry the per-element blur. */
     const bool  isBlurKind = (mat.kind == Material::Kind::Blur);
     const float anim[4] = {
         (float)(int)mat.kind,
@@ -276,8 +315,8 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
     };
     bgfx::setUniform(impl.u_glassAnim, anim);
 
-    // Element's own colour (for Tinted / Ripple / Hover). Transparent
-    // signals "no base colour" — the shader will skip the overlay branch.
+    /* Element's own colour (for Tinted / Ripple / Hover). Transparent signals
+       "no base colour" — the shader will skip the overlay branch. */
     const float base[4] = {
         baseColor.r / 255.f,
         baseColor.g / 255.f,
@@ -286,10 +325,7 @@ void Renderer::drawGlass(const Rectf& dst, const Material& mat,
     };
     bgfx::setUniform(impl.u_glassBase, base);
 
-    // Cursor in element-local 0..1 coords + activity signals. We compute
-    // both axes regardless of whether the cursor sits inside the rect so
-    // the shader can still render a soft halo on the rim when the user
-    // approaches it.
+    /* Cursor in element-local 0..1 coords + activity signals. */
     const Vec2f mpx       = m_mousePos;
     const float localU    = (mpx.x - x) / std::max(1.f, w);
     const float localV    = (mpx.y - y) / std::max(1.f, h);

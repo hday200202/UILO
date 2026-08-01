@@ -5,6 +5,15 @@
 
 namespace uilo {
 
+/*
+    Color:
+    - Desc: An 8-bit RGBA colour. Opaque by default, so a colour written without
+            an alpha behaves the way one is usually meant to, and a zero alpha is
+            what the library reads as "nothing to draw" in several places rather
+            than a separate flag.
+    - Colours are normally paired with a palette role at the call site: the role
+      wins when it resolves, and the literal is the fallback.
+*/
 struct Color {
     uint8_t r = 0, g = 0, b = 0, a = 255;
 
@@ -12,13 +21,13 @@ struct Color {
     constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
         : r(r), g(g), b(b), a(a) {}
 
-    // Normalised [0,1] for GPU upload
+    /* Normalised [0,1] for GPU upload */
     constexpr float rf() const { return r / 255.f; }
     constexpr float gf() const { return g / 255.f; }
     constexpr float bf() const { return b / 255.f; }
     constexpr float af() const { return a / 255.f; }
 
-    // Pack to / unpack from 0xRRGGBBAA
+    /* Pack to / unpack from 0xRRGGBBAA */
     constexpr uint32_t toRGBA() const {
         return (uint32_t(r) << 24) | (uint32_t(g) << 16) |
                (uint32_t(b) <<  8) |  uint32_t(a);
@@ -28,17 +37,17 @@ struct Color {
                  uint8_t(v >>  8), uint8_t(v) };
     }
 
-    // Parse "#RRGGBB" or "#RRGGBBAA" (leading # optional)
+    /* Parse "#RRGGBB" or "#RRGGBBAA" (leading # optional) */
     static Color fromHex(std::string_view hex);
 
-    // Invert RGB, preserve alpha
+    /* Invert RGB, preserve alpha */
     constexpr void invert() {
         r = uint8_t(255 - r);
         g = uint8_t(255 - g);
         b = uint8_t(255 - b);
     }
 
-    // Return a copy with alpha multiplied by factor [0,1]
+    /* Return a copy with alpha multiplied by factor [0,1] */
     constexpr Color withAlpha(float factor) const {
         return { r, g, b, uint8_t(a * factor) };
     }

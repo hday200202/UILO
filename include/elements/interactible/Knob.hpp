@@ -7,19 +7,40 @@
 
 namespace uilo {
 
+/*
+    KnobValueChangedFuncPtr:
+    - Desc: Storage signature for a knob's value callback, fired only when the
+            value actually moves.
+*/
 using KnobValueChangedFuncPtr = std::function<void(float)>;
 
-// Direction the arc sweeps when going from start angle to end angle.
-// Combined with the start/end angles this covers every DAW-style layout
-// (e.g. start=135, end=45, Clockwise = sweep down/under-bottom;
-//  start=135, end=45, CounterClockwise = sweep up/over-top).
+
+/*
+    KnobArcDir:
+    - Desc: Which way the arc sweeps from the start angle to the end angle.
+            Together with those two angles this covers every knob layout: from
+            135 to 45 clockwise sweeps under the bottom, and the same pair
+            counter-clockwise sweeps over the top.
+*/
 enum class KnobArcDir { Clockwise, CounterClockwise };
 
+/*
+    KnobOptions:
+    - Desc:     Everything a Knob draws and the range it works over: the body
+                and its
+            rim, the unfilled track, the filled arc, the indicator line, the arc's
+            geometry, and the value range and step. Colors come as a literal plus
+            a role, where the role wins when it resolves against the active
+            Palette and the literal is the fallback.
+    - The body radius comes from the element's bounds rather than the options --
+      half the smaller side -- so a knob is sized like any other element and the
+      thicknesses here are measured against that.
+*/
 class KnobOptions {
 public:
     KnobOptions() = default;
 
-    // Colors --------------------------------------------------------------
+    // Colors
     KnobOptions& setBodyColor(Color c)        { m_bodyColor = c;       return *this; }
     KnobOptions& setBodyColorRole(const std::string& r) { m_bodyColorRole = r; return *this; }
     KnobOptions& setOutlineColor(Color c)     { m_outlineColor = c;    return *this; }
@@ -31,9 +52,8 @@ public:
     KnobOptions& setIndicatorColor(Color c)   { m_indicatorColor = c;  return *this; }
     KnobOptions& setIndicatorColorRole(const std::string& r) { m_indicatorColorRole = r; return *this; }
 
-    // Geometry ------------------------------------------------------------
-    // Body radius is taken from the element bounds (min(w,h)/2). These
-    // thicknesses are unscaled px and are multiplied by UILO scale at draw.
+    // Geometry. These thicknesses are unscaled pixels, multiplied by the UILO
+    // scale when drawn.
     KnobOptions& setOutlineThickness(float t) { m_outlineThickness = t; return *this; }
     KnobOptions& setArcThickness(float t)     { m_arcThickness = t;     return *this; }
     KnobOptions& setIndicatorThickness(float t){m_indicatorThickness = t;return *this; }
@@ -93,15 +113,15 @@ public:
 
 private:
     Color m_bodyColor          = Color{55, 58, 74};
-    std::string m_bodyColorRole;
+    std::string m_bodyColorRole      = "panel";
     Color m_outlineColor       = Color::Transparent;
     std::string m_outlineColorRole;
     Color m_trackColor         = Color{30, 32, 42};
-    std::string m_trackColorRole;
+    std::string m_trackColorRole     = "panelAlt";
     Color m_arcColor           = Color{151, 120, 206};
-    std::string m_arcColorRole;
+    std::string m_arcColorRole       = "accent";
     Color m_indicatorColor     = Color::White;
-    std::string m_indicatorColorRole;
+    std::string m_indicatorColorRole = "text";
     float m_outlineThickness   = 0.f;
     float m_arcThickness       = 4.f;
     float m_indicatorThickness = 2.f;
@@ -124,16 +144,37 @@ private:
     KnobValueChangedFuncPtr m_onValueChanged;
 };
 
+/*
+    Knob:
+    - Desc: A rotary value control. Dragging vertically changes the value, at a
+            rate set by dragPixelsPerRange, which is the convention a mouse can
+            actually work with -- following the pointer around the circle makes a
+            small knob unusable. The wheel adjusts it too, accumulating sub-step
+            motion so a stepped knob still responds to a slow trackpad, and a
+            double click restores the configured default.
+    - sweepDegrees and angleForValue are pure functions of the options and the
+      current value, exposed because an alternate renderer needs to lay the arc
+      out exactly the way render() does.
+*/
 class Knob : public Interactible {
 public:
-    Knob(Modifier modifier, KnobOptions options = {}, const std::string& name = "");
+    Knob(
+        Modifier modifier,
+        KnobOptions options = {},
+        const std::string& name = ""
+    );
 
     void update(Rectf& parentBounds, float dt) override;
     void render() override;
 
     bool checkHover(const Vec2f& mousePosition) override;
     bool checkLeftClick(const Vec2f& mousePosition) override;
-    bool checkScroll(const Vec2f& mousePosition, float delta, bool precise = false, bool momentum = false) override;
+    bool checkScroll(
+        const Vec2f& mousePosition,
+        float delta,
+        bool precise = false,
+        bool momentum = false
+    ) override;
 
     void onDeactivate() override;
 
@@ -142,16 +183,9 @@ public:
 
     const KnobOptions& getOptions() const { return m_options; }
     KnobOptions&       getOptions()       { return m_options; }
-    void setOptions(const KnobOptions& o) { m_options = o; m_dirty = true; }
+    void               setOptions(const KnobOptions& o) { m_options = o; m_dirty = true; }
 
-    // Arc geometry. Both are pure functions of the options and the current
-    // value, and an alternate renderer needs them to lay the knob out the same
-    // way render() does.
-    //
-    // Total signed sweep from start to end along the chosen direction, always
-    // in (0, 360]. 0 collapses to 360 to give a full ring.
     float sweepDegrees() const;
-    // The angle (degrees, cartesian) of a value along the configured arc.
     float angleForValue(float v) const;
 
 private:

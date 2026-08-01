@@ -5,13 +5,20 @@
 
 namespace uilo {
 
-// Base class for stateful interactibles (Dropdown, Slider, Knob, TextBox, etc.).
-// Excludes Button, which inherits Row directly and has no persistent open/focus state.
-//
-// When any Interactible is clicked, it becomes the single "active" interactible
-// via UILO::setCurrInteractible(). When a different interactible (or empty space)
-// is clicked, onDeactivate() is called on the previously active one so it can
-// close itself, release focus, etc.
+/*
+    Interactible:
+    - Desc: Base class for elements that carry state between clicks -- Dropdown,
+            Slider, Knob, Textbox and the like. Clicking one makes it the single
+            active interactible through UILO::setCurrInteractible(); clicking a
+            different one, or empty space, calls onDeactivate() on the previous
+            holder so it can close itself or release focus. Keyboard and text
+            events are routed only to the active one.
+    - Button is deliberately not one of these -- it inherits Row directly and has
+      no open or focused state to keep.
+    - Every Interactible claims pointer events whether or not a Modifier callback
+      was attached, so a press over a slider or a textbox is consumed rather than
+      falling through to whatever is behind it.
+*/
 class Interactible : public Element {
 public:
     Interactible() = default;
@@ -19,22 +26,20 @@ public:
     bool checkLeftClick(const Vec2f& mousePosition) override;
     bool checkRightClick(const Vec2f& mousePosition) override;
 
-    // Called by UILO when another interactible (or empty space) is clicked.
-    // Override to close dropdowns, release focus, etc.
+    // Called when another interactible, or empty space, is clicked. Override to
+    // close a popup, release focus, and so on.
     virtual void onDeactivate() {}
 
-    // Called by UILO event routing for keyboard/text input.
-    // Override in text-input interactibles (e.g. Textbox).
+    // Called by UILO's event routing while this is the active interactible.
+    // Override in anything that takes typing.
     virtual void handleTextInput(char32_t /* unicode */) {}
     virtual void handleKeyInput(SDL_Keycode /* key */, bool /* shift */, bool /* ctrl */) {}
 
-    // Override and return true in interactibles that consume IME / text-input
-    // events (Textbox). UILO uses this to toggle SDL_StartTextInput on focus.
+    // Return true from anything that consumes IME or text-input events. UILO
+    // uses this to toggle SDL_StartTextInput as focus moves.
     virtual bool wantsTextInput() const { return false; }
 
 protected:
-    // Interactive by definition: a press over a slider/knob/textbox is
-    // consumed even when the user attached no Modifier callback of their own.
     bool claimsPointerEvents() const override { return true; }
 };
 

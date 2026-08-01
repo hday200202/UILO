@@ -49,7 +49,7 @@ void UILO::setPage(const std::string& pageName) {
         m_resizers.clear();
         m_floating.clear();
         setCurrInteractible(nullptr);
-        // The container a coast belongs to is not on screen any more.
+        /* The container a coast belongs to is not on screen any more. */
         cancelMacScrollMomentum();
         m_hasScrollOrigin = false;
         m_activePage = it->second.get();
@@ -72,7 +72,7 @@ void UILO::setActivePage(Page* page) {
     m_resizers.clear();
     m_floating.clear();
     setCurrInteractible(nullptr);
-    // The container a coast belongs to is not on screen any more.
+    /* The container a coast belongs to is not on screen any more. */
     cancelMacScrollMomentum();
     m_hasScrollOrigin = false;
     m_activePage = page;
@@ -301,10 +301,8 @@ void UILO::update() {
             return true;
         }, this);
         installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
-            // A coast belongs to whatever the gesture was flicked on, so momentum
-            // ticks replay at the position the gesture started from. Tracking the
-            // live cursor instead would hand the leftover velocity to whatever it
-            // happened to land on -- a slider, a knob, a neighbouring panel.
+            /* A coast belongs to whatever the gesture was flicked on, so
+               momentum ticks replay at the position the gesture started from. */
             Vec2f pos;
             if (momentum && m_hasScrollOrigin) {
                 pos = m_scrollOrigin;
@@ -327,8 +325,8 @@ void UILO::update() {
     m_pendingCursor         = CursorType::Arrow;
     m_pendingCursorPriority = 0;
 
-    // Averaged over a window rather than smoothing 1/dt: a single long frame
-    // (a stall, a resize) would otherwise drag the reported rate for a while.
+    /* Averaged over a window rather than smoothing 1/dt: a single long frame
+       (a stall, a resize) would otherwise drag the reported rate for a while. */
     ++m_avgFrameCount;
     const float avgWindow = m_avgFrameTimer.elapsed();
     if (avgWindow >= m_avgFrameWindow) {
@@ -337,11 +335,8 @@ void UILO::update() {
         m_avgFrameTimer.restart();
     }
 
-    // Action bindings run before layout so a handler that changes scale, swaps
-    // pages, or hides an element is reflected in this frame's tree walk.
-    // A widget consuming text input holds the keyboard: dispatch is suppressed
-    // but edge state still advances, so a key held while typing does not fire
-    // the moment focus is released.
+    /* Action bindings run before layout so a handler that changes scale, swaps
+       pages, or hides an element is reflected in this frame's tree walk. */
     const bool keyboardOwnedByWidget =
         m_currInteractible && m_currInteractible->wantsTextInput();
     m_keybinds.update(!keyboardOwnedByWidget);
@@ -411,11 +406,8 @@ void UILO::update() {
             break;
         }
     }
-    // Dispatch through the element, not through the entry: a handler is allowed
-    // to call removeFloating() (a popup dismissing itself on click does exactly
-    // that), which erases the entry hoveredFloating points at. The element
-    // itself stays alive -- the element pool owns it -- so this stays valid
-    // where the entry pointer would not.
+    /* Dispatch through the element, not through the entry: a handler is
+       allowed to call removeFloating() (a popup dismissing itself on click. */
     Element* hoveredFloatingElement = hoveredFloating ? hoveredFloating->element : nullptr;
 
     bool floatingConsumedClick = false;
@@ -644,6 +636,19 @@ void UILO::pollEvents() {
     }
 }
 
+/*
+    handleEvent(const SDL_Event& event):
+    - Params:   const SDL_Event& event
+    - Returns:  void
+    - Desc:     Turns one SDL event into UILO's own dispatch. Scroll and zoom
+                gestures are separated here -- a wheel with a modifier held is a
+                zoom, not a scroll -- and keyboard events are routed to the
+                active interactible, except for the zoom shortcuts and the
+                navigation keys, which drive scrolling when nothing has focus. A
+                key repeat arriving after every key has physically come up is
+                dropped, which is what stops a held key from continuing to fire
+                once the window has lost and regained focus.
+*/
 void UILO::handleEvent(const SDL_Event& event) {
     if (!m_activePage) return;
 

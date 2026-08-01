@@ -3,6 +3,14 @@
 
 namespace uilo {
 
+/*
+    hexByte(std::string_view s, size_t pos):
+    - Params:   std::string_view s, size_t pos
+    - Returns:  static uint8_t
+    - Desc:     Parses two hex digits into a byte, returning 0 for anything that
+                is not a hex pair so a malformed string yields black rather than
+                garbage.
+*/
 static uint8_t hexByte(std::string_view s, size_t pos) {
     auto nibble = [](char c) -> uint8_t {
         if (c >= '0' && c <= '9') return uint8_t(c - '0');
@@ -13,8 +21,13 @@ static uint8_t hexByte(std::string_view s, size_t pos) {
     return uint8_t((nibble(s[pos]) << 4) | nibble(s[pos + 1]));
 }
 
+/*
+    fromHex(std::string_view hex):
+    - Params:   std::string_view hex
+    - Returns:  Color
+    - Desc:     Strip leading '#'
+*/
 Color Color::fromHex(std::string_view hex) {
-    // Strip leading '#'
     if (!hex.empty() && hex[0] == '#') hex.remove_prefix(1);
 
     Color out;

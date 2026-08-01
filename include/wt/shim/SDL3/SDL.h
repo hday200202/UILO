@@ -66,6 +66,7 @@ using SDL_Scancode = Uint32;
 #define SDL_SCANCODE_TO_KEYCODE(X) ((X) | SDLK_SCANCODE_MASK)
 
 #define SDLK_BACKSPACE 0x00000008u
+#define SDLK_TAB       0x00000009u
 #define SDLK_RETURN    0x0000000du
 #define SDLK_ESCAPE    0x0000001bu
 #define SDLK_MINUS     0x0000002du
