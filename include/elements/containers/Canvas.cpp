@@ -13,8 +13,8 @@ namespace uilo {
 
 /*
     Canvas(Modifier modifier, CanvasOptions options, const std::string& name):
-    - Params:   Modifier modifier, CanvasOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, CanvasOptions options, const std::string&
+                name
     - Returns:  Canvas
     - Desc:     Constructs an empty canvas. Children are added afterwards
                 through addChild, which is what gives them a canvas-space
@@ -512,8 +512,8 @@ void Canvas::render() {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the canvas consumed the event
     - Desc:     Single-axis scroll, forwarded to the two-axis path as a vertical
                 delta so a plain wheel pans the canvas down.
@@ -530,8 +530,8 @@ bool Canvas::checkScroll(
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the canvas consumed the event
     - Desc:     Two-axis scroll, offered to the children first so a scrollable
                 element sitting on the canvas keeps its own gesture. Otherwise

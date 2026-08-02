@@ -18,8 +18,8 @@ namespace uilo::wt {
 
 /*
     Config:
-    - Desc: Per-application settings that have no UILO equivalent, because
-            they describe the page rather than the UI inside it.
+    - Desc:     Per-application settings that have no UILO equivalent, because
+                they describe the page rather than the UI inside it.
 */
 struct Config {
     std::string title = "UILO";
@@ -40,10 +40,10 @@ struct Config {
 
 /*
     Session:
-    - Desc: One browser tab. Wt builds an application instance per session, so
-            each gets its own UILO instance and its own element tree -- element
-            pointers captured in your callbacks belong to that session alone
-            and are never shared between users.
+    - Desc:     One browser tab. Wt builds an application instance per session,
+                so each gets its own UILO instance and its own element tree --
+                element pointers captured in your callbacks belong to that
+                session alone and are never shared between users.
 */
 class Session {
 public:
@@ -87,11 +87,13 @@ public:
 using Builder = std::function<Page*(Session&)>;
 
 /*
-    run():
-    - Desc: Starts the web server and serves `build` at the document root.
-            Blocks until the server stops, and returns its exit code, so it is
-            a drop-in for the body of main().
-    - Argv is Wt's own -- `--http-address`, `--http-port`, `--docroot`.
+    run(int argc, char** argv, Builder build, Config config):
+    - Params:   int argc, char** argv, Builder build, Config config
+    - Returns:  int -- the server's exit code
+    - Desc:     Starts the web server and serves `build` at the document root.
+                Blocks until the server stops, so it is a drop-in for the body
+                of main(). Argv is Wt's own -- `--http-address`, `--http-port`,
+                `--docroot`.
 */
 int run(int argc, char** argv, Builder build, Config config = {});
 

@@ -17,11 +17,11 @@ namespace uilo {
 
 /*
     DropdownOptions:
-    - Desc: Everything a Dropdown draws, in three groups: the header the user
-            clicks, the popup that opens under it, and the items inside that
-            popup. Colors come as a literal plus a role, where the role wins when
-            it resolves against the active Palette and the literal is the
-            fallback.
+    - Desc:     Everything a Dropdown draws, in three groups: the header the
+                user clicks, the popup that opens under it, and the items inside
+                that popup. Colors come as a literal plus a role, where the role
+                wins when it resolves against the active Palette and the literal
+                is the fallback.
     - setMaxItems caps how tall the popup grows; beyond that it scrolls rather
       than running off the window.
 */
@@ -222,11 +222,10 @@ private:
 /*
     Dropdown:
     - Desc:     A header button that opens a list of items. The header is a
-                Button and
-            the popup a scrollable Column, both built once at construction and
-            kept for the element's lifetime -- opening and closing only adds and
-            removes the popup from UILO's floating layer, so no element is created
-            or destroyed on a click.
+                Button and the popup a scrollable Column, both built once at
+                construction and kept for the element's lifetime -- opening and
+                closing only adds and removes the popup from UILO's floating
+                layer, so no element is created or destroyed on a click.
     - It is an Element rather than an Interactible because the header does the
       claiming: the press is consumed there whatever callbacks are attached.
     - The popup has to be floating rather than a child, because UILO only ticks,

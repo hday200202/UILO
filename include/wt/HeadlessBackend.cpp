@@ -6,10 +6,11 @@
             collapse to a no-op and bgfx and SDL are then neither compiled nor
             linked. Renderer.hpp only forward-declares those types, so the header
             stays usable unchanged.
-    - Three groups live here: the entire Renderer class, the SDL functions
-      declared by wt/shim/SDL3/SDL.h, and the macOS trackpad and live-resize
-      shims UILO.cpp calls -- UILO's own MacStubs.cpp is guarded on !__APPLE__,
-      so a headless macOS build would otherwise be missing them.
+    - Four groups live here: the entire Renderer class, the SDL functions
+      declared by wt/shim/SDL3/SDL.h, the macOS trackpad and live-resize shims
+      UILO.cpp calls -- UILO's own MacStubs.cpp is guarded on !__APPLE__, so a
+      headless macOS build would otherwise be missing them -- and Pty, which
+      Terminal links against but which cannot exist on the web at all.
     - Nothing here is on a path the web app reaches. A headless program that does
       call update() or render() draws nothing rather than crashing.
 */
@@ -17,6 +18,7 @@
 #include "../renderer/Renderer.hpp"
 #include "../platform/MacScroll.hpp"
 #include "../platform/MacWindow.hpp"
+#include "../platform/Pty.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -54,10 +56,10 @@ SDL_Keymod  SDL_GetModState()               { return SDL_KMOD_NONE; }
     SDL_GetKeyboardState(int* numkeys):
     - Params:   int* numkeys
     - Returns:  const bool*
-    - Desc:     A full always-up scancode table. UILO scans [0, numkeys)
-                looking for any key held down, and uilo::Keybinds indexes
-                this directly by scancode, so the table has to span the
-                whole range rather than a single entry.
+    - Desc:     A full always-up scancode table. UILO scans [0, numkeys) looking
+                for any key held down, and uilo::Keybinds indexes this directly
+                by scancode, so the table has to span the whole range rather
+                than a single entry.
 */
 const bool* SDL_GetKeyboardState(int* numkeys) {
     static constexpr int kScancodeCount = 512;   /* SDL_SCANCODE_COUNT */
@@ -129,9 +131,8 @@ bool SDL_AddEventWatch(SDL_EventFilter, void*) { return true; }
     SDL_PollEvent(SDL_Event*):
     - Params:   SDL_Event*
     - Returns:  bool
-    - Desc:     The browser is the input device on this backend, so the
-                queue is always empty and there is no cursor to capture or
-                warp.
+    - Desc:     The browser is the input device on this backend, so the queue is
+                always empty and there is no cursor to capture or warp.
 */
 bool SDL_PollEvent(SDL_Event*) { return false; }
 
@@ -186,10 +187,10 @@ const char* SDL_GetError() { return ""; }
     SDL_WasInit(SDL_InitFlags):
     - Params:   SDL_InitFlags
     - Returns:  SDL_InitFlags
-    - Desc:     uilo::OS queries. There is no local display on this backend,
-                so every one reports "not initialised / unknown" and OS
-                returns its documented fallbacks (scale 1.0, zero sizes)
-                rather than inventing values.
+    - Desc:     uilo::OS queries. There is no local display on this backend, so
+                every one reports "not initialised / unknown" and OS returns its
+                documented fallbacks (scale 1.0, zero sizes) rather than
+                inventing values.
 */
 SDL_InitFlags SDL_WasInit(SDL_InitFlags)                  { return 0; }
 /*
@@ -565,8 +566,7 @@ void    Renderer::destroyTexture(Texture& tex)    { tex = Texture{}; }
 
 /*
     loadImagePixels(const std::string&, std::vector<uint8_t>&, uint32_t&, uint32_t&):
-    - Params:   const std::string&, std::vector<uint8_t>&, uint32_t&,
-                uint32_t&
+    - Params:   const std::string&, std::vector<uint8_t>&, uint32_t&, uint32_t&
     - Returns:  bool
     - Desc:     No-op in the headless build, which never draws.
 */
@@ -623,8 +623,7 @@ Font Renderer::loadFont(const std::string&) { return {}; }
 
 /*
     drawText(const std::string&, Vec2f, const Font&, float, Color, TextStyle):
-    - Params:   const std::string&, Vec2f, const Font&, float, Color,
-                TextStyle
+    - Params:   const std::string&, Vec2f, const Font&, float, Color, TextStyle
     - Returns:  none
     - Desc:     No-op in the headless build, which never draws.
 */
@@ -785,5 +784,30 @@ uint16_t Renderer::currentViewId() const { return 0; }
     - Desc:     No-op in the headless build, which never draws.
 */
 void     Renderer::submitOrtho(uint16_t, Vec2u) {}
+
+
+/*
+    Pty:
+    - Desc: Stubs for the web build, where a page has no shell to attach to --
+            a browser cannot fork a process, and proxying one to the server
+            would hand every visitor a shell on the host. Terminal is compiled
+            for the web because it lives under elements/, so it needs these to
+            link; with them it renders as an empty screen and reports that no
+            shell could be started, which is the honest outcome.
+    - Serving a real shell to a browser would need an explicit, authenticated
+      server-side channel. That is a deliberate decision for whoever deploys
+      the app, not something UILO should do implicitly.
+*/
+Pty::~Pty() {}
+
+bool Pty::open(const std::string&, int, int) {
+    m_error = "pty: a shell cannot be attached in the web build";
+    return false;
+}
+void        Pty::close()                         {}
+std::size_t Pty::read(std::string&)              { return 0; }
+void        Pty::write(const char*, std::size_t) {}
+void        Pty::resize(int, int)                {}
+bool        Pty::childExited()                   { return true; }
 
 } // namespace uilo

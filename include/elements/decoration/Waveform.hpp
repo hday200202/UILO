@@ -11,10 +11,10 @@ namespace uilo {
 
 /*
     WaveformLayout:
-    - Desc: How multiple audio channels are arranged inside the widget bounds.
-            Stacked gives each channel its own horizontal strip, Overlay draws
-            them over each other at full height, and SumMono averages them into a
-            single full-height waveform.
+    - Desc:     How multiple audio channels are arranged inside the widget
+                bounds. Stacked gives each channel its own horizontal strip,
+                Overlay draws them over each other at full height, and SumMono
+                averages them into a single full-height waveform.
 */
 enum class WaveformLayout {
     Stacked,
@@ -25,10 +25,10 @@ enum class WaveformLayout {
 
 /*
     WaveformStyle:
-    - Desc: How one channel's samples are drawn. Bars is a vertical min/max line
-            per column, the oscilloscope look; Line is a continuous polyline
-            through the per-column samples; Filled mirrors that polyline to form a
-            filled envelope.
+    - Desc:     How one channel's samples are drawn. Bars is a vertical min/max
+                line per column, the oscilloscope look; Line is a continuous
+                polyline through the per-column samples; Filled mirrors that
+                polyline to form a filled envelope.
 */
 enum class WaveformStyle {
     Bars,
@@ -40,12 +40,11 @@ enum class WaveformStyle {
 /*
     WaveformOptions:
     - Desc:     Everything a Waveform draws: the trace colour with optional per-
-                channel
-            overrides, the background, corner rounding, line thickness, the channel
-            layout and trace style, how many columns the samples are binned into,
-            and a vertical gain. Colors come as a literal plus a role, where the
-            role wins when it resolves against the active Palette and the literal
-            is the fallback.
+                channel overrides, the background, corner rounding, line
+                thickness, the channel layout and trace style, how many columns
+                the samples are binned into, and a vertical gain. Colors come as
+                a literal plus a role, where the role wins when it resolves
+                against the active Palette and the literal is the fallback.
 */
 class WaveformOptions {
 public:
@@ -133,13 +132,13 @@ inline float WaveformOptions::getRounding() const {
 /*
     Waveform:
     - Desc:     An audio waveform display. The element owns a copy of the sample
-                data,
-            so the caller's buffers can be freed as soon as setSamples returns, and
-            bins it into per-column min/max peaks that are cached and only rebuilt
-            when the data, the visible range, the column count or the widget size
-            changes. A sub-range of the buffer can be shown and zoomed about a
-            point, which is what makes it usable as a scrubbable view of a long
-            recording rather than only a whole-file thumbnail.
+                data, so the caller's buffers can be freed as soon as setSamples
+                returns, and bins it into per-column min/max peaks that are
+                cached and only rebuilt when the data, the visible range, the
+                column count or the widget size changes. A sub-range of the
+                buffer can be shown and zoomed about a point, which is what
+                makes it usable as a scrubbable view of a long recording rather
+                than only a whole-file thumbnail.
 */
 class Waveform : public Element {
 public:

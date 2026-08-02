@@ -10,9 +10,10 @@ namespace uilo {
 
 /*
     Weekday:
-    - Desc: Sunday is 0 to match C's tm_wday and the usual left-hand column of
-            a calendar grid. Widgets that start their week on Monday do so by
-            passing a different firstDayOfWeek, not by renumbering this.
+    - Desc:     Sunday is 0 to match C's tm_wday and the usual left-hand column
+                of a calendar grid. Widgets that start their week on Monday do
+                so by passing a different firstDayOfWeek, not by renumbering
+                this.
 */
 enum class Weekday : unsigned {
     Sunday = 0, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
@@ -21,10 +22,10 @@ enum class Weekday : unsigned {
 
 /*
     Month:
-    - Desc: January is 1, so the value is the month number itself. Every
-            function below takes a plain unsigned month for that reason; this
-            enum exists for readability at call sites, not as a separate
-            currency.
+    - Desc:     January is 1, so the value is the month number itself. Every
+                function below takes a plain unsigned month for that reason;
+                this enum exists for readability at call sites, not as a
+                separate currency.
 */
 enum class Month : unsigned {
     January = 1, February, March, April, May, June,
@@ -34,11 +35,11 @@ enum class Month : unsigned {
 
 /*
     Date:
-    - Desc: A calendar day with no time and no zone attached. Default-
-            constructs to the Unix epoch rather than to zeros, so a default
-            Date is always valid. - Comparison is defaulted, which sorts year,
-            then month, then day -- i.e. chronological order for any valid
-            date.
+    - Desc:     A calendar day with no time and no zone attached. Default-
+                constructs to the Unix epoch rather than to zeros, so a default
+                Date is always valid. - Comparison is defaulted, which sorts
+                year, then month, then day -- i.e. chronological order for any
+                valid date.
 */
 struct Date {
     int      year  = 1970;
@@ -57,8 +58,8 @@ struct Date {
 
 /*
     Time:
-    - Desc: A time of day, millisecond resolution, no zone attached. Hour is
-            0-23; the 12-hour split is a formatting concern.
+    - Desc:     A time of day, millisecond resolution, no zone attached. Hour is
+                0-23; the 12-hour split is a formatting concern.
 */
 struct Time {
     unsigned hour        = 0;
@@ -77,9 +78,9 @@ struct Time {
 
 /*
     DateTime:
-    - Desc: A Date and a Time together. Which zone it is expressed in depends
-            on where it came from: nowLocal() and nowUTC() differ by exactly
-            the offset timeZoneOffsetMinutes() reports.
+    - Desc:     A Date and a Time together. Which zone it is expressed in
+                depends on where it came from: nowLocal() and nowUTC() differ by
+                exactly the offset timeZoneOffsetMinutes() reports.
 */
 struct DateTime {
     Date date;

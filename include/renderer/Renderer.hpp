@@ -33,9 +33,9 @@ struct Texture {
 
 /*
     Font:
-    - Desc: An opaque handle to a loaded font, an index into the renderer's font
-            table. Invalid until loadFont succeeds, which is what a caller checks
-            before drawing rather than testing the path.
+    - Desc:     An opaque handle to a loaded font, an index into the renderer's
+                font table. Invalid until loadFont succeeds, which is what a
+                caller checks before drawing rather than testing the path.
 */
 struct Font {
     uint32_t id = UINT32_MAX;   /* index into Renderer's font table */
@@ -45,10 +45,9 @@ struct Font {
 /*
     TextMetrics:
     - Desc:     Measurements of a laid-out string: the bounding box plus the
-                vertical
-            metrics of the face it was measured with. lineHeight() is ascent plus
-            descent plus the recommended gap, which is the spacing text should be
-            laid out on.
+                vertical metrics of the face it was measured with. lineHeight()
+                is ascent plus descent plus the recommended gap, which is the
+                spacing text should be laid out on.
 */
 struct TextMetrics {
     Vec2f size      = {0.f, 0.f};   /* total bounding box */

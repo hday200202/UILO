@@ -37,10 +37,10 @@ namespace uilo::wt::detail {
 
 /*
     KnobWidget:
-    - Desc: A plain box that also owns the JSignal the drag script hands the
-            settled value to. A knob is drawn entirely in CSS, so the only
-            reason this is a subclass at all is that a JSignal has to live on
-            a WObject.
+    - Desc:     A plain box that also owns the JSignal the drag script hands the
+                settled value to. A knob is drawn entirely in CSS, so the only
+                reason this is a subclass at all is that a JSignal has to live
+                on a WObject.
 */
 class KnobWidget : public Wt::WContainerWidget {
 public:
@@ -102,8 +102,8 @@ std::string rgba(Color c) {
     rgbaWith(Color c, float alpha):
     - Params:   Color c, float alpha
     - Returns:  std::string
-    - Desc:     Same colour, explicit alpha. Materials need this: the
-                shader's body opacity is separate from the tint's own alpha.
+    - Desc:     Same colour, explicit alpha. Materials need this: the shader's
+                body opacity is separate from the tint's own alpha.
 */
 std::string rgbaWith(Color c, float alpha) {
     return "rgba(" + num(c.r) + "," + num(c.g) + "," + num(c.b) + ","
@@ -116,9 +116,9 @@ std::string rgbaWith(Color c, float alpha) {
     crossAlign(Align a, Axis parentAxis):
     - Params:   Align a, Axis parentAxis
     - Returns:  const char*
-    - Desc:     Cross-axis placement, in the order Element::resize() tests
-                the flags: the edge flags win over the centre flag when both
-                are set.
+    - Desc:     Cross-axis placement, in the order Element::resize() tests the
+                flags: the edge flags win over the centre flag when both are
+                set.
 */
 const char* crossAlign(Align a, Axis parentAxis) {
     if (parentAxis == Axis::Row) {   /* cross axis is vertical */
@@ -137,9 +137,9 @@ const char* crossAlign(Align a, Axis parentAxis) {
     bucketOf(Align a, Axis axis):
     - Params:   Align a, Axis axis
     - Returns:  int
-    - Desc:     Which of a container's three layout groups a child belongs
-                to: 0 = start, 1 = centre, 2 = end. Mirrors the bucket test
-                in Row/Column::update().
+    - Desc:     Which of a container's three layout groups a child belongs to: 0
+                = start, 1 = centre, 2 = end. Mirrors the bucket test in
+                Row/Column::update().
 */
 int bucketOf(Align a, Axis axis) {
     if (axis == Axis::Row) {
@@ -156,9 +156,9 @@ int bucketOf(Align a, Axis axis) {
     textJustify(Align a):
     - Params:   Align a
     - Returns:  const char*
-    - Desc:     Text's own alignment is a single enum value, not a flag set
-                -- Text::render() switches on it exactly -- so these compare
-                rather than test bits.
+    - Desc:     Text's own alignment is a single enum value, not a flag set --
+                Text::render() switches on it exactly -- so these compare rather
+                than test bits.
 */
 const char* textJustify(Align a) {
     if (a == Align::CenterX) return "center";
@@ -282,10 +282,10 @@ bool backgroundOf(Element* el, Background& out) {
     aspectLocked(const ImageOptions& o):
     - Params:   const ImageOptions& o
     - Returns:  bool
-    - Desc:     With either lock set, Image::update() overwrites one axis of
-                its bounds with (other axis / aspect), so the drawn box has
-                the picture's own proportions no matter what size the layout
-                hands it.
+    - Desc:     With either lock set, Image::update() overwrites one axis of its
+                bounds with (other axis / aspect), so the drawn box has the
+                picture's own proportions no matter what size the layout hands
+                it.
 */
 bool aspectLocked(const ImageOptions& o) {
     return o.getLockAspectWidth() || o.getLockAspectHeight();
@@ -293,12 +293,13 @@ bool aspectLocked(const ImageOptions& o) {
 
 /*
     KnobGeometry:
-    - Desc: The knob's arc laid out the way CSS wants it. UILO measures angles
-            from +x with y running down; a conic-gradient starts at 12 o'clock
-            and sweeps clockwise, which is the same direction -- just rotated a
-            quarter turn, hence the +90 everywhere. `span` is always positive
-            because a gradient's stops must ascend, so a clockwise knob starts
-            from the far end and fills backwards (`rev`).
+    - Desc:     The knob's arc laid out the way CSS wants it. UILO measures
+                angles from +x with y running down; a conic-gradient starts at
+                12 o'clock and sweeps clockwise, which is the same direction --
+                just rotated a quarter turn, hence the +90 everywhere. `span` is
+                always positive because a gradient's stops must ascend, so a
+                clockwise knob starts from the far end and fills backwards
+                (`rev`).
 */
 struct KnobGeometry {
     float from  = 0.f;   /* gradient origin, CSS degrees */
@@ -340,8 +341,8 @@ KnobGeometry knobGeometry(Knob* k) {
     - Returns:  bool
     - Desc:     Reads just the dimensions out of an image file's header.
                 Image::init() gets these from the decoded texture; the web
-                backend has no decoder, but the header is all that's needed
-                and every one of these formats puts it up front.
+                backend has no decoder, but the header is all that's needed and
+                every one of these formats puts it up front.
 */
 bool imageSize(const std::string& path, uint32_t& w, uint32_t& h) {
     std::ifstream in(path, std::ios::binary);
@@ -441,9 +442,9 @@ bool isScrollable(Element* el) {
     - Params:   const TextboxOptions& o
     - Returns:  float
     - Desc:     Textbox::lineHeight() is charSize * 1.2, so CSS can match it
-                exactly. It has to be a definite number rather than
-                `normal`: the auto-grow script converts a maxResizeLines cap
-                into pixels and must agree with the rendered leading.
+                exactly. It has to be a definite number rather than `normal`:
+                the auto-grow script converts a maxResizeLines cap into pixels
+                and must agree with the rendered leading.
 */
 float textboxLineHeight(const TextboxOptions& o) {
     return static_cast<float>(o.getCharSize()) * 1.2f;
@@ -454,11 +455,10 @@ float textboxLineHeight(const TextboxOptions& o) {
     - Params:   const SliderOptions& o
     - Returns:  int
     - Desc:     A Wt slider is integral where UILO's is float, so the float
-                range is carried as a whole number of steps. Using the
-                declared step means one arrow-key press moves the slider
-                exactly one step, the way it does natively; a continuous
-                slider has no such anchor and gets a fixed resolution
-                instead.
+                range is carried as a whole number of steps. Using the declared
+                step means one arrow-key press moves the slider exactly one
+                step, the way it does natively; a continuous slider has no such
+                anchor and gets a fixed resolution instead.
 */
 int sliderSteps(const SliderOptions& o) {
     const float span = o.getMax() - o.getMin();
@@ -474,9 +474,9 @@ int sliderSteps(const SliderOptions& o) {
     gradientCss(const Color c[4]):
     - Params:   const Color c[4]
     - Returns:  std::string
-    - Desc:     UILO interpolates four corner colours bilinearly on the GPU.
-                CSS has no equivalent, but the two cases the Gradient API
-                actually encourages -- a vertical or horizontal fade, via
+    - Desc:     UILO interpolates four corner colours bilinearly on the GPU. CSS
+                has no equivalent, but the two cases the Gradient API actually
+                encourages -- a vertical or horizontal fade, via
                 setTop/setBottom or setLeft/setRight -- are plain linear-
                 gradients. Anything genuinely four-cornered falls back to a
                 diagonal through the two opposite corners.
@@ -496,10 +496,10 @@ std::string gradientCss(const Color c[4]) {
     - Params:   std::string& css, const Material& mat, Color elementColor
     - Returns:  none
     - Desc:     Materials are shader effects natively. The browser's nearest
-                equivalent is a backdrop-filter, which covers the frosted-
-                pane look the static kinds are after. The animated kinds
-                (Shimmer, Aurora, Holographic, Liquid) keep their tint and
-                blur but lose the animation.
+                equivalent is a backdrop-filter, which covers the frosted- pane
+                look the static kinds are after. The animated kinds (Shimmer,
+                Aurora, Holographic, Liquid) keep their tint and blur but lose
+                the animation.
 */
 void appendMaterial(std::string& css, const Material& mat, Color elementColor) {
     Color tint = mat.tint;
@@ -573,15 +573,14 @@ std::string styleKey(const std::string& css, const PseudoRules& pseudo) {
     addVendorRule(const std::string& rule):
     - Params:   const std::string& rule
     - Returns:  none
-    - Desc:     Wt adds rules with CSSStyleSheet.insertRule, which *throws*
-                on a selector the browser does not recognise -- and each
-                engine only recognises its own vendor-prefixed pseudo-
-                elements. One `::-moz-range-track` is therefore enough to
-                abort the whole stylesheet in Chrome and leave the page
-                blank. Appending text to a <style> element goes through the
-                ordinary CSS parser instead, which drops rules it cannot
-                parse and keeps the rest, which is the behaviour these rules
-                were written expecting.
+    - Desc:     Wt adds rules with CSSStyleSheet.insertRule, which *throws* on a
+                selector the browser does not recognise -- and each engine only
+                recognises its own vendor-prefixed pseudo- elements. One
+                `::-moz-range-track` is therefore enough to abort the whole
+                stylesheet in Chrome and leave the page blank. Appending text to
+                a <style> element goes through the ordinary CSS parser instead,
+                which drops rules it cannot parse and keeps the rest, which is
+                the behaviour these rules were written expecting.
 */
 void Translator::addVendorRule(const std::string& rule) {
     std::string js;
@@ -659,9 +658,9 @@ std::string Translator::fontFamilyFor(const std::string& path) {
    server and waiting for a re-render would make the splitter visibly lag the. */
 /*
     kTextboxJs:
-    - Desc: Client-side support for the two Textbox features the browser has no
-            equivalent of: a Tab key that indents instead of moving focus, and a
-            line-number gutter beside a multiline box.
+    - Desc:     Client-side support for the two Textbox features the browser has
+                no equivalent of: a Tab key that indents instead of moving
+                focus, and a line-number gutter beside a multiline box.
     - The gutter is built entirely here rather than as Wt widgets, so it never
       enters the widget tree the Translator syncs -- nothing it does can disturb
       the flex layout, and if any step fails the box simply renders without a
@@ -961,10 +960,10 @@ std::string jsDimension(Dimension d) {
     - Params:   Element* el, Axis parentAxis, bool parentScrolls, const
                 std::string& parentHeight
     - Returns:  std::string
-    - Desc:     The element's drawn height as a CSS length, when the tree
-                alone determines it. Used to size text that has no explicit
-                charSize, which UILO derives from the box height. Empty
-                means "only the browser knows", and callers fall back.
+    - Desc:     The element's drawn height as a CSS length, when the tree alone
+                determines it. Used to size text that has no explicit charSize,
+                which UILO derives from the box height. Empty means "only the
+                browser knows", and callers fall back.
 */
 std::string ownHeightExpr(Element* el, Axis parentAxis, bool parentScrolls,
                           const std::string& parentHeight) {
@@ -1179,6 +1178,28 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
                     + rgba(el->resolveColor(o.getOutlineColorRole(), o.getOutlineColor()))
                     + ";outline-offset:-" + t + ";");
             }
+            break;
+        }
+
+        case ElementType::Terminal: {
+            const auto& o = static_cast<Terminal*>(el)->getOptions();
+
+            /* A terminal screen is a fixed grid, so the web copy has to be a
+               monospace block with the rows at exactly the height the widget
+               measured -- anything else and the two drift apart line by line. */
+            css += "font-family:" + fontFamilyFor(o.getFontPath()) + ",monospace;";
+            css += "font-size:" + px(o.getCharSize() * m_config.charSizeToFontSize) + ";";
+            css += "line-height:" + num(o.getLineSpacing()) + ";";
+            css += "color:" + rgba(el->resolveColor(o.getForegroundColorRole(),
+                                                    o.getForegroundColor())) + ";";
+            css += "background-color:" + rgba(el->resolveColor(o.getBackgroundColorRole(),
+                                                               o.getBackgroundColor())) + ";";
+            css += "border-radius:" + px(o.getRounding()) + ";";
+            css += "padding:" + px(o.getPadding()) + ";";
+            css += "white-space:pre;overflow:auto;";
+            /* Copy is the browser's own: the page has no shell to paste into,
+               but the screen text is real text and should select like it. */
+            css += "user-select:text;-webkit-user-select:text;";
             break;
         }
 
@@ -1598,6 +1619,19 @@ void Translator::apply(Node& n) {
                 w->setCurrentIndex(dd->getSelectedIndex());
             break;
         }
+        case ElementType::Terminal: {
+            auto* term = static_cast<Terminal*>(n.element);
+            /* No shell can be attached in a browser, so say so rather than
+               leaving an empty box that looks like a broken widget. */
+            const std::string s = term->isRunning() || term->lastError().empty()
+                ? term->screenText()
+                : term->lastError();
+            if (s != n.appliedText) {
+                static_cast<Wt::WText*>(n.widget)->setText(Wt::WString::fromUTF8(s));
+                n.appliedText = s;
+            }
+            break;
+        }
         case ElementType::TextBox: {
             const std::string s = static_cast<Textbox*>(n.element)->getString();
             if (s != n.appliedText) {
@@ -1618,9 +1652,8 @@ void Translator::apply(Node& n) {
     sync():
     - Params:   none
     - Returns:  none
-    - Desc:     Reflect any popup opened or closed since the last sync
-                before restyling, so the overlay's widgets exist to receive
-                it.
+    - Desc:     Reflect any popup opened or closed since the last sync before
+                restyling, so the overlay's widgets exist to receive it.
 */
 void Translator::sync() {
     syncFloating(m_uilo.getFloatingElements());
@@ -1635,9 +1668,9 @@ void Translator::sync() {
     - Params:   const std::vector<Element*>& floating
     - Returns:  none
     - Desc:     Toggle the overlays we already have: up if their backdrop is
-                still floating, hidden otherwise. This is what closes a
-                popup -- open() adds the backdrop, close() removes it, and
-                the state falls out of the list.
+                still floating, hidden otherwise. This is what closes a popup --
+                open() adds the backdrop, close() removes it, and the state
+                falls out of the list.
 */
 void Translator::syncFloating(const std::vector<Element*>& floating) {
     for (FloatingLayer& layer : m_floatingLayers) {
@@ -1937,6 +1970,15 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
             break;
         }
 
+        case ElementType::Terminal: {
+            /* Plain text, not markup: a shell emits '<' and '&' constantly and
+               they have to reach the page as themselves. */
+            auto* w = parent->addWidget(std::make_unique<Wt::WText>());
+            w->setTextFormat(Wt::TextFormat::Plain);
+            node.widget = w;
+            break;
+        }
+
         case ElementType::Resizer: {
             auto* wrap = parent->addWidget(std::make_unique<Wt::WContainerWidget>());
             wrap->addStyleClass("uilo-resizer");
@@ -1947,7 +1989,7 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
 
         default:
             /* Containers, Button, Spacer, and the widgets with no web
-               equivalent yet (Knob, Waveform) are all plain boxes. */
+               equivalent yet (Waveform) are all plain boxes. */
             node.widget = parent->addWidget(std::make_unique<Wt::WContainerWidget>());
             break;
     }
@@ -1998,12 +2040,12 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
 
 /*
     translateChildren(...):
-    - Params:   Container* container, Wt::WContainerWidget* parent, Axis
-                axis, bool scrolls, const std::string& parentHeight
+    - Params:   Container* container, Wt::WContainerWidget* parent, Axis axis,
+                bool scrolls, const std::string& parentHeight
     - Returns:  none
-    - Desc:     UILO lays a container out in three groups -- start, centre,
-                end -- and draws them in that order regardless of child
-                order, so the widgets are emitted grouped the same way.
+    - Desc:     UILO lays a container out in three groups -- start, centre, end
+                -- and draws them in that order regardless of child order, so
+                the widgets are emitted grouped the same way.
 */
 void Translator::translateChildren(Container* container, Wt::WContainerWidget* parent,
                                    Axis axis, bool scrolls,

@@ -8,10 +8,10 @@ class UILO;
 
 /*
     Page:
-    - Desc: A named screen owned by UILO, wrapping a root Container. UILO
-            ticks and renders the active page each frame, and the page
-            forwards layout and draw calls to its root container. Members
-            are protected and driven through UILO via friendship.
+    - Desc:     A named screen owned by UILO, wrapping a root Container. UILO
+                ticks and renders the active page each frame, and the page
+                forwards layout and draw calls to its root container. Members
+                are protected and driven through UILO via friendship.
 */
 class Page {
 public:

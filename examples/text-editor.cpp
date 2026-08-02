@@ -35,7 +35,7 @@ Page*       buildMainPage();
 */
 int main() {
     Renderer renderer;
-    renderer.init(1280, 720, "Containers");
+    renderer.init(1280, 720, "Text Editor");
 
     UILO uilo(renderer, buildMainPage());
 
@@ -75,9 +75,11 @@ Palette buildPalette() {
     palette.set("navIcon",          Color::fromHex("#b5b4b4"));
     palette.set("navIconHovered",   Color::fromHex("#ffffff"));
     palette.set("accent",           Color::fromHex("#c485ff"));
+    palette.set("textboxSelection", Color::fromHex("#c485ff5b"));
+    palette.set("terminalBg",       Color::fromHex("#181818"));
     palette.set("transparent",      Color::Transparent);
 
-    Theme::current().setRounding(10.f);
+    Theme::current().setRounding(8.f);
 
     return palette;
 }
@@ -119,6 +121,7 @@ Container* buildFilebrowser(const std::filesystem::path& path) {
             .setOuterPadding(4.f),
         FileBrowserOptions()
             .setRootPath(path.string())
+            .setScrollSpeed(50.f)
             // .setSelectedColorRole("accent")
     );
 }
@@ -149,6 +152,7 @@ Container* buildMainContentContainer() {
                 .setLineNumberAlign(Align::Left)
                 .setCursorWidth(1.f)
                 .setLineNumberBold(true)
+                .setSelectionColorRole("textboxSelection")
         )
     });
 }
@@ -162,9 +166,23 @@ Container* buildBottomBar() {
     return row(
         Modifier()
             .setOuterPadding(4.f)
-            .setHeight(128_px),
+            .setHeight(256_px),
         RowOptions()
-            .setColorRole("panel")
+            .setColorRole("panel"),
+        contains {
+            terminal(
+                Modifier(),
+                TerminalOptions()
+                    .setFont("assets/fonts/AdwaitaMonoNerdFont.ttf")
+                    .setCharSize(16)
+                    .setLineSpacing(1.15f)
+                    .setBackgroundColorRole("terminalBg")
+                    .setForegroundColorRole("terminalFg")
+                    // .setPadding(10.f)
+                    .setScrollback(5000)
+                    .setScrollSpeed(50.f)
+            )
+        }
     );
 }
 
@@ -313,6 +331,7 @@ Page* buildMainPage() {
                         .setResizeWidthMax(50_pct)
                 ),
                 column(Modifier(), ColumnOptions(), contains{
+                    panel(false, 100_pct, 48_px, {}, true),
                     buildMainContentContainer(),
                     resizer(
                         Modifier()
@@ -337,8 +356,10 @@ Page* buildMainPage() {
                     ),
 
                     buildBottomBar()
-                })
+                }),
             }),
+
+            panel(false, 100_pct, 24_px, {}, false)
         }), "main_page"
     );
 }

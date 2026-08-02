@@ -11,14 +11,15 @@ namespace uilo {
 
 /*
     TextOptions:
-    - Desc: Everything a Text draws: the font, the string, the character size,
-            the colour, the style flags, and where the glyphs sit inside the
-            element's bounds. The colour comes as a literal plus a role, where the
-            role wins when it resolves against the active Palette and the literal
-            is the fallback. Character size is left unset by default, which makes
-            the element size its own text from its height.
-    - setTextAlignX / setTextAlignY place the glyphs within the element, which is
-      separate from the Modifier's align, which places the element within its
+    - Desc:     Everything a Text draws: the font, the string, the character
+                size, the colour, the style flags, and where the glyphs sit
+                inside the element's bounds. The colour comes as a literal plus
+                a role, where the role wins when it resolves against the active
+                Palette and the literal is the fallback. Character size is left
+                unset by default, which makes the element size its own text from
+                its height.
+    - setTextAlignX / setTextAlignY place the glyphs within the element, which
+      is separate from the Modifier's align, which places the element within its
       parent.
 */
 class TextOptions {
@@ -101,17 +102,19 @@ inline unsigned int TextOptions::getCharSize() const {
 
 /*
     Text:
-    - Desc: A string drawn with a loaded font. The font is loaded on the first
-            update, once the element is bound to a UILO and so has a renderer to
-            load it with, which is why a Text built before the page is added still
-            works. With no explicit char size the glyphs are sized from the
-            element's height, so a Text in a fixed-height row scales with it.
-            Optional word wrapping re-flows the string whenever the element's
-            width changes. Layout metrics are cached and only re-measured when the
-            string, size, scale or wrap width changes, so drawing does not walk
-            the UTF-8 and the glyph table every frame.
-    - setString() writes to a live string separate from the options, so a runtime
-      update is read through getString() rather than getOptions().getContent().
+    - Desc:     A string drawn with a loaded font. The font is loaded on the
+                first update, once the element is bound to a UILO and so has a
+                renderer to load it with, which is why a Text built before the
+                page is added still works. With no explicit char size the glyphs
+                are sized from the element's height, so a Text in a fixed-height
+                row scales with it. Optional word wrapping re-flows the string
+                whenever the element's width changes. Layout metrics are cached
+                and only re-measured when the string, size, scale or wrap width
+                changes, so drawing does not walk the UTF-8 and the glyph table
+                every frame.
+    - setString() writes to a live string separate from the options, so a
+      runtime update is read through getString() rather than
+      getOptions().getContent().
 */
 class Text : public Element {
 public:

@@ -8,8 +8,8 @@ namespace uilo {
 
 /*
     Resizer(Modifier modifier, ResizerOptions options, const std::string& name):
-    - Params:   Modifier modifier, ResizerOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, ResizerOptions options, const std::string&
+                name
     - Returns:  Resizer
     - Desc:     Constructs a drag handle and tags it as a Resizer, which is what
                 makes Row and Column skip it in the flow and place it at a
@@ -188,9 +188,14 @@ bool Resizer::checkHover(const Vec2f& mousePosition) {
 bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
 
+    /* 0 means "not clicked yet", so it must not count as a previous click:
+       without that guard the first click within the double-click window of
+       startup reads as a double click and snaps the target to its original
+       size instead of beginning a drag. */
     const uint64_t nowMs = SDL_GetTicks();
     constexpr uint64_t doubleClickMs = 350;
-    const bool isDoubleClick = (nowMs - m_lastClickMs) <= doubleClickMs;
+    const bool isDoubleClick = m_lastClickMs != 0
+                            && (nowMs - m_lastClickMs) <= doubleClickMs;
     m_lastClickMs = nowMs;
 
     if (isDoubleClick && m_haveOriginalSize) {

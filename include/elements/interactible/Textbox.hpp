@@ -12,16 +12,16 @@ namespace uilo {
 
 /*
     TextboxOptions:
-    - Desc: Everything a Textbox draws and how it behaves: the font and text
-            appearance, the box itself, the focus outline, the placeholder, the
-            caret, the selection, the line-number gutter, and the editing rules.
-            Colors come as a literal plus a role, where the role wins when it
-            resolves against the active Palette and the literal is the fallback --
-            so setting a literal colour alone often does nothing until the role is
-            cleared.
+    - Desc:     Everything a Textbox draws and how it behaves: the font and text
+                appearance, the box itself, the focus outline, the placeholder,
+                the caret, the selection, the line-number gutter, and the
+                editing rules. Colors come as a literal plus a role, where the
+                role wins when it resolves against the active Palette and the
+                literal is the fallback -- so setting a literal colour alone
+                often does nothing until the role is cleared.
     - Multiline and wrap together decide the shape of the control. A single-line
-      box is a field, a multiline one an editor, and a wrapping multiline one that
-      was given a pixel height grows with its content.
+      box is a field, a multiline one an editor, and a wrapping multiline one
+      that was given a pixel height grows with its content.
 */
 class TextboxOptions {
 public:
@@ -110,6 +110,9 @@ public:
     TextboxOptions& setMaxResizeLines(int n)         { m_maxResizeLines = n;   return *this; }
     TextboxOptions& setMaxLength(int n)              { m_maxLength = n;        return *this; }
     TextboxOptions& setPasswordMode(bool v)          { m_passwordMode = v;     return *this; }
+    // Pixels travelled per unit of scroll delta, matching ColumnOptions so a
+    // textbox and a scrollable column feel the same under one gesture.
+    TextboxOptions& setScrollSpeed(float s)          { m_scrollSpeed = s;      return *this; }
     // How many spaces the Tab key inserts. Tab always inserts spaces rather than
     // a literal '\t': the renderer has no tab-advance logic, so a real tab
     // character would draw as a missing-glyph box.
@@ -174,6 +177,7 @@ public:
     int                getMaxLength()        const { return m_maxLength; }
     bool               getPasswordMode()     const { return m_passwordMode; }
     int                getTabWidth()         const { return m_tabWidth; }
+    float              getScrollSpeed()      const { return m_scrollSpeed; }
     const std::function<void(const std::string&)>& getOnStringChanged() const { return m_onStringChanged; }
     const std::function<void(const std::string&)>& getOnEnterPressed()  const { return m_onEnterPressed; }
 
@@ -227,6 +231,7 @@ private:
     int                m_maxLength         = 0;   /* 0 = unlimited */
     bool               m_passwordMode      = false;
     int                m_tabWidth          = 4;
+    float              m_scrollSpeed       = 40.f;   // same default as a Column
     std::function<void(const std::string&)> m_onStringChanged;
     std::function<void(const std::string&)> m_onEnterPressed;
 };
@@ -276,20 +281,19 @@ inline float TextboxOptions::getRounding() const {
 /*
     Textbox:
     - Desc:     An editable text field or multiline editor. The text is held as
-                UTF-32
-            so an index is a codepoint rather than a byte, which is what keeps
-            cursor movement, selection and word jumps simple; UTF-8 is produced
-            only at the renderer and API boundaries.
-    - Multiline plus wrap builds a soft-wrapped display string alongside the real
-      one, with a table of where breaks were inserted so display and text indices
-      map back and forth. Everything positional -- the caret, hit testing,
-      selection rectangles -- goes through that mapping.
-    - Height works one of two ways. A pixel height is a starting size the box may
-      grow past as content is added, publishing the new height back to its parent;
-      a percent height means the parent owns the slot, so the box fills it and
-      taller content scrolls. Growing a percent box would mean rewriting its
-      declared height to pixels, which severs it from the layout and stops it
-      following a window resize.
+                UTF-32 so an index is a codepoint rather than a byte, which is
+                what keeps cursor movement, selection and word jumps simple;
+                UTF-8 is produced only at the renderer and API boundaries.
+    - Multiline plus wrap builds a soft-wrapped display string alongside the
+      real one, with a table of where breaks were inserted so display and text
+      indices map back and forth. Everything positional -- the caret, hit
+      testing, selection rectangles -- goes through that mapping.
+    - Height works one of two ways. A pixel height is a starting size the box
+      may grow past as content is added, publishing the new height back to its
+      parent; a percent height means the parent owns the slot, so the box fills
+      it and taller content scrolls. Growing a percent box would mean rewriting
+      its declared height to pixels, which severs it from the layout and stops
+      it following a window resize.
     - Layout metrics are cached and rebuilt only when the text, size, scale or
       wrap width changes, so an idle frame costs no measurement.
 */
@@ -315,8 +319,12 @@ public:
 
     // Routed here by UILO while this is the active interactible.
     void handleTextInput(char32_t unicode) override;
-    void handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) override;
+    void handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) override;
     bool wantsTextInput() const override { return true; }
+
+    // A multiline box scrolls a view, so a flick over one should coast the way
+    // it does over a scrollable column. A single-line box has nothing to coast.
+    bool wantsScrollMomentum() const override { return m_options.getMultiline(); }
 
     std::string getString() const;
     void        setString(const std::string& s);
@@ -366,7 +374,6 @@ private:
     bool                    m_cursorVisible = true;
     float                   m_scrollOffsetX = 0.f;
     float                   m_scrollOffsetY = 0.f;
-    float                   m_scrollAccum   = 0.f;
     float                   m_preferredX    = 0.f;   /* preserved column x for up/down nav */
 
     // Soft-wrap state (multiline+wrap mode)

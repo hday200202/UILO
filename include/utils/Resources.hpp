@@ -169,9 +169,10 @@ private:
 
 /*
     Resources:
-    - Desc: Compile-time names for the fonts that ship with UILO, so a call site
-            spells one as Resources::fonts::default_ and gets a compiler error on
-            a typo rather than a silent fallback at runtime.
+    - Desc:     Compile-time names for the fonts that ship with UILO, so a call
+                site spells one as Resources::fonts::default_ and gets a
+                compiler error on a typo rather than a silent fallback at
+                runtime.
 */
 struct Resources::fonts {
     /* The DejaVu Sans compiled into the binary (assets/EmbeddedFont.hpp). */

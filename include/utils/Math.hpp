@@ -7,8 +7,8 @@ namespace uilo {
 
 /*
     Vec2f:
-    - Desc: A two-component float vector, used for positions, sizes and deltas
-            throughout the library.
+    - Desc:     A two-component float vector, used for positions, sizes and
+                deltas throughout the library.
 */
 struct Vec2f {
     float x = 0.f, y = 0.f;
@@ -34,8 +34,7 @@ inline Vec2f operator*(float s, const Vec2f& v) { return {s * v.x, s * v.y}; }
 /*
     Vec2u:
     - Desc:     An unsigned pair, for pixel dimensions that cannot be negative
-                such as
-            a window or texture size.
+                such as a window or texture size.
 */
 struct Vec2u {
     unsigned x = 0u, y = 0u;
@@ -49,7 +48,7 @@ struct Vec2u {
 
 /*
     Vec2i:
-    - Desc: A signed integer pair, for whole-pixel coordinates.
+    - Desc:     A signed integer pair, for whole-pixel coordinates.
 */
 struct Vec2i {
     int x = 0, y = 0;
@@ -63,12 +62,12 @@ struct Vec2i {
 
 /*
     Rectf:
-    - Desc: An axis-aligned rectangle held as a position and a size rather than
-            two corners, which is the form layout works in. contains() treats the
-            rectangle as half-open -- the left and top edges are inside and the
-            right and bottom are not -- so two rectangles sharing an edge never
-            both claim the same pixel, and a click on a boundary lands in exactly
-            one of them.
+    - Desc:     An axis-aligned rectangle held as a position and a size rather
+                than two corners, which is the form layout works in. contains()
+                treats the rectangle as half-open -- the left and top edges are
+                inside and the right and bottom are not -- so two rectangles
+                sharing an edge never both claim the same pixel, and a click on
+                a boundary lands in exactly one of them.
 */
 struct Rectf {
     Vec2f position;

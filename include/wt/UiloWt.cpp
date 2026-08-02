@@ -20,9 +20,9 @@ namespace {
 
 /*
     UiloApplication:
-    - Desc: One browser session. Owns that session's UILO instance, the tree
-            the builder produced, and the Wt widgets translated from it.
-            Implements Session, so the builder never sees the Wt side.
+    - Desc:     One browser session. Owns that session's UILO instance, the tree
+                the builder produced, and the Wt widgets translated from it.
+                Implements Session, so the builder never sees the Wt side.
 */
 class UiloApplication : public Wt::WApplication, public Session {
 public:

@@ -9,13 +9,14 @@ namespace uilo {
 
 /*
     ColumnOptions:
-    - Desc: Everything a Column draws that is not layout: background fill,
-            gradient, corner rounding, border, scrolling, the subdivision grid
-            and zoom. Colors come as a literal plus a role, where the role wins
-            when it resolves against the active Palette and the literal is the
-            fallback. A gradient takes precedence over a flat fill when active,
-            and a Material on the Modifier takes precedence over both. Sizes are
-            unscaled content pixels; UILO multiplies by its scale at layout time.
+    - Desc:     Everything a Column draws that is not layout: background fill,
+                gradient, corner rounding, border, scrolling, the subdivision
+                grid and zoom. Colors come as a literal plus a role, where the
+                role wins when it resolves against the active Palette and the
+                literal is the fallback. A gradient takes precedence over a flat
+                fill when active, and a Material on the Modifier takes
+                precedence over both. Sizes are unscaled content pixels; UILO
+                multiplies by its scale at layout time.
 */
 class ColumnOptions {
 public:
@@ -182,10 +183,11 @@ inline float ColumnOptions::getRounding() const {
 
 /*
     Column:
-    - Desc: A Container that lays its children out top to bottom, distributing
-            the vertical axis between them and giving each the full width.
-            Optionally scrolls, zooms, and draws a subdivision grid behind its
-            children. Row is the same class with the axes exchanged.
+    - Desc:     A Container that lays its children out top to bottom,
+                distributing the vertical axis between them and giving each the
+                full width. Optionally scrolls, zooms, and draws a subdivision
+                grid behind its children. Row is the same class with the axes
+                exchanged.
 */
 class Column : public Container {
 public:

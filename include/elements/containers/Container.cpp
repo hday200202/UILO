@@ -129,8 +129,8 @@ bool Container::checkHover(const Vec2f& mousePosition) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the event was consumed
     - Desc:     Offers the scroll to the children under the cursor, stopping at
                 the first that takes it, and otherwise falls back to the
@@ -158,8 +158,8 @@ bool Container::checkScroll(
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the event was consumed
     - Desc:     The two-axis form of the above, passing the whole delta down.
 */

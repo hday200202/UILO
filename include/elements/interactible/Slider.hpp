@@ -12,41 +12,42 @@ namespace uilo {
 
 /*
     ValueChangedFuncPtr:
-    - Desc: Storage signature for a slider's value callback. Fired whenever the
-            value actually moves, not on every input event, so a handler can be
-            expensive without being called on a frame where nothing changed.
+    - Desc:     Storage signature for a slider's value callback. Fired whenever
+                the value actually moves, not on every input event, so a handler
+                can be expensive without being called on a frame where nothing
+                changed.
 */
 using ValueChangedFuncPtr = std::function<void(float)>;
 
 
 /*
     ThumbShape:
-    - Desc: How the slider's handle is drawn -- a circle, or a rectangle whose
-            corner radius comes from setThumbRounding.
+    - Desc:     How the slider's handle is drawn -- a circle, or a rectangle
+                whose corner radius comes from setThumbRounding.
 */
 enum class ThumbShape       { Circle, Rect };
 
 
 /*
     SliderOrientation:
-    - Desc: Which axis the slider runs along. Horizontal fills left to right;
-            Vertical fills bottom to top, so a level or volume control reads the
-            way one is expected to.
+    - Desc:     Which axis the slider runs along. Horizontal fills left to
+                right; Vertical fills bottom to top, so a level or volume
+                control reads the way one is expected to.
 */
 enum class SliderOrientation { Horizontal, Vertical };
 
 /*
     SliderOptions:
     - Desc:     Everything a Slider draws and the range it works over: the
-                track, the
-            filled portion, the thumb, the value range and step, and the
-            orientation. Colors come as a literal plus a role, where the role wins
-            when it resolves against the active Palette and the literal is the
-            fallback.
+                track, the filled portion, the thumb, the value range and step,
+                and the orientation. Colors come as a literal plus a role, where
+                the role wins when it resolves against the active Palette and
+                the literal is the fallback.
     - setTrackThickness is read two ways. A value of 1 or below is a fraction of
       the cross-axis size, so the track scales with the element, and anything
       above 1 is a pixel thickness.
-    - A step of 0 is continuous; anything above snaps the value to that increment.
+    - A step of 0 is continuous; anything above snaps the value to that
+      increment.
 */
 class SliderOptions {
 public:
@@ -138,14 +139,14 @@ inline float SliderOptions::getThumbRounding() const {
 
 /*
     Slider:
-    - Desc: A draggable value control. Clicking anywhere on the track jumps the
-            value there and begins a drag, so a press and a drag are the same
-            gesture; double-clicking restores the configured default. The wheel
-            adjusts it too, accumulating sub-step motion so a stepped slider still
-            responds to a slow trackpad rather than ignoring deltas too small to
-            cross an increment.
-    - The thumb is inset from both ends by its own half-size, so its edge stops at
-      the track's edge instead of hanging past it, and the usable travel is
+    - Desc:     A draggable value control. Clicking anywhere on the track jumps
+                the value there and begins a drag, so a press and a drag are the
+                same gesture; double-clicking restores the configured default.
+                The wheel adjusts it too, accumulating sub-step motion so a
+                stepped slider still responds to a slow trackpad rather than
+                ignoring deltas too small to cross an increment.
+    - The thumb is inset from both ends by its own half-size, so its edge stops
+      at the track's edge instead of hanging past it, and the usable travel is
       measured against that inset span.
 */
 class Slider : public Interactible {

@@ -11,8 +11,8 @@ namespace uilo {
 namespace {
 /*
     resolveScrollBounds(...):
-    - Params:   const ColumnOptions& options, float contentMax,
-                float& minScroll, float& maxScroll
+    - Params:   const ColumnOptions& options, float contentMax, float&
+                minScroll, float& maxScroll
     - Returns:  void
     - Desc:     Works out how far a column may scroll. With both explicit bounds
                 set the options win outright, swapped into order if they arrive
@@ -340,12 +340,12 @@ void Column::updateScrollable(float dt, float scale) {
     - Returns:  void
     - Desc:     Lays out a non-scrolling column. Children are sorted into top,
                 centre and bottom buckets by their alignment, then the height
-                left over after the fixed-size ones is shared among the
-                percent-sized ones -- every percent child gets the same slot, so
-                two 50% siblings beside a 100px one split what remains rather
-                than the whole column. Each group is finally placed from its own
-                anchor: top from the top edge, centre about the middle, bottom
-                against the bottom edge.
+                left over after the fixed-size ones is shared among the percent-
+                sized ones -- every percent child gets the same slot, so two 50%
+                siblings beside a 100px one split what remains rather than the
+                whole column. Each group is finally placed from its own anchor:
+                top from the top edge, centre about the middle, bottom against
+                the bottom edge.
 */
 void Column::updateFlow(float dt, float scale) {
     /* First pass: bucket the children by alignment, and total how much height is
@@ -847,8 +847,8 @@ void Column::setZoomY(float z) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the column consumed the event
     - Desc:     Single-axis scroll, offered to the children first. `precise`
                 marks a trackpad's pixel delta, which is scaled against
@@ -880,8 +880,8 @@ bool Column::checkScroll(
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the column consumed the event
     - Desc:     Two-axis scroll. The children are offered the full delta first,
                 but their answer is deliberately not short-circuited: a column

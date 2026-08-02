@@ -25,8 +25,8 @@ RowOptions surfaceOptionsFrom(const DateFieldOptions& o) {
 
 /*
     DateField(Modifier modifier, DateFieldOptions options, const std::string& name):
-    - Params:   Modifier modifier, DateFieldOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, DateFieldOptions options, const std::string&
+                name
     - Returns:  DateField
     - Desc:     Builds the field as a Row and creates every part it will ever
                 need -- the insets, the icon, the gap, the label and the chevron
@@ -380,8 +380,8 @@ void DateField::setDate(const Date& date) {
     setRange(const Date& first, const Date& last):
     - Params:   const Date& first, const Date& last
     - Returns:  void
-    - Desc:     Sets both ends of a range, in either order. Silent, as
-                setDate() is.
+    - Desc:     Sets both ends of a range, in either order. Silent, as setDate()
+                is.
 */
 void DateField::setRange(const Date& first, const Date& last) {
     if (!DT::isValid(first) || !DT::isValid(last)) return;

@@ -9,8 +9,8 @@ namespace uilo {
 
 /*
     Waveform(Modifier modifier, WaveformOptions options, const std::string& name):
-    - Params:   Modifier modifier, WaveformOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, WaveformOptions options, const std::string&
+                name
     - Returns:  Waveform
     - Desc:     Constructs an empty waveform from a modifier and its options,
                 and tags it as a Waveform. Sample data arrives separately
@@ -108,8 +108,8 @@ void Waveform::setRange(std::size_t firstFrame, std::size_t frameCount) {
 
 /*
     zoomAt(float anchorNorm, float factor):
-    - Params:   float anchorNorm -- 0 at the left edge, 1 at the right,
-                float factor -- above 1 zooms in, below 1 zooms out
+    - Params:   float anchorNorm -- 0 at the left edge, 1 at the right, float
+                factor -- above 1 zooms in, below 1 zooms out
     - Returns:  void
     - Desc:     Zooms the visible range about a normalised position across the
                 widget, keeping the sample under that position under it

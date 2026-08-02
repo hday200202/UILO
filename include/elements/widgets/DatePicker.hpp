@@ -20,11 +20,11 @@ class UILO;
 
 /*
     DatePickerMode:
-    - Desc: Single takes one date at a time, so every click replaces the
-            selection. Range brackets a span with two clicks -- the first starts
-            it, the second closes it, and a third begins a new one -- and while a
-            range is half made the cells under the cursor preview where it would
-            land.
+    - Desc:     Single takes one date at a time, so every click replaces the
+                selection. Range brackets a span with two clicks -- the first
+                starts it, the second closes it, and a third begins a new one --
+                and while a range is half made the cells under the cursor
+                preview where it would land.
 */
 enum class DatePickerMode { Single, Range };
 
@@ -32,17 +32,17 @@ enum class DatePickerMode { Single, Range };
 /*
     WeekdayLabelStyle:
     - Desc:     How the column headings above the grid are written. Initial
-                ("S") suits a
-      narrow picker, Short ("Sun") a wide one.
+                ("S") suits a narrow picker, Short ("Sun") a wide one.
 */
 enum class WeekdayLabelStyle { Initial, Short, Full };
 
 
 /*
     DatePickerOptions:
-    - Desc: Everything the widget draws, in the same shape as the rest of the
-      library: literal + role colour pairs where the role wins if it resolves
-      against the active Palette, and plain pixel metrics in virtual units.
+    - Desc:     Everything the widget draws, in the same shape as the rest of
+                the library: literal + role colour pairs where the role wins if
+                it resolves against the active Palette, and plain pixel metrics
+                in virtual units.
     - Sizes are all "before scale": UILO multiplies by getScale() at layout
       time, so a picker configured once is the right physical size on any
       display.
@@ -553,9 +553,9 @@ inline float DatePickerOptions::getButtonRounding() const {
 
 /*
     DatePicker:
-    - Desc: A month grid for choosing a date, built on Column. Header with month
-      title and arrows, weekday headings, six rows of day cells, and an
-      optional button row.
+    - Desc:     A month grid for choosing a date, built on Column. Header with
+                month title and arrows, weekday headings, six rows of day cells,
+                and an optional button row.
     - There are two ways to use one.
 
         Embedded -- add it to a layout like any other element and read the

@@ -10,12 +10,13 @@ namespace uilo {
 
 /*
     ButtonOptions:
-    - Desc: Everything a Button draws: background fill or gradient, corner
-            rounding, an inside border, and the Text element used as its label.
-            Colors come as a literal plus a role, where the role wins when it
-            resolves against the active Palette and the literal is the fallback.
-            These are a curated subset of RowOptions, since a Button is a Row --
-            scrolling and the subdivision grid are deliberately not exposed.
+    - Desc:     Everything a Button draws: background fill or gradient, corner
+                rounding, an inside border, and the Text element used as its
+                label. Colors come as a literal plus a role, where the role wins
+                when it resolves against the active Palette and the literal is
+                the fallback. These are a curated subset of RowOptions, since a
+                Button is a Row -- scrolling and the subdivision grid are
+                deliberately not exposed.
 */
 class ButtonOptions {
 public:
@@ -104,16 +105,17 @@ inline float ButtonOptions::getRounding() const {
 
 /*
     Button:
-    - Desc: A clickable Row. Being a Row rather than an Interactible is
-            deliberate: a button has no state to keep between clicks, and it
-            means the label goes in as an ordinary child, so anything else can be
-            added beside it -- which is how Dropdown builds its header and arrow.
-            It claims a press whether or not a callback was attached, so a click
-            never falls through to the panel behind, and it asks for the hand
-            cursor whenever the pointer is over it.
-    - ButtonOptions are pushed down into the underlying RowOptions on every draw,
-      so a handler that mutates getOptions() directly is reflected on the next
-      frame without calling setOptions().
+    - Desc:     A clickable Row. Being a Row rather than an Interactible is
+                deliberate: a button has no state to keep between clicks, and it
+                means the label goes in as an ordinary child, so anything else
+                can be added beside it -- which is how Dropdown builds its
+                header and arrow. It claims a press whether or not a callback
+                was attached, so a click never falls through to the panel
+                behind, and it asks for the hand cursor whenever the pointer is
+                over it.
+    - ButtonOptions are pushed down into the underlying RowOptions on every
+      draw, so a handler that mutates getOptions() directly is reflected on the
+      next frame without calling setOptions().
 */
 class Button : public Row {
 public:

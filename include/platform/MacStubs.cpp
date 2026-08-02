@@ -26,10 +26,9 @@ bool configureMacWindowForLiveResize(void*) { return false; }
     getNativeDisplayPixelSize(uint32_t&, uint32_t&):
     - Params:   uint32_t&, uint32_t&
     - Returns:  bool
-    - Desc:     No equivalent of the CoreGraphics mode list here; OS falls
-                back to the SDL-derived sizes, which is the right answer on
-                platforms that do not render at one resolution and scan out
-                at another.
+    - Desc:     No equivalent of the CoreGraphics mode list here; OS falls back
+                to the SDL-derived sizes, which is the right answer on platforms
+                that do not render at one resolution and scan out at another.
 */
 bool getNativeDisplayPixelSize(uint32_t&, uint32_t&) { return false; }
 /*

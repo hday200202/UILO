@@ -50,8 +50,8 @@ std::string weekdayLabel(Weekday day, WeekdayLabelStyle style) {
 
 /*
     DatePicker(Modifier modifier, DatePickerOptions options, const std::string& name):
-    - Params:   Modifier modifier, DatePickerOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, DatePickerOptions options, const std::string&
+                name
     - Returns:  DatePicker
     - Desc:     Builds the picker as a Column: header, weekday row, day grid and
                 footer. The modifier is kept as well as applied, because opening
@@ -91,8 +91,8 @@ void DatePicker::setOptions(const DatePickerOptions& opts) {
     applyCardOptions():
     - Params:   none
     - Returns:  void
-    - Desc:     Pushes the background and rounding down onto the Column the
-                card is built from.
+    - Desc:     Pushes the background and rounding down onto the Column the card
+                is built from.
 */
 void DatePicker::applyCardOptions() {
     Column::setOptions(cardOptionsFrom(m_dpOptions));
@@ -332,8 +332,8 @@ void DatePicker::notifyMonthChanged() {
     - Returns:  bool
     - Desc:     Whether the footer would draw anything: showFooter on and at
                 least one label non-empty. Both preferredHeight() and
-                buildFooter() go through this so the height reserved and the
-                row actually built can never disagree.
+                buildFooter() go through this so the height reserved and the row
+                actually built can never disagree.
 */
 bool DatePicker::hasFooterButtons() const {
     const DatePickerOptions& o = m_dpOptions;
@@ -349,11 +349,11 @@ bool DatePicker::hasFooterButtons() const {
     preferredHeight():
     - Params:   none
     - Returns:  float
-    - Desc:     The height the configured metrics add up to, in virtual
-                pixels: padding, header, weekday strip, six week rows (or as
-                many as the month needs when fixed rows are off), and the
-                footer. What open() uses when no explicit popup height is set,
-                and what sizeToContent() writes into the modifier.
+    - Desc:     The height the configured metrics add up to, in virtual pixels:
+                padding, header, weekday strip, six week rows (or as many as the
+                month needs when fixed rows are off), and the footer. What
+                open() uses when no explicit popup height is set, and what
+                sizeToContent() writes into the modifier.
 */
 float DatePicker::preferredHeight() const {
     const DatePickerOptions& o = m_dpOptions;
@@ -385,8 +385,8 @@ float DatePicker::preferredHeight() const {
     - Params:   none
     - Returns:  DatePicker*
     - Desc:     Fixes the picker's height at preferredHeight() so an embedded
-                one takes exactly the room it needs instead of stretching to
-                its slot. Returns this, to be used inline where the element is
+                one takes exactly the room it needs instead of stretching to its
+                slot. Returns this, to be used inline where the element is
                 declared:
 
                     datepicker(Modifier(), opts)->sizeToContent()
@@ -408,12 +408,12 @@ DatePicker* DatePicker::sizeToContent() {
     - Params:   UILO& uiloRef
     - Returns:  void
     - Desc:     Presents the picker centred over the window on a dimmed
-                backdrop. The backdrop goes in as a floating element rather
-                than an overlay because UILO ticks and renders floating
-                elements every frame but leaves overlays to whoever owns them
-                -- and a popup picker, being outside the page tree, has no
-                owner to do that. Clicks land on the backdrop first, which is
-                what makes the popup modal.
+                backdrop. The backdrop goes in as a floating element rather than
+                an overlay because UILO ticks and renders floating elements
+                every frame but leaves overlays to whoever owns them -- and a
+                popup picker, being outside the page tree, has no owner to do
+                that. Clicks land on the backdrop first, which is what makes the
+                popup modal.
 */
 void DatePicker::open(UILO& uiloRef) {
     if (m_isOpen) return;
@@ -515,10 +515,10 @@ void DatePicker::clearRows() {
     rebuild():
     - Params:   none
     - Returns:  void
-    - Desc:     Builds the card contents for the month on show: header,
-                weekday strip, day grid, footer. Only paging months and
-                changing options come through here -- selecting and hovering
-                go through applyCellColors(), which touches no allocation.
+    - Desc:     Builds the card contents for the month on show: header, weekday
+                strip, day grid, footer. Only paging months and changing options
+                come through here -- selecting and hovering go through
+                applyCellColors(), which touches no allocation.
 */
 void DatePicker::rebuild() {
     m_needsRebuild = false;
@@ -674,9 +674,9 @@ Element* DatePicker::buildNavButton(const std::string& iconName, std::function<v
     buildWeekdayHeader():
     - Params:   none
     - Returns:  Element*
-    - Desc:     Seven column headings, starting from the configured first day
-                of the week. Split the same way as the grid below so the
-                letters line up over their columns.
+    - Desc:     Seven column headings, starting from the configured first day of
+                the week. Split the same way as the grid below so the letters
+                line up over their columns.
 */
 Element* DatePicker::buildWeekdayHeader() {
     const DatePickerOptions& o = m_dpOptions;
@@ -717,8 +717,8 @@ Element* DatePicker::buildWeekdayHeader() {
     - Returns:  Element*
     - Desc:     The day cells, as a Column of week Rows. Every row holds seven
                 cells whatever the month, walking whole weeks from gridStart()
-                so the columns stay aligned to their weekdays; cells outside
-                the month are marked adjacent and styled apart.
+                so the columns stay aligned to their weekdays; cells outside the
+                month are marked adjacent and styled apart.
 */
 Element* DatePicker::buildGrid() {
     const DatePickerOptions& o = m_dpOptions;
@@ -775,8 +775,8 @@ Element* DatePicker::buildGrid() {
     - Returns:  Element*
     - Desc:     One day: a Row carrying the fill and the click, with the day
                 number centred in it. Colours are left to applyCellColors(),
-                which runs immediately after the grid is assembled and again
-                on every selection or hover change.
+                which runs immediately after the grid is assembled and again on
+                every selection or hover change.
 */
 Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
     const DatePickerOptions& o = m_dpOptions;
@@ -824,8 +824,8 @@ Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
     - Params:   none
     - Returns:  Element*
     - Desc:     The action row: Today and Clear on the left, Cancel and the
-                confirm button on the right. Returns nothing when every label
-                is empty, so an all-empty footer takes up no space.
+                confirm button on the right. Returns nothing when every label is
+                empty, so an all-empty footer takes up no space.
 */
 Element* DatePicker::buildFooter() {
     const DatePickerOptions& o = m_dpOptions;
@@ -951,9 +951,8 @@ bool DatePicker::isSelectable(const Date& date) const {
     - Params:   const Date& date
     - Returns:  bool
     - Desc:     True for a day strictly between the ends of a range. While the
-                second end is still missing the cell under the cursor stands
-                in for it, which is what previews the span as the pointer
-                moves.
+                second end is still missing the cell under the cursor stands in
+                for it, which is what previews the span as the pointer moves.
 */
 bool DatePicker::isInRange(const Date& date) const {
     if (m_dpOptions.getMode() != DatePickerMode::Range) return false;
@@ -1065,9 +1064,9 @@ void DatePicker::applyCellColors() {
     - Params:   const std::optional<Date>& date
     - Returns:  void
     - Desc:     Tracks which day the cursor is over and restyles the grid when
-                that changes. The hover fill could be done per cell, but a
-                half-made range has to repaint the whole previewed span, which
-                only the grid as a whole can do.
+                that changes. The hover fill could be done per cell, but a half-
+                made range has to repaint the whole previewed span, which only
+                the grid as a whole can do.
 */
 void DatePicker::setHoverDate(const std::optional<Date>& date) {
     if (m_hoverDate == date) return;

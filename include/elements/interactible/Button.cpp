@@ -34,8 +34,8 @@ RowOptions rowOptionsFrom(const ButtonOptions& o) {
 
 /*
     Button(Modifier modifier, ButtonOptions options, const std::string& name):
-    - Params:   Modifier modifier, ButtonOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, ButtonOptions options, const std::string&
+                name
     - Returns:  Button
     - Desc:     Constructs a button as a Row carrying the converted options, and
                 adds the label as its first child when one was given. Tagged as
@@ -111,8 +111,8 @@ bool Button::checkHover(const Vec2f& mousePosition) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the event was consumed
     - Desc:     Uses Element's handling, so a button never scrolls itself and a
                 wheel over one bubbles to the list or panel it sits in.

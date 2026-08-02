@@ -1196,15 +1196,21 @@ void Textbox::onDeactivate() {
 
 /*
     checkScroll(const Vec2f& mousePos, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePos, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePos, float delta, bool precise, bool momentum
     - Returns:  bool -- true when the box consumed the event
-    - Desc:     Scrolls a multiline box by whole lines, snapping the offset to a
-                line so text never sits half-clipped. Declines when nothing
-                overflows, which lets a wheel over a short editor scroll the
-                page behind it instead.
+    - Desc:     Scrolls a multiline box, converting the delta exactly the way a
+                scrollable Column does so the two feel identical under one
+                gesture. The offset is continuous rather than snapped to whole
+                lines, which is what lets a trackpad's momentum tail read as
+                smooth instead of stepping. Declines when nothing overflows, so
+                a wheel over a short editor scrolls the page behind it instead.
 */
-bool Textbox::checkScroll(const Vec2f& mousePos, float delta, bool /*precise*/, bool /*momentum*/) {
+bool Textbox::checkScroll(
+    const Vec2f& mousePos,
+    float delta,
+    bool precise,
+    bool /*momentum*/
+) {
     if (!m_bounds.contains(mousePos)) return false;
     if (!m_options.getMultiline()) return false;
 
@@ -1218,12 +1224,16 @@ bool Textbox::checkScroll(const Vec2f& mousePos, float delta, bool /*precise*/, 
     const float maxScroll = maxScrollY(lineCount, lh);
     if (maxScroll <= 0.f) return false;
 
-    m_scrollAccum -= delta * lh;
-    const float target = std::max(0.f, std::min(m_scrollOffsetY + m_scrollAccum, maxScroll));
-    const float snapped = std::round(target / lh) * lh;
-    if (snapped != m_scrollOffsetY) {
-        m_scrollAccum -= (snapped - m_scrollOffsetY);
-        m_scrollOffsetY = snapped;
+    /* Same conversion a scrollable Column uses, so one gesture moves a textbox
+       and a container by the same distance. A trackpad's precise pixel delta is
+       scaled differently from a wheel's discrete step, since the OS already
+       supplies the momentum tail for the former. */
+    const float speed = m_options.getScrollSpeed();
+    const float step  = precise ? 30.f * (speed / 40.f) : speed;
+
+    const float next = std::clamp(m_scrollOffsetY - delta * step, 0.f, maxScroll);
+    if (next != m_scrollOffsetY) {
+        m_scrollOffsetY = next;
         m_dirty = true;
     }
     return true;
@@ -1288,19 +1298,22 @@ void Textbox::insertTab() {
 }
 
 /*
-    handleKeyInput(SDL_Keycode key, bool shift, bool ctrl):
-    - Params:   SDL_Keycode key, bool shift, bool ctrl
+    handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui):
+    - Params:   SDL_Keycode key, bool shift, bool ctrl, bool gui
     - Returns:  void
     - Desc:     Handles every key that is not plain typing: cursor movement with
                 the arrows, Home and End, word jumps with ctrl, deletion, Tab,
                 Enter, Escape, and the clipboard and select-all shortcuts. Shift
                 extends the selection by leaving the anchor where it is; without
                 it the anchor follows the cursor and the selection collapses.
+    - Word jumps stay on Control alone. Only the clipboard and select-all
+      shortcuts accept Command as well, which is what a Mac user expects.
 */
-void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) {
+void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
     if (!m_focused) return;
 
-    const size_t n = m_text.size();
+    const bool   shortcut = isShortcutModifier(ctrl, gui);
+    const size_t n        = m_text.size();
 
     auto moveCursor = [&](size_t newPos) {
         m_cursorPos = newPos;
@@ -1386,17 +1399,17 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) {
             if (m_uiloRef) m_uiloRef->setCurrInteractible(nullptr);
             return;
         case SDLK_A:
-            if (ctrl) { m_anchorPos = 0; m_cursorPos = n; resetBlink(); }
+            if (shortcut) { m_anchorPos = 0; m_cursorPos = n; resetBlink(); }
             break;
         case SDLK_C:
-            if (ctrl && hasSelection()) {
+            if (shortcut && hasSelection()) {
                 const size_t lo = std::min(m_cursorPos, m_anchorPos);
                 const size_t hi = std::max(m_cursorPos, m_anchorPos);
                 SDL_SetClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)).c_str());
             }
             break;
         case SDLK_X:
-            if (ctrl && hasSelection()) {
+            if (shortcut && hasSelection()) {
                 const size_t lo = std::min(m_cursorPos, m_anchorPos);
                 const size_t hi = std::max(m_cursorPos, m_anchorPos);
                 SDL_SetClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)).c_str());
@@ -1405,7 +1418,7 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl) {
             }
             break;
         case SDLK_V:
-            if (ctrl) {
+            if (shortcut) {
                 const char* raw = SDL_GetClipboardText();
                 if (raw && *raw) {
                     std::u32string pasted = utf8ToU32(raw);

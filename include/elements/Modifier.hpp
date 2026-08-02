@@ -28,11 +28,11 @@ namespace detail {
 
 /*
     cb_traits:
-    - Desc: First-argument introspection for a callable, so a user-supplied
-            handler can be written as `[](){}`, `[](Element*){}` or
-            `[](Button*){}` without ceremony. Reports the arity and the first
-            parameter type; specialised for member operator() in both const and
-            non-const forms, and for plain function pointers.
+    - Desc:     First-argument introspection for a callable, so a user-supplied
+                handler can be written as `[](){}`, `[](Element*){}` or
+                `[](Button*){}` without ceremony. Reports the arity and the
+                first parameter type; specialised for member operator() in both
+                const and non-const forms, and for plain function pointers.
 */
 template <class T> struct cb_traits : cb_traits<decltype(&T::operator())> {};
 
@@ -114,12 +114,12 @@ inline ScrollFuncPtr makeScrollCb(F&& f) {
 
 /*
     Modifier:
-    - Desc: The layout and event half of an element, kept separate from the
-            per-widget Options that describe how it is drawn. Carries size,
-            alignment, outer padding, visibility, free position, material, and
-            the callback set: clicks, edge-triggered hover, scroll, and the two
-            per-frame lifecycle hooks. Every setter returns *this so a modifier
-            reads as one declaration at the call site.
+    - Desc:     The layout and event half of an element, kept separate from the
+                per-widget Options that describe how it is drawn. Carries size,
+                alignment, outer padding, visibility, free position, material,
+                and the callback set: clicks, edge-triggered hover, scroll, and
+                the two per-frame lifecycle hooks. Every setter returns *this so
+                a modifier reads as one declaration at the call site.
     - There is deliberately no continuous "is hovered" callback: handlers react
       to the enter and exit transitions and keep any persistent visual change on
       the element themselves.
@@ -262,8 +262,8 @@ Modifier& Modifier::setOnHover(F&& f) {
     setOnScroll(F&& f):
     - Params:   F&& f
     - Returns:  Modifier&
-    - Desc:     Scroll handler. Accepts either `(float delta)` or
-                `(ElementPtr, float delta)`.
+    - Desc:     Scroll handler. Accepts either `(float delta)` or `(ElementPtr,
+                float delta)`.
 */
 template <class F>
 Modifier& Modifier::setOnScroll(F&& f) {

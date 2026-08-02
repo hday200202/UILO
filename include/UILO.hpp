@@ -22,17 +22,18 @@ class Interactible;
 
 /*
     UILO:
-    - Desc: The top-level controller. It owns the pages and the element pool,
-            drives layout and input dispatch once per frame, and manages
-            overlays, the floating layer, scaling, cursor requests and the shared
-            scroll and zoom links.
+    - Desc:     The top-level controller. It owns the pages and the element
+                pool, drives layout and input dispatch once per frame, and
+                manages overlays, the floating layer, scaling, cursor requests
+                and the shared scroll and zoom links.
     - Ownership runs through here rather than through the tree. An element binds
       itself with setUILO() on the first walk that reaches it, which puts it in
-      the pool, and erase() only marks it -- the sweep happens between frames, so
-      a handler is free to remove elements while the tree is still being walked.
+      the pool, and erase() only marks it -- the sweep happens between frames,
+      so a handler is free to remove elements while the tree is still being
+      walked.
     - The floating layer is the one part of the tree that is ticked, hit-tested
-      and drawn above the page. A popup has to live there rather than as a child,
-      or the container it sits in would clip it.
+      and drawn above the page. A popup has to live there rather than as a
+      child, or the container it sits in would clip it.
 */
 class UILO {
 public:
@@ -54,7 +55,7 @@ public:
     void handleEvent(const SDL_Event& event);
     void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
     void dispatchZoom(const Vec2f& pos, float magnification);
-    bool isSDLScrollTarget(const Vec2f& pos) const;
+    bool wantsScrollMomentum(const Vec2f& pos) const;
     // Cursor position in render pixels, read live from SDL rather than from the
     // once-per-frame cache, so event callbacks that fire mid-frame see where the
     // pointer actually is.

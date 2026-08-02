@@ -29,9 +29,9 @@ inline std::time_t getFileTime_t(fs::file_time_type ftime) {
 
 /*
     FileKind:
-    - Desc: Enum for abstract file types. - Scoped (enum class) deliberately:
-            unscoped enumerators named Image and Text would collide with the
-            uilo::Image and uilo::Text element classes.
+    - Desc:     Enum for abstract file types. - Scoped (enum class)
+                deliberately: unscoped enumerators named Image and Text would
+                collide with the uilo::Image and uilo::Text element classes.
 */
 enum class FileKind {
     Image,      Code,       Doc,        Text,
@@ -94,21 +94,21 @@ class Directory;
 
 /*
     EntryType:
-    - Desc: Discriminates the two concrete FSEntry subclasses without
-            RTTI/dynamic_cast
+    - Desc:     Discriminates the two concrete FSEntry subclasses without
+                RTTI/dynamic_cast
 */
 enum class EntryType { File, Directory };
 
 
 /*
     FSEntry:
-    - Desc: Common base for File and Directory. - Holds everything that's
-            meaningful for both: path, parent, name, permissions, and symlink
-            target. All are captured once via error_code overloads, so a
-            vanished file or broken symlink mid-scan never throws. -
-            type()/isFile()/isDirectory() let callers holding an FSEntry*
-            figure out which concrete type they have and cast accordingly
-            (static_cast is safe once type() has been checked).
+    - Desc:     Common base for File and Directory. - Holds everything that's
+                meaningful for both: path, parent, name, permissions, and
+                symlink target. All are captured once via error_code overloads,
+                so a vanished file or broken symlink mid-scan never throws. -
+                type()/isFile()/isDirectory() let callers holding an FSEntry*
+                figure out which concrete type they have and cast accordingly
+                (static_cast is safe once type() has been checked).
 */
 class FSEntry {
 public:
@@ -161,18 +161,18 @@ protected:
 
 /*
     File:
-    - Desc: Abstract representation of a file on disk. - Constructor:
-            File(std::filesystem::path, Directory* parent = nullptr) -
-            getFileName()      -> string name of file without extension -
-            getFileExt()       -> string file extension - getFileKind()
-            -> abstract FileKind derived from extension (no disk access) -
-            getFileSize()      -> file size in bytes, empty on stat failure -
-            getLastModified()  -> last write time as time_t, empty on stat
-            failure - getPermissions()   -> std::filesystem::perms captured at
-            construction (inherited) - isReadOnly()       -> true if no write
-            permission bit is set (inherited) - getSymlinkTarget() -> resolved
-            target path, if this file is a symlink (inherited) - getPath()
-            -> full path on disk (inherited)
+    - Desc:     Abstract representation of a file on disk. - Constructor:
+                File(std::filesystem::path, Directory* parent = nullptr) -
+                getFileName()      -> string name of file without extension -
+                getFileExt()       -> string file extension - getFileKind() ->
+                abstract FileKind derived from extension (no disk access) -
+                getFileSize()      -> file size in bytes, empty on stat failure
+                - getLastModified()  -> last write time as time_t, empty on stat
+                failure - getPermissions()   -> std::filesystem::perms captured
+                at construction (inherited) - isReadOnly()       -> true if no
+                write permission bit is set (inherited) - getSymlinkTarget() ->
+                resolved target path, if this file is a symlink (inherited) -
+                getPath() -> full path on disk (inherited)
 */
 class File : public FSEntry {
 public:
@@ -211,20 +211,21 @@ private:
 
 /*
     Directory:
-    - Desc: Abstract representation of a directory on disk. - Constructor:
-            Directory(std::filesystem::path, Directory* parent = nullptr) -
-            expand()     -> lazily lists immediate children (files +
-            subdirectories), caching them in m_children. A no-op if already
-            loaded, so it's safe to call every time a widget "opens" this
-            directory without re-hitting the disk. - invalidate() -> drops the
-            cache; pass reload=true to re-list immediately. -
-            getChildren()/getFiles()/getSubdirectories() -> cached results. -
-            Children are stored as a single vector of FSEntry so callers can
-            walk one ordered list and cast per-entry (isDirectory()/isFile())
-            rather than juggling two parallel containers. - Note: expand()
-            only ever lists one level. Nothing here recurses automatically, so
-            a symlink that loops back to an ancestor directory is harmless
-            unless something walks the tree eagerly.
+    - Desc:     Abstract representation of a directory on disk. - Constructor:
+                Directory(std::filesystem::path, Directory* parent = nullptr) -
+                expand()     -> lazily lists immediate children (files +
+                subdirectories), caching them in m_children. A no-op if already
+                loaded, so it's safe to call every time a widget "opens" this
+                directory without re-hitting the disk. - invalidate() -> drops
+                the cache; pass reload=true to re-list immediately. -
+                getChildren()/getFiles()/getSubdirectories() -> cached results.
+                - Children are stored as a single vector of FSEntry so callers
+                can walk one ordered list and cast per-entry
+                (isDirectory()/isFile()) rather than juggling two parallel
+                containers. - Note: expand() only ever lists one level. Nothing
+                here recurses automatically, so a symlink that loops back to an
+                ancestor directory is harmless unless something walks the tree
+                eagerly.
 */
 class Directory : public FSEntry {
 public:
@@ -298,13 +299,13 @@ private:
 
 /*
     FileTree:
-    - Desc: Builds and owns a lazily-expanded directory tree rooted at a given
-            path. - Constructor: FileTree(std::filesystem::path rootPath)
-            Expands the root immediately so the top level is ready to display;
-            everything below the root stays unloaded until a widget calls
-            expand() on the Directory it's opening. - getRoot()  -> root
-            Directory* - refresh()  -> drops and re-lists the root's immediate
-            children
+    - Desc:     Builds and owns a lazily-expanded directory tree rooted at a
+                given path. - Constructor: FileTree(std::filesystem::path
+                rootPath) Expands the root immediately so the top level is ready
+                to display; everything below the root stays unloaded until a
+                widget calls expand() on the Directory it's opening. - getRoot()
+                -> root Directory* - refresh()  -> drops and re-lists the root's
+                immediate children
 */
 class FileTree {
 public:
