@@ -1,6 +1,12 @@
 #include "MacScroll.hpp"
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+/* __APPLE__ is true on iOS as well as macOS, and none of AppKit exists there.
+   TARGET_OS_OSX is what actually distinguishes the two. */
+#if defined(__APPLE__) && TARGET_OS_OSX
 
 #import <AppKit/AppKit.h>
 #include <cstdio>
@@ -172,7 +178,7 @@ bool installMacZoomMonitor(std::function<bool(float)> cb) {
 
 } // namespace uilo
 
-#else // !__APPLE__
+#else // not macOS
 
 namespace uilo {
 bool installMacScrollMonitor(std::function<bool(float, float, bool)>) { return false; }

@@ -26,13 +26,22 @@ namespace uilo {
              an application-registered icon behaves exactly like a built-in.
     - Registering is only about *source markup*. Parsing and rasterizing happen
       in the Icon element, lazily, cached per on-screen size.
-    - Fonts work the same way, one level simpler. Resources::fonts::default_ names
-      the DejaVu Sans built into the binary, which is also what any text that
-      never had a font set renders with:
+    - Fonts work the same way, one level simpler. Two faces are built into the
+      binary and neither needs a file on disk. Resources::fonts::default_ (also
+      spelled ::regular) is DejaVu Sans and is what text with no font set
+      renders with; Resources::fonts::mono is Droid Sans Mono, for anything laid
+      out as a grid:
 
                 text({}, TextOptions().setFont(Resources::fonts::default_));
                 text({}, TextOptions());   identical -- default is implicit
+
+                terminal({}, TerminalOptions().setFont(Resources::fonts::mono));
 */
+/* The pseudo-path Resources::fonts::mono resolves to. Not a file: the renderer
+   tests for it and uses the monospaced face compiled into the binary. */
+inline constexpr std::string_view kEmbeddedMonoFontPath = "__uilo_embedded_mono__";
+
+
 class Resources {
 public:
     /* Defined by the generated header included at the bottom of this file: one
@@ -177,6 +186,13 @@ private:
 struct Resources::fonts {
     /* The DejaVu Sans compiled into the binary (assets/EmbeddedFont.hpp). */
     static constexpr std::string_view default_ = "default";
+    /* The same face, spelled the way the mono one is, for call sites that want
+       to name both rather than lean on the default being implicit. */
+    static constexpr std::string_view regular  = "regular";
+    /* The Droid Sans Mono compiled into the binary
+       (assets/EmbeddedMonoFont.hpp). Every glyph the same width, which is what
+       a Terminal or a code editor needs. */
+    static constexpr std::string_view mono     = "mono";
 };
 
 } // namespace uilo

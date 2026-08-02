@@ -1,12 +1,19 @@
 /*
     MacStubs.cpp:
     - Desc: Cross-platform stubs for the macOS-only trackpad and live-resize
-            shims. On Apple builds CMake compiles MacScroll.mm and MacWindow.mm
-            instead, which carry their own non-Apple guards; everywhere else this
-            file is compiled so the symbols UILO.cpp references still resolve and
-            each one degrades to "not available" rather than failing to link.
+            shims. On macOS CMake compiles MacScroll.mm and MacWindow.mm
+            instead, which carry their own guards; everywhere else this file is
+            compiled so the symbols UILO.cpp references still resolve and each
+            one degrades to "not available" rather than failing to link.
+    - "Everywhere else" includes iOS. AppKit is macOS-only, so an iOS build takes
+       these stubs exactly as a Linux or Windows build does -- which is why the
+       test is TARGET_OS_OSX and not the far broader __APPLE__.
 */
-#if !defined(__APPLE__)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if !(defined(__APPLE__) && TARGET_OS_OSX)
 
 #include "MacScroll.hpp"
 #include "MacWindow.hpp"

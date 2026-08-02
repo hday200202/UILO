@@ -182,7 +182,13 @@ std::size_t Resources::IconRegistry::builtInCount() {
                 nothing rather than a copy of the bytes.
 */
 Resources::FontRegistry::FontRegistry() {
+    /* Both built-in faces resolve to a reserved pseudo-path rather than a real
+       file. The renderer recognises them and loads the bytes it already carries,
+       so a name is all a caller ever needs. */
     m_fonts.emplace(std::string(Resources::fonts::default_), std::string{});
+    m_fonts.emplace(std::string(Resources::fonts::regular),  std::string{});
+    m_fonts.emplace(std::string(Resources::fonts::mono),
+                    std::string(kEmbeddedMonoFontPath));
 }
 
 /*

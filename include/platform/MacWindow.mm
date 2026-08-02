@@ -1,6 +1,12 @@
 #include "MacWindow.hpp"
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+/* __APPLE__ is true on iOS as well as macOS, and none of AppKit exists there.
+   TARGET_OS_OSX is what actually distinguishes the two. */
+#if defined(__APPLE__) && TARGET_OS_OSX
 
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
