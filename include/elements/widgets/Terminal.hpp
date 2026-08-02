@@ -26,6 +26,10 @@ struct TerminalCell {
     bool     bold      = false;
     bool     italic    = false;
     bool     underline = false;
+    // Reverse video. Kept as a flag and applied when the cell is drawn rather
+    // than by swapping the two colours here: a swap cannot be undone, because
+    // "default background" is an absence of colour and swapping loses it.
+    bool     inverse   = false;
 };
 
 
@@ -333,7 +337,7 @@ private:
     void  scrollDown(int lines);
     void  newline();
     void  putChar(char32_t c);
-    void  useAlternateScreen(bool on);
+    void  useAlternateScreen(bool on, bool saveRestore);
 
     // ---- parser -------------------------------------------------------
     void feed(const std::string& bytes);
@@ -349,7 +353,7 @@ private:
     // ---- geometry -----------------------------------------------------
     Rectf contentArea() const;
     float gridTopY() const;
-    void  remeasure();
+    void  remeasure(float dt);
 
     // ---- selection ----------------------------------------------------
     // Selection is anchored in absolute line numbers -- how many lines have
@@ -377,6 +381,10 @@ private:
 
     int  m_curCol = 0, m_curRow = 0;
     int  m_savedCol = 0, m_savedRow = 0;
+    // Saved alongside the cursor by DECSET 1049, because that sequence saves
+    // the graphic rendition too -- which is what stops a program's parting
+    // colours leaking onto the main screen after it exits.
+    TerminalCell m_savedPen;
     int  m_scrollTop = 0, m_scrollBot = 0;     // inclusive region
     bool m_altScreen   = false;
     bool m_cursorVisible = true;
@@ -390,6 +398,15 @@ private:
     // Total lines ever pushed off the top, which is what makes an absolute line
     // number meaningful.
     long m_linesScrolled = 0;
+
+    // A drag across the window edge steps through a new grid size every few
+    // pixels, and telling the child about each one makes a full-screen program
+    // restart its layout over and over while it is still working on the last
+    // change. The size has to hold still briefly before it is applied, so one
+    // drag costs one reshape.
+    int   m_pendingCols  = 0;
+    int   m_pendingRows  = 0;
+    float m_sizeSettled  = 0.f;
 
     TerminalCell m_pen;                        // current attributes
 
