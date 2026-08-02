@@ -26,8 +26,8 @@ UILO::UILO(Renderer& renderer, Page* page) {
     addPage(Page* page):
     - Params:   Page* page
     - Returns:  void
-    - Desc:     Registers a page with UILO, taking ownership and binding it
-                to this instance. Keyed by the page's name.
+    - Desc:     Registers a page with UILO, taking ownership and binding it to
+                this instance. Keyed by the page's name.
 */
 void UILO::addPage(Page* page) {
     page->setUILO(*this);
@@ -84,8 +84,8 @@ void UILO::setActivePage(Page* page) {
     - Params:   Interactible* i
     - Returns:  void
     - Desc:     Sets the focused interactible, deactivating the previous one,
-                and starts or stops SDL text input depending on whether the
-                new interactible wants keyboard text.
+                and starts or stops SDL text input depending on whether the new
+                interactible wants keyboard text.
 */
 void UILO::setCurrInteractible(Interactible* i) {
     m_interactibleActivatedThisFrame = true;
@@ -117,8 +117,8 @@ void UILO::setScale(float scale) { if (scale > 0.f) m_scale = scale; }
     registerOverlay(Element* e, std::function<void()> onDismiss):
     - Params:   Element* e, std::function<void()> onDismiss
     - Returns:  void
-    - Desc:     Registers an element as a modal overlay with an optional
-                dismiss callback. Ignores duplicates.
+    - Desc:     Registers an element as a modal overlay with an optional dismiss
+                callback. Ignores duplicates.
 */
 void UILO::registerOverlay(Element* e, std::function<void()> onDismiss) {
     for (auto& ov : m_overlays)
@@ -147,8 +147,8 @@ void UILO::unregisterOverlay(Element* e) {
     - Params:   FreeElement f
     - Returns:  Element*
     - Desc:     Adds a free-floating element at a fixed or percent position,
-                optionally draggable, and returns it. Registers the element
-                and any child elements with UILO.
+                optionally draggable, and returns it. Registers the element and
+                any child elements with UILO.
 */
 Element* UILO::addFloating(FreeElement f) {
     if (!f.element) return nullptr;
@@ -212,8 +212,8 @@ float UILO::getScrollLinkOffset(const std::string& linkId, bool horizontal) cons
     setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal):
     - Params:   const std::string& linkId, float offset, bool horizontal
     - Returns:  void
-    - Desc:     Stores a shared scroll offset for a link id on the given axis
-                so linked containers scroll together.
+    - Desc:     Stores a shared scroll offset for a link id on the given axis so
+                linked containers scroll together.
 */
 void UILO::setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal) {
     if (linkId.empty()) return;
@@ -255,8 +255,8 @@ void UILO::setZoomLinkValue(const std::string& linkId, float zoom, bool horizont
     setOnLiveResize(std::function<void()> cb):
     - Params:   std::function<void()> cb
     - Returns:  void
-    - Desc:     Sets a callback invoked during native live window resize so
-                the host can redraw at each intermediate size.
+    - Desc:     Sets a callback invoked during native live window resize so the
+                host can redraw at each intermediate size.
 */
 void UILO::setOnLiveResize(std::function<void()> cb) {
     m_onLiveResize = std::move(cb);
@@ -269,8 +269,8 @@ void UILO::setOnLiveResize(std::function<void()> cb) {
     - Returns:  void
     - Desc:     Advances the UI by one frame. On the first frame -- and only
                 when UILO owns its window, never when embedded in a host -- it
-                installs the macOS native scroll and zoom monitors and the
-                live-resize configuration. Each frame it converts the SDL mouse
+                installs the macOS native scroll and zoom monitors and the live-
+                resize configuration. Each frame it converts the SDL mouse
                 position from logical points to backing pixels, updates layout
                 for the active page and every floating element, culls elements
                 marked for deletion, then dispatches hover, left-click, and
@@ -312,7 +312,7 @@ void UILO::update() {
                 m_hasScrollOrigin = true;
             }
             dispatchScroll(pos, Vec2f{dxLines, dyLines}, true, momentum);
-            return !isSDLScrollTarget(pos);
+            return wantsScrollMomentum(pos);
         });
         installMacZoomMonitor([this](float mag) -> bool {
             dispatchZoom(queryMousePixelPosition(), mag);
@@ -437,13 +437,31 @@ void UILO::update() {
             requestCursor(CursorType::Crosshair, 5);
     }
 
-    for (auto* r : m_resizers) r->checkHover(mouse);
-    Element* hoveredOverlay = nullptr;
-    for (auto& ov : m_overlays)
-        if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
-    if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
-    else if (hoveredFloatingElement) hoveredFloatingElement->checkHover(mouse);
-    else                     root->checkHover(mouse);
+    /* A resizer drag owns the pointer. Everything else is told the cursor is
+       nowhere, so an element under it neither lights up nor keeps a hover it
+       entered before the drag began -- and its exit handler still fires. */
+    Element* draggingResizer = nullptr;
+    for (auto* r : m_resizers) {
+        if (static_cast<Resizer*>(r)->isDragging()) { draggingResizer = r; break; }
+    }
+
+    if (draggingResizer) {
+        static constexpr Vec2f kNowhere{-1e9f, -1e9f};
+        for (auto* r : m_resizers)
+            if (r != draggingResizer) r->checkHover(kNowhere);
+        draggingResizer->checkHover(mouse);
+        for (auto& ov : m_overlays) ov.element->checkHover(kNowhere);
+        if (hoveredFloatingElement) hoveredFloatingElement->checkHover(kNowhere);
+        root->checkHover(kNowhere);
+    } else {
+        for (auto* r : m_resizers) r->checkHover(mouse);
+        Element* hoveredOverlay = nullptr;
+        for (auto& ov : m_overlays)
+            if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
+        if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
+        else if (hoveredFloatingElement) hoveredFloatingElement->checkHover(mouse);
+        else                     root->checkHover(mouse);
+    }
 
     if (m_pendingCursor != m_activeCursor) {
         m_renderer->setCursor(m_pendingCursor);
@@ -542,12 +560,12 @@ Vec2f UILO::queryMousePixelPosition() const {
     dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum):
     - Params:   const Vec2f& pos, Vec2f delta, bool precise, bool momentum
     - Returns:  void
-    - Desc:     Routes a scroll delta at a position to the topmost overlay
-                under it, or the active page's root otherwise. For a real
-                gesture the cached cursor is refreshed first, so callbacks
-                reading getMousePosition() see the position that triggered the
-                scroll. Momentum ticks leave it alone: they replay at the
-                gesture's origin, which is no longer where the pointer is.
+    - Desc:     Routes a scroll delta at a position to the topmost overlay under
+                it, or the active page's root otherwise. For a real gesture the
+                cached cursor is refreshed first, so callbacks reading
+                getMousePosition() see the position that triggered the scroll.
+                Momentum ticks leave it alone: they replay at the gesture's
+                origin, which is no longer where the pointer is.
 */
 void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum) {
     if (!m_activePage || (delta.x == 0.f && delta.y == 0.f)) return;
@@ -566,8 +584,8 @@ void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool mome
     dispatchZoom(const Vec2f& pos, float magnification):
     - Params:   const Vec2f& pos, float magnification
     - Returns:  void
-    - Desc:     Routes a zoom magnification at a position to the topmost
-                overlay under it, or the active page's root otherwise.
+    - Desc:     Routes a zoom magnification at a position to the topmost overlay
+                under it, or the active page's root otherwise.
 */
 void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
     if (!m_activePage || magnification == 0.f) return;
@@ -581,16 +599,19 @@ void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
 
 
 /*
-    isSDLScrollTarget(const Vec2f& pos):
+    wantsScrollMomentum(const Vec2f& pos):
     - Params:   const Vec2f& pos
     - Returns:  bool
     - Desc:     Walks the visible element tree from the topmost overlay (or the
                 page root) down to the deepest element containing the position,
-                and returns true when that element is an Interactible. Such hits
-                should receive raw wheel events through the cross-platform SDL
-                path rather than the macOS momentum-scroll monitor.
+                and asks that element whether a flick over it should coast. The
+                macOS monitor uses this both to decide whether to start a coast
+                at the end of a gesture and to stop one that has drifted onto
+                something that does not want it.
+    - Nothing here routes events to SDL: the monitor consumes every precise
+      scroll it sees, and a mouse wheel never reaches it in the first place.
 */
-bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
+bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
     auto hit = [&](Element* root) -> Element* {
         Element* cur = root;
         while (cur) {
@@ -612,7 +633,7 @@ bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
     if (!root) return false;
 
     Element* deepest = hit(root);
-    return dynamic_cast<Interactible*>(deepest) != nullptr;
+    return deepest ? deepest->wantsScrollMomentum() : true;
 }
 
 
@@ -623,10 +644,10 @@ bool UILO::isSDLScrollTarget(const Vec2f& pos) const {
     - Desc:     Processes one SDL event. Mouse-wheel events map to zoom when
                 Ctrl/Cmd is held, horizontal scroll when Shift is held, or
                 normal scroll otherwise. Text input and key input route to the
-                focused interactible, with a filter that drops the stale
-                key-repeat events Wayland can deliver after a key is released.
-                UTF-8 text is decoded one codepoint at a time so batched or IME
-                input is not dropped.
+                focused interactible, with a filter that drops the stale key-
+                repeat events Wayland can deliver after a key is released. UTF-8
+                text is decoded one codepoint at a time so batched or IME input
+                is not dropped.
 */
 void UILO::pollEvents() {
     SDL_Event event;
@@ -757,7 +778,8 @@ void UILO::handleEvent(const SDL_Event& event) {
 
         bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
         bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
-        m_currInteractible->handleKeyInput(event.key.key, shift, ctrl);
+        bool gui   = (event.key.mod & SDL_KMOD_GUI)   != 0;
+        m_currInteractible->handleKeyInput(event.key.key, shift, ctrl, gui);
     }
 }
 

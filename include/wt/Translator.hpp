@@ -27,13 +27,13 @@ class KnobWidget;
 /*
     Translator:
     - Desc:     Turns a UILO element tree into Wt widgets and keeps them in
-                step. build()
-            walks the tree once per session and creates a widget per element;
-            sync() then runs each frame and only re-applies properties -- styles,
-            text, values -- to widgets that already exist. Structural changes
-            after build() are therefore invisible to the web, which is why
-            widgets that change shape at runtime keep their parts alive and toggle
-            visibility instead of rebuilding.
+                step. build() walks the tree once per session and creates a
+                widget per element; sync() then runs each frame and only re-
+                applies properties -- styles, text, values -- to widgets that
+                already exist. Structural changes after build() are therefore
+                invisible to the web, which is why widgets that change shape at
+                runtime keep their parts alive and toggle visibility instead of
+                rebuilding.
 */
 class Translator {
 public:

@@ -283,8 +283,8 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the knob consumed the event
     - Desc:     Adjusts the value by the wheel, accumulating the delta so a
                 stepped knob still responds to deltas too small to cross an

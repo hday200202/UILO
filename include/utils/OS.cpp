@@ -12,10 +12,10 @@ namespace {
     videoReady():
     - Params:   none
     - Returns:  bool
-    - Desc:     Every display query needs the video subsystem. UILO's
-                renderer initialises it, but OS is callable before that (and
-                from tools that never open a window), so each query checks
-                rather than returning nonsense.
+    - Desc:     Every display query needs the video subsystem. UILO's renderer
+                initialises it, but OS is callable before that (and from tools
+                that never open a window), so each query checks rather than
+                returning nonsense.
 */
 bool videoReady() {
     return SDL_WasInit(SDL_INIT_VIDEO) != 0;
@@ -28,16 +28,16 @@ bool videoReady() {
     scale():
     - Params:   none
     - Returns:  float
-    - Desc:     UILO lays out in virtual pixels that map 1:1 onto the
-                window's pixels, so the useful scale is "how many real panel
-                pixels does one virtual pixel cover" -- native panel
-                resolution divided by the virtual desktop size. This is NOT
-                SDL_GetDisplayContentScale, which reports 1.0 on macOS
-                however the desktop is scaled, and NOT the backing-store
-                ratio either: at a 1470x956 desktop macOS renders 2940x1912
-                and scans it out to a 2560x1664 panel, so the backing ratio
-                says 2.0 while the panel only gives 1.74 physical pixels per
-                point. Using 2.0 would draw everything ~15% too large.
+    - Desc:     UILO lays out in virtual pixels that map 1:1 onto the window's
+                pixels, so the useful scale is "how many real panel pixels does
+                one virtual pixel cover" -- native panel resolution divided by
+                the virtual desktop size. This is NOT
+                SDL_GetDisplayContentScale, which reports 1.0 on macOS however
+                the desktop is scaled, and NOT the backing-store ratio either:
+                at a 1470x956 desktop macOS renders 2940x1912 and scans it out
+                to a 2560x1664 panel, so the backing ratio says 2.0 while the
+                panel only gives 1.74 physical pixels per point. Using 2.0 would
+                draw everything ~15% too large.
 */
 float OS::scale() {
     const Vec2u nativePx = physicalDisplaySize();
@@ -60,9 +60,9 @@ float OS::scale() {
     displaySize():
     - Params:   none
     - Returns:  Vec2u
-    - Desc:     Prefer the platform's own answer; SDL's bounds agree with it
-                on macOS but this keeps the two halves of the scale ratio
-                coming from one source.
+    - Desc:     Prefer the platform's own answer; SDL's bounds agree with it on
+                macOS but this keeps the two halves of the scale ratio coming
+                from one source.
 */
 Vec2u OS::displaySize() {
     uint32_t w = 0, h = 0;
@@ -194,8 +194,7 @@ int OS::systemRamMB() {
     executableDirectory():
     - Params:   none
     - Returns:  std::string
-    - Desc:     Owned by SDL and valid for the process lifetime -- do not
-                free.
+    - Desc:     Owned by SDL and valid for the process lifetime -- do not free.
 */
 std::string OS::executableDirectory() {
     const char* base = SDL_GetBasePath();
@@ -204,8 +203,7 @@ std::string OS::executableDirectory() {
 
 /*
     preferencesDirectory(...):
-    - Params:   const std::string& organization, const std::string&
-                application
+    - Params:   const std::string& organization, const std::string& application
     - Returns:  std::string
     - Desc:     The per-user directory an application should keep its settings
                 in, created if it does not exist. The organisation and

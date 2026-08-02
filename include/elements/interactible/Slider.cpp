@@ -9,8 +9,8 @@ namespace uilo {
 
 /*
     Slider(Modifier modifier, SliderOptions options, const std::string& name):
-    - Params:   Modifier modifier, SliderOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, SliderOptions options, const std::string&
+                name
     - Returns:  Slider
     - Desc:     Constructs a slider and seats it at its configured default,
                 clamped into range, or at the minimum when no default was given.
@@ -199,8 +199,8 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the slider consumed the event
     - Desc:     Adjusts the value by the wheel, accumulating the delta so a
                 stepped slider still responds to a trackpad whose individual

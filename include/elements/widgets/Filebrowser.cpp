@@ -73,8 +73,8 @@ void eraseSubtree(Element* element) {
 
 /*
     FileBrowser(Modifier modifier, FileBrowserOptions options, const std::string& name):
-    - Params:   Modifier modifier, FileBrowserOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, FileBrowserOptions options, const
+                std::string& name
     - Returns:  FileBrowser
     - Desc:     Constructs the browser as a Column carrying the panel options,
                 opens the tree at the configured root when one was given, and
@@ -177,9 +177,9 @@ fs::path FileBrowser::getRootPath() const {
     - Params:   none
     - Returns:  void
     - Desc:     Re-scans the disk, keeping expansion state. Every cached listing
-                is dropped; the directories still in the expanded set are
-                re-listed lazily as the rows are rebuilt, so what the user had
-                open comes back.
+                is dropped; the directories still in the expanded set are re-
+                listed lazily as the rows are rebuilt, so what the user had open
+                comes back.
 */
 void FileBrowser::refresh() {
     if (m_tree) m_tree->refresh();
@@ -576,9 +576,8 @@ void FileBrowser::sortEntries(std::vector<FSEntry*>& entries) const {
 
 /*
     appendEntryIcon(...):
-    - Params:   std::vector<Element*>& children, const FSEntry* entry,
-                const Color& textColor, const std::string& textRole,
-                bool selected
+    - Params:   std::vector<Element*>& children, const FSEntry* entry, const
+                Color& textColor, const std::string& textRole, bool selected
     - Returns:  void
     - Desc:     Appends the icon that marks what kind of entry this is, followed
                 by the gap before the label. An untinted icon rides the entry's
@@ -621,9 +620,8 @@ void FileBrowser::appendEntryIcon(
 
 /*
     appendDirectoryArrow(...):
-    - Params:   std::vector<Element*>& children, const FSEntry* entry,
-                const Color& textColor, const std::string& textRole,
-                bool selected
+    - Params:   std::vector<Element*>& children, const FSEntry* entry, const
+                Color& textColor, const std::string& textRole, bool selected
     - Returns:  void
     - Desc:     Appends the arrow that marks whether a directory is open. It
                 goes in after the label, which is the only percent-sized child

@@ -27,8 +27,8 @@ namespace {
     findBuiltIn(std::string_view name):
     - Params:   std::string_view name
     - Returns:  std::string_view
-    - Desc:     The generated table is sorted by name, so a built-in lookup
-                is a binary search over string_views with no allocation.
+    - Desc:     The generated table is sorted by name, so a built-in lookup is a
+                binary search over string_views with no allocation.
 */
 std::string_view findBuiltIn(std::string_view name) {
     const auto* begin = std::begin(detail::kEmbeddedIcons);
@@ -138,9 +138,8 @@ void Resources::IconRegistry::remove(std::string_view name) {
     names():
     - Params:   none
     - Returns:  std::vector<std::string_view> Resources::
-    - Desc:     A set rather than a plain append: a registered override
-                shares its name with the built-in it shadows and must appear
-                once.
+    - Desc:     A set rather than a plain append: a registered override shares
+                its name with the built-in it shadows and must appear once.
 */
 std::vector<std::string_view> Resources::IconRegistry::names() const {
     std::set<std::string_view> unique;

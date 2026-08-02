@@ -240,8 +240,8 @@ void Renderer::Impl::shutdownResources() {
     - Params:   none
     - Returns:  none
     - Desc:     ============================================================
-                ================ Offscreen scene + blur ladder
-                (Material::Glass) ==========================================
+                ================ Offscreen scene + blur ladder (Material::Glass)
+                ==========================================
                 ==================================
 */
 void Renderer::Impl::destroySceneFramebuffers() {
@@ -478,8 +478,7 @@ void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
     - Returns:  R
     - Desc:     ============================================================
                 ================ Renderer ctor/dtor/lifecycle ==============
-                ============================================================
-                ==
+                ============================================================ ==
 */
 Renderer::Renderer() : m_impl(std::make_unique<Impl>()) {}
 /*
@@ -802,8 +801,7 @@ void Renderer::setCursor(CursorType type) {
     - Returns:  none
     - Desc:     ============================================================
                 ================ Frame lifecycle / projection ==============
-                ============================================================
-                ==
+                ============================================================ ==
 */
 void Renderer::beginFrame() {
     Vec2u sz = getSize();
@@ -866,8 +864,8 @@ void Renderer::beginFrame() {
     endFrame():
     - Params:   none
     - Returns:  none
-    - Desc:     Flush any rects still sitting in the solid-rect batch from
-                the last user draw call before kicking off internal passes.
+    - Desc:     Flush any rects still sitting in the solid-rect batch from the
+                last user draw call before kicking off internal passes.
 */
 void Renderer::endFrame() {
     m_impl->flushSolidBatch();
@@ -1262,8 +1260,8 @@ void Renderer::popRoundClip() {
     - Params:   float degrees, Vec2f pivot
     - Returns:  none
     - Desc:     No flush: rotation is applied CPU-side when vertices are
-                appended, so rects already queued in the batch keep the
-                rotation they were emitted under.
+                appended, so rects already queued in the batch keep the rotation
+                they were emitted under.
 */
 void Renderer::setRotation(float degrees, Vec2f pivot) {
     auto& r = m_impl->rotation;
@@ -1310,10 +1308,9 @@ void Renderer::clearRotation() {
     setMouseState(Vec2f mousePosFbPx):
     - Params:   Vec2f mousePosFbPx
     - Returns:  none
-    - Desc:     Detect motion vs the previous frame so animated materials
-                can fade the ripple amplitude when the cursor sits still.
-                Threshold avoids sub-pixel noise from triggering constant
-                "moving" state.
+    - Desc:     Detect motion vs the previous frame so animated materials can
+                fade the ripple amplitude when the cursor sits still. Threshold
+                avoids sub-pixel noise from triggering constant "moving" state.
 */
 void Renderer::setMouseState(Vec2f mousePosFbPx) {
     const float dx = mousePosFbPx.x - m_mousePosPrev.x;
@@ -1349,13 +1346,13 @@ static constexpr float kDeg2Rad = 3.14159265f / 180.f;
     refreshClipCache():
     - Params:   none
     - Returns:  none
-    - Desc:     Walk the clip stack from the top down and collect the two
-                top-most rounded entries (radius > 0). The first becomes the
-                "inner" SDF (the shape being drawn, e.g. a button's own
-                rounded body); the second becomes the "outer" SDF (the
-                enclosing rounded ancestor, e.g. the parent panel). Both are
-                applied in the fragment shader, so a child element stays its
-                own shape AND gets cropped by the parent's rounded corners.
+    - Desc:     Walk the clip stack from the top down and collect the two top-
+                most rounded entries (radius > 0). The first becomes the "inner"
+                SDF (the shape being drawn, e.g. a button's own rounded body);
+                the second becomes the "outer" SDF (the enclosing rounded
+                ancestor, e.g. the parent panel). Both are applied in the
+                fragment shader, so a child element stays its own shape AND gets
+                cropped by the parent's rounded corners.
 */
 void Renderer::Impl::refreshClipCache() {
     if (curClipVersion == clipVersion) return;
@@ -1432,8 +1429,8 @@ namespace {
     packAvgColor(Color a, Color b, Color c, Color d):
     - Params:   Color a, Color b, Color c, Color d
     - Returns:  inline uint32_t
-    - Desc:     Center-vertex color for gradient quads: the average of the
-                four corners.
+    - Desc:     Center-vertex color for gradient quads: the average of the four
+                corners.
 */
 inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
     return packColor(Color{
@@ -1946,8 +1943,8 @@ void Renderer::drawLines(const Line* lines, size_t count) {
 
 /*
     drawArc(...):
-    - Params:   Vec2f center, float innerR, float outerR, float startDeg,
-                float endDeg, Color color, int segments
+    - Params:   Vec2f center, float innerR, float outerR, float startDeg, float
+                endDeg, Color color, int segments
     - Returns:  none
     - Desc:     Draws an annular sector between two radii, antialiased by fading
                 out over about a pixel past each edge, angular and radial alike.

@@ -82,8 +82,8 @@ Color Element::resolveColor(std::string_view role, Color literal) const {
 
 /*
     resolveGradient(...):
-    - Params:   const Gradient& literal, std::string_view gradientRole,
-                Color out[4]
+    - Params:   const Gradient& literal, std::string_view gradientRole, Color
+                out[4]
     - Returns:  bool -- true when the result is worth drawing
     - Desc:     Picks the gradient to draw and resolves its stops to colors. A
                 non-empty role naming a palette gradient wins over the literal
@@ -243,8 +243,8 @@ bool Element::checkRightClick(const Vec2f& mousePosition) {
     - The cursor is requested on every frame the pointer is inside, not once on
       the way in: UILO clears the request pool at the top of each frame, so a
       one-shot request would be undone immediately. A Modifier cursor wins over
-      the hand a clickable element asks for, which is what lets an explicit Arrow
-      suppress it.
+      the hand a clickable element asks for, which is what lets an explicit
+      Arrow suppress it.
 */
 bool Element::checkHover(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) {
@@ -272,8 +272,8 @@ bool Element::checkHover(const Vec2f& mousePosition) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the event was consumed
     - Desc:     Fires the Modifier's onScroll handler when the position is
                 inside the element. A plain element does not scroll itself, so

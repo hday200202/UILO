@@ -81,8 +81,8 @@ float normalizeGridStep(
 
 /*
     Row(...):
-    - Params:   Modifier modifier, RowOptions options, contains children,
-                const std::string& name
+    - Params:   Modifier modifier, RowOptions options, contains children, const
+                std::string& name
     - Returns:  Row
     - Desc:     Constructs a row from a modifier, its options and its children,
                 and tags it as a Row so layout and hit-testing can identify it.
@@ -813,8 +813,8 @@ void Row::setZoomX(float z) {
 
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, float delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the row consumed the event
     - Desc:     Single-axis scroll, offered to the children first. A row scrolls
                 horizontally, so it declines a zero delta and lets plain
@@ -848,8 +848,8 @@ bool Row::checkScroll(
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the row consumed the event
     - Desc:     Two-axis scroll. The children are offered the full delta first,
                 but their answer is deliberately not short-circuited: a row owns

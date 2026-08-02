@@ -9,12 +9,12 @@ namespace uilo {
 
 /*
     SpacerOptions:
-    - Desc: Everything a Spacer draws, which by default is nothing: the fill is
-            transparent and there is no border, so a spacer is pure empty space.
-            Giving it a colour turns it into a bar or a divider, and giving it an
-            outline alone turns it into a frame. Colors come as a literal plus a
-            role, where the role wins when it resolves against the active Palette
-            and the literal is the fallback.
+    - Desc:     Everything a Spacer draws, which by default is nothing: the fill
+                is transparent and there is no border, so a spacer is pure empty
+                space. Giving it a colour turns it into a bar or a divider, and
+                giving it an outline alone turns it into a frame. Colors come as
+                a literal plus a role, where the role wins when it resolves
+                against the active Palette and the literal is the fallback.
 */
 class SpacerOptions {
 public:
@@ -67,12 +67,12 @@ inline float SpacerOptions::getRounding() const {
 
 /*
     Spacer:
-    - Desc: Empty space in a layout, and the usual way to push siblings apart or
-            hold a gap open. Takes part in layout like any other element -- a
-            percent width shares the space left over, a pixel width is fixed --
-            but draws nothing unless it was given a fill or an outline. Carries no
-            callbacks of its own, so it never swallows a click or hover meant for
-            the container it sits in.
+    - Desc:     Empty space in a layout, and the usual way to push siblings
+                apart or hold a gap open. Takes part in layout like any other
+                element -- a percent width shares the space left over, a pixel
+                width is fixed -- but draws nothing unless it was given a fill
+                or an outline. Carries no callbacks of its own, so it never
+                swallows a click or hover meant for the container it sits in.
 */
 class Spacer : public Element {
 public:

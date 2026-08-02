@@ -12,9 +12,9 @@ class Palette;   /* resolve() walks it at draw time — see Gradient.cpp */
 
 /*
     GradientColor:
-    - Desc: One corner of a gradient: a literal Color, or a palette role
-            resolved at draw time. Converts implicitly from Color and from a
-            role string, so call sites just pass a color or a role name.
+    - Desc:     One corner of a gradient: a literal Color, or a palette role
+                resolved at draw time. Converts implicitly from Color and from a
+                role string, so call sites just pass a color or a role name.
 */
 struct GradientColor {
     Color       color { 0, 0, 0, 0 };
@@ -34,13 +34,14 @@ using GradientStop = GradientColor;
 
 /*
     Gradient:
-    - Desc: A per-corner background fill, built once and shared across elements
-            the same way a Material is. Each of the four corners is a
-            GradientColor -- a literal Color or a palette role, freely mixable,
-            and since GradientColor converts implicitly from both you never name
-            the type at a call site. Colors are interpolated across the background
-            quad on the GPU and clipped by the same rounded-corner mask a solid
-            fill uses, so gradients and rounding compose at no extra cost.
+    - Desc:     A per-corner background fill, built once and shared across
+                elements the same way a Material is. Each of the four corners is
+                a GradientColor -- a literal Color or a palette role, freely
+                mixable, and since GradientColor converts implicitly from both
+                you never name the type at a call site. Colors are interpolated
+                across the background quad on the GPU and clipped by the same
+                rounded-corner mask a solid fill uses, so gradients and rounding
+                compose at no extra cost.
     - The fluent setters name the position each colour occupies, so a gradient
       reads without having to remember corner order:
 
@@ -49,10 +50,10 @@ using GradientStop = GradientColor;
           Gradient().setTop(Color{60, 40, 120}).setBottom(Color{20, 20, 40});
           Gradient().setLeft("accent").setRight("panel");
 
-    - vertical() and horizontal() are shorthand for the two common cases. A whole
-      gradient can also be named in the Palette with setGradient("hero", g) and
-      referenced per element with setGradientRole("hero"), which is what lets a
-      palette switch restyle every gradient at once.
+    - vertical() and horizontal() are shorthand for the two common cases. A
+      whole gradient can also be named in the Palette with setGradient("hero",
+      g) and referenced per element with setGradientRole("hero"), which is what
+      lets a palette switch restyle every gradient at once.
 */
 struct Gradient {
     GradientColor topLeft, topRight, bottomLeft, bottomRight;

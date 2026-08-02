@@ -11,12 +11,12 @@ namespace uilo {
 
 /*
     ImageOptions:
-    - Desc: Everything an Image draws: the file it comes from, an optional tint,
-            whether either axis is driven by the source aspect ratio, and the
-            per-draw transforms -- horizontal and vertical flips, and an elliptical
-            clip for a round avatar. The tint only applies with recolor on, and
-            comes as a literal plus a role, where the role wins when it resolves
-            against the active Palette.
+    - Desc:     Everything an Image draws: the file it comes from, an optional
+                tint, whether either axis is driven by the source aspect ratio,
+                and the per-draw transforms -- horizontal and vertical flips,
+                and an elliptical clip for a round avatar. The tint only applies
+                with recolor on, and comes as a literal plus a role, where the
+                role wins when it resolves against the active Palette.
     - Locking an aspect makes one axis follow the other rather than the slot the
       parent gave it, so only one of the two lock flags is meaningful at a time.
 */
@@ -61,11 +61,11 @@ private:
 /*
     Image:
     - Desc:     A textured quad loaded from a file. The texture is loaded on the
-                first
-            update, once the element is bound to a UILO and so has a renderer to
-            load it through, and is cached by path -- so several Images naming the
-            same file share one texture. Either axis can be driven by the source
-            aspect ratio instead of by the slot the parent gave it.
+                first update, once the element is bound to a UILO and so has a
+                renderer to load it through, and is cached by path -- so several
+                Images naming the same file share one texture. Either axis can
+                be driven by the source aspect ratio instead of by the slot the
+                parent gave it.
     - getPixel and setPixel work in source-texture texels: (0,0) is the image's
       top-left, x below getTextureWidth() and y below getTextureHeight(), and
       neither on-screen size nor flips nor recolor affects them. Reads out of

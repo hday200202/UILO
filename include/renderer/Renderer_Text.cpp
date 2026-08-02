@@ -40,8 +40,8 @@ constexpr const char* kEmbeddedFontCacheKey = "__UILO_EMBEDDED_DEFAULT_FONT__";
 
 /*
     initAtlasFace(...):
-    - Params:   FontFace& face, stbtt_fontinfo info, std::vector<uint8_t>
-                ttf, float pixelHeight
+    - Params:   FontFace& face, stbtt_fontinfo info, std::vector<uint8_t> ttf,
+                float pixelHeight
     - Returns:  none
     - Desc:     Sets up a font face at one pixel size: reads the vertical
                 metrics, scales them, and allocates a blank single-channel atlas
@@ -328,8 +328,8 @@ std::vector<Vec2f> Renderer::charPositions(const std::string& utf8,
 
 /*
     drawText(...):
-    - Params:   const std::string& utf8, Vec2f position, const Font& font,
-                float sizePx, Color color, TextStyle style
+    - Params:   const std::string& utf8, Vec2f position, const Font& font, float
+                sizePx, Color color, TextStyle style
     - Returns:  none
     - Desc:     Draws a UTF-8 string, one textured quad per glyph, batched into
                 a single submit. Bold re-emits each glyph nudged sideways and

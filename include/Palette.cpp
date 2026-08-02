@@ -11,8 +11,8 @@ constexpr int kMaxAliasDepth = 8;
     set(const std::string& role, Color color):
     - Params:   const std::string& role, Color color
     - Returns:  void
-    - Desc:     Assigns a direct color to a role, overwriting any existing
-                entry including an alias.
+    - Desc:     Assigns a direct color to a role, overwriting any existing entry
+                including an alias.
 */
 void Palette::set(const std::string& role, Color color) {
     auto& e = m_entries[role];
@@ -84,8 +84,8 @@ Color Palette::resolve(std::string_view role, Color literal) const {
     - Params:   std::string_view role, int depth
     - Returns:  Color
     - Desc:     Recursively resolves a role, following alias chains until it
-                reaches a direct color. Returns the fallback color when the
-                role is missing or the alias depth cap is reached, which breaks
+                reaches a direct color. Returns the fallback color when the role
+                is missing or the alias depth cap is reached, which breaks
                 cycles.
 */
 Color Palette::resolveImpl(std::string_view role, int depth) const {
@@ -196,8 +196,8 @@ Palette Palette::defaultDark() {
     defaultLight():
     - Params:   none
     - Returns:  Palette
-    - Desc:     Returns a pre-populated light palette covering every role
-                UILO's built-in widgets read. Intended as a starting point that
+    - Desc:     Returns a pre-populated light palette covering every role UILO's
+                built-in widgets read. Intended as a starting point that
                 consumers override per role as needed.
 */
 Palette Palette::defaultLight() {

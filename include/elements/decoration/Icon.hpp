@@ -14,23 +14,22 @@ namespace uilo {
 /*
     IconOptions:
     - Desc:     Styling for an Icon. The source is one of three things, checked
-                in the
-            order markup, then file, then registry name:
-              setIcon("arrow-left")          -- a name in Resources
-              setIcon(Resources::icons::x)   -- the same, spelled safely
-              setFile("art/logo.svg")        -- an .svg on disk
-              setMarkup("<svg>...</svg>")    -- markup already in memory
-            The built-in set is monochrome line art authored with
-            stroke="currentColor", which no SVG parser can resolve on its own, so
-            the colour set here is applied to every stroke and fill in the icon.
-            That is what makes tinting an icon a one-liner --
-            IconOptions().setColorRole("accent") -- and
-            setPreserveOriginalColors(true) opts out, keeping whatever colours the
-            markup declares, for multicolour art.
+                in the order markup, then file, then registry name:
+                setIcon("arrow-left")          -- a name in Resources
+                setIcon(Resources::icons::x)   -- the same, spelled safely
+                setFile("art/logo.svg")        -- an .svg on disk
+                setMarkup("<svg>...</svg>")    -- markup already in memory The
+                built-in set is monochrome line art authored with
+                stroke="currentColor", which no SVG parser can resolve on its
+                own, so the colour set here is applied to every stroke and fill
+                in the icon. That is what makes tinting an icon a one-liner --
+                IconOptions().setColorRole("accent") -- and
+                setPreserveOriginalColors(true) opts out, keeping whatever
+                colours the markup declares, for multicolour art.
     - Stroke width is in the icon's own authoring units, the numbers in the
-      markup, not pixels. The built-ins are drawn on a 24x24 grid at width 1.5, so
-      setStrokeWidth(2.f) is "a bit heavier than stock" at every size, and the
-      stroke keeps its proportions as the icon scales.
+      markup, not pixels. The built-ins are drawn on a 24x24 grid at width 1.5,
+      so setStrokeWidth(2.f) is "a bit heavier than stock" at every size, and
+      the stroke keeps its proportions as the icon scales.
 */
 class IconOptions {
 public:
@@ -119,15 +118,14 @@ inline bool IconOptions::hasStrokeWidth() const {
 /*
     Icon:
     - Desc:     Draws an SVG icon. The element holds the *source* markup: the
-                desktop
-            backend parses it with NanoSVG and rasterizes to a texture at the size
-            the icon actually occupies on screen, so it stays crisp as the window
-            scales, while the web backend can emit that same markup inline
-            instead. Keeping source rather than pixels on the element is what lets
-            one Icon serve both.
+                desktop backend parses it with NanoSVG and rasterizes to a
+                texture at the size the icon actually occupies on screen, so it
+                stays crisp as the window scales, while the web backend can emit
+                that same markup inline instead. Keeping source rather than
+                pixels on the element is what lets one Icon serve both.
     - The raster is cached and rebuilt only when something it depends on has
-      moved -- pixel size, resolved colour, stroke width, or the source itself. A
-      palette switch therefore re-tints without the caller doing anything.
+      moved -- pixel size, resolved colour, stroke width, or the source itself.
+      A palette switch therefore re-tints without the caller doing anything.
 */
 class Icon : public Element {
 public:

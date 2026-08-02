@@ -19,20 +19,21 @@ namespace uilo {
 
 /*
     FileBrowserSort:
-    - Desc: Ordering applied to the entries of each directory. Size and Modified
-            stat each file the first time a directory is listed; Name and
-            Extension are free, since they only read the cached path.
+    - Desc:     Ordering applied to the entries of each directory. Size and
+                Modified stat each file the first time a directory is listed;
+                Name and Extension are free, since they only read the cached
+                path.
 */
 enum class FileBrowserSort { Name, Extension, Size, Modified };
 
 
 /*
     FileBrowserOptions:
-    - Desc: Everything the widget draws is configurable here. Colors come in
-            literal plus role pairs like the rest of the library: the role wins
-            when it resolves against the active Palette, otherwise the literal is
-            used. Sizes are unscaled content pixels; UILO multiplies by its scale
-            at layout time.
+    - Desc:     Everything the widget draws is configurable here. Colors come in
+                literal plus role pairs like the rest of the library: the role
+                wins when it resolves against the active Palette, otherwise the
+                literal is used. Sizes are unscaled content pixels; UILO
+                multiplies by its scale at layout time.
 */
 class FileBrowserOptions {
 public:
@@ -529,15 +530,16 @@ inline float FileBrowserOptions::getDirectoryArrowBlockWidth() const {
 
 /*
     FileBrowser:
-    - Desc: A scrollable directory listing built on top of Column. Each visible
-            entry is a Row -- background plus hover and selection state --
-            holding an indent Spacer, an icon, a Text label, and for a directory
-            an arrow pinned to the right edge. Directories expand and collapse on
-            click, one level at a time: the underlying FileTree only lists a
-            directory the first time it is opened and caches it from then on, so
-            deep trees stay cheap. Expansion state is keyed by path rather than
-            stored on the tree nodes, so refresh() can re-scan the disk without
-            losing what the user opened.
+    - Desc:     A scrollable directory listing built on top of Column. Each
+                visible entry is a Row -- background plus hover and selection
+                state -- holding an indent Spacer, an icon, a Text label, and
+                for a directory an arrow pinned to the right edge. Directories
+                expand and collapse on click, one level at a time: the
+                underlying FileTree only lists a directory the first time it is
+                opened and caches it from then on, so deep trees stay cheap.
+                Expansion state is keyed by path rather than stored on the tree
+                nodes, so refresh() can re-scan the disk without losing what the
+                user opened.
 */
 class FileBrowser : public Column {
 public:

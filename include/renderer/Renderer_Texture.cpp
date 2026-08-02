@@ -11,8 +11,8 @@ namespace uilo {
     loadTexture(const std::string& path):
     - Params:   const std::string& path
     - Returns:  Texture
-    - Desc:     applyScissor / scissorEmpty / clip-uniform helpers are
-                shared inlines in RendererImpl.hpp.
+    - Desc:     applyScissor / scissorEmpty / clip-uniform helpers are shared
+                inlines in RendererImpl.hpp.
 */
 Texture Renderer::loadTexture(const std::string& path) {
     auto& impl = *m_impl;
@@ -131,8 +131,8 @@ void Renderer::destroyTexture(Texture& tex) {
 
 /*
     drawImage(...):
-    - Params:   const Rectf& dst, const Texture& tex, Color tint, Rectf uv,
-                bool flipH, bool flipV, bool clipEllipse
+    - Params:   const Rectf& dst, const Texture& tex, Color tint, Rectf uv, bool
+                flipH, bool flipV, bool clipEllipse
     - Returns:  none
     - Desc:     Draws a texture into a rectangle, with a tint, a source sub-
                 rectangle, optional horizontal and vertical flips, and an
@@ -198,9 +198,9 @@ void Renderer::drawImage(const Rectf& dst, const Texture& tex,
     - Params:   const Rectf& dst, const Material& mat, Color baseColor
     - Returns:  none
     - Desc:     ------------------------------------------------------------
-                --------------- drawGlass — sample the blurred backdrop
-                (built in the previous frame) and overlay tint + edge
-                highlight via the fs_glass shader. -------------------------
+                --------------- drawGlass — sample the blurred backdrop (built
+                in the previous frame) and overlay tint + edge highlight via the
+                fs_glass shader. -------------------------
                 --------------------------------------------------
 */
 void Renderer::drawGlass(const Rectf& dst, const Material& mat,

@@ -23,9 +23,9 @@ const std::array<const char*, 7> kWeekdayNames = {
     toYMD(const Date& d):
     - Params:   const Date& d
     - Returns:  std::chrono::year_month_day
-    - Desc:     Bridges to <chrono>'s calendar types, which own all the
-                awkward parts (leap years, month lengths, day-of-week) and
-                get them right.
+    - Desc:     Bridges to <chrono>'s calendar types, which own all the awkward
+                parts (leap years, month lengths, day-of-week) and get them
+                right.
 */
 std::chrono::year_month_day toYMD(const Date& d) {
     return std::chrono::year_month_day{
@@ -65,9 +65,9 @@ std::chrono::sys_days toSysDays(const Date& d) {
     breakDown(std::time_t t, bool local, std::tm& out):
     - Params:   std::time_t t, bool local, std::tm& out
     - Returns:  bool
-    - Desc:     localtime/gmtime are not thread-safe in their plain form and
-                the reentrant spelling differs on Windows, so both are
-                funnelled through here.
+    - Desc:     localtime/gmtime are not thread-safe in their plain form and the
+                reentrant spelling differs on Windows, so both are funnelled
+                through here.
 */
 bool breakDown(std::time_t t, bool local, std::tm& out) {
 #if defined(_WIN32)
@@ -135,8 +135,8 @@ std::string pad(long long value, int width) {
     runLength(std::string_view pattern, std::size_t i):
     - Params:   std::string_view pattern, std::size_t i
     - Returns:  std::size_t
-    - Desc:     How many times `c` repeats starting at `i`. Tokens are runs
-                of one letter, so this is what decides MM from MMMM.
+    - Desc:     How many times `c` repeats starting at `i`. Tokens are runs of
+                one letter, so this is what decides MM from MMMM.
 */
 std::size_t runLength(std::string_view pattern, std::size_t i) {
     const char c = pattern[i];
@@ -149,9 +149,8 @@ std::size_t runLength(std::string_view pattern, std::size_t i) {
     readQuoted(std::string_view pattern, std::size_t& i):
     - Params:   std::string_view pattern, std::size_t& i
     - Returns:  std::string
-    - Desc:     A quoted run is literal text. Returns the literal and
-                advances past the closing quote; a doubled '' is one
-                apostrophe.
+    - Desc:     A quoted run is literal text. Returns the literal and advances
+                past the closing quote; a doubled '' is one apostrophe.
 */
 std::string readQuoted(std::string_view pattern, std::size_t& i) {
     std::string out;
@@ -318,12 +317,11 @@ struct Parser {
 
 /*
     parseFields(std::string_view text, std::string_view pattern, DateTime& out):
-    - Params:   std::string_view text, std::string_view pattern, DateTime&
-                out
+    - Params:   std::string_view text, std::string_view pattern, DateTime& out
     - Returns:  bool
     - Desc:     Fills whichever fields the pattern mentions; anything absent
-                keeps the fallback's value, so a date-only pattern leaves
-                the time at midnight.
+                keeps the fallback's value, so a date-only pattern leaves the
+                time at midnight.
 */
 bool parseFields(std::string_view text, std::string_view pattern, DateTime& out) {
     Parser p{text};
@@ -462,8 +460,8 @@ Time DateAndTime::timeOfDay() {
     - Params:   none
     - Returns:  DateTime
     - Desc:     Current date and time in the machine's local zone. The seconds
-                come from the C library (which owns the zone rules) and the
-                sub-second part from the system clock.
+                come from the C library (which owns the zone rules) and the sub-
+                second part from the system clock.
 */
 DateTime DateAndTime::nowLocal() {
     const int64_t ms = millisecondsSinceEpoch();
@@ -520,8 +518,8 @@ int64_t DateAndTime::millisecondsSinceEpoch() {
     - Returns:  int
     - Desc:     Minutes to add to UTC for local time, daylight saving included.
                 Derived by breaking one instant down both ways and differencing
-                the results, which avoids both tm_gmtoff (absent on Windows)
-                and the incomplete <chrono> time zone database.
+                the results, which avoids both tm_gmtoff (absent on Windows) and
+                the incomplete <chrono> time zone database.
 */
 int DateAndTime::timeZoneOffsetMinutes() {
     const std::time_t t = timestamp();
@@ -742,9 +740,9 @@ bool DateAndTime::isSameWeek(const Date& a, const Date& b, Weekday firstDayOfWee
     isWeekend(const Date& date):
     - Params:   const Date& date
     - Returns:  bool
-    - Desc:     Saturday or Sunday. Which days count as the weekend is
-                regional; widgets that need another rule should test the
-                weekday themselves.
+    - Desc:     Saturday or Sunday. Which days count as the weekend is regional;
+                widgets that need another rule should test the weekday
+                themselves.
 */
 bool DateAndTime::isWeekend(const Date& date) {
     const Weekday wd = weekdayOf(date);
@@ -807,9 +805,9 @@ Date DateAndTime::addWeeks(const Date& date, int weeks) {
     - Params:   const Date& date, int months
     - Returns:  Date
     - Desc:     Steps whole months, holding the day of month where the target
-                month is long enough and clamping to its last day otherwise:
-                31 March back one month is 28 or 29 February, never 2 or 3
-                March. That keeps a month-by-month walk from skipping a month.
+                month is long enough and clamping to its last day otherwise: 31
+                March back one month is 28 or 29 February, never 2 or 3 March.
+                That keeps a month-by-month walk from skipping a month.
 */
 Date DateAndTime::addMonths(const Date& date, int months) {
     /* Month as a running count from year 0 so the arithmetic is plain integer
@@ -830,8 +828,8 @@ Date DateAndTime::addMonths(const Date& date, int months) {
     addYears(const Date& date, int years):
     - Params:   const Date& date, int years
     - Returns:  Date
-    - Desc:     The same month and day in another year, 29 February clamping
-                to the 28th when the target year is not a leap year.
+    - Desc:     The same month and day in another year, 29 February clamping to
+                the 28th when the target year is not a leap year.
 */
 Date DateAndTime::addYears(const Date& date, int years) {
     return addMonths(date, years * 12);
@@ -897,8 +895,8 @@ DateTime DateAndTime::addHours(const DateTime& dateTime, int64_t hours) {
     daysBetween(const Date& from, const Date& to):
     - Params:   const Date& from, const Date& to
     - Returns:  int
-    - Desc:     Whole days from one date to the other, positive when `to` is
-                the later of the two.
+    - Desc:     Whole days from one date to the other, positive when `to` is the
+                later of the two.
 */
 int DateAndTime::daysBetween(const Date& from, const Date& to) {
     return static_cast<int>(toDaysSinceEpoch(to) - toDaysSinceEpoch(from));
@@ -909,8 +907,8 @@ int DateAndTime::daysBetween(const Date& from, const Date& to) {
     secondsBetween(const DateTime& from, const DateTime& to):
     - Params:   const DateTime& from, const DateTime& to
     - Returns:  int64_t
-    - Desc:     Whole seconds between the two, positive when `to` is later.
-                Both are taken to be in the same zone.
+    - Desc:     Whole seconds between the two, positive when `to` is later. Both
+                are taken to be in the same zone.
 */
 int64_t DateAndTime::secondsBetween(const DateTime& from, const DateTime& to) {
     auto absolute = [](const DateTime& dt) -> int64_t {
@@ -991,8 +989,8 @@ Date DateAndTime::endOfWeek(const Date& date, Weekday firstDayOfWeek) {
 
 /*
     clamp(...):
-    - Params:   const Date& date, const std::optional<Date>& min,
-                const std::optional<Date>& max
+    - Params:   const Date& date, const std::optional<Date>& min, const
+                std::optional<Date>& max
     - Returns:  Date
     - Desc:     Pulls the date inside whichever bounds are present.
 */
@@ -1012,9 +1010,9 @@ Date DateAndTime::clamp(const Date& date,
     gridStart(int year, unsigned month, Weekday firstDayOfWeek):
     - Params:   int year, unsigned month, Weekday firstDayOfWeek
     - Returns:  Date
-    - Desc:     The date in the first cell of a month grid: the 1st walked
-                back to the start of its week, so the grid holds whole weeks.
-                Falls in the previous month unless the 1st happens to land on
+    - Desc:     The date in the first cell of a month grid: the 1st walked back
+                to the start of its week, so the grid holds whole weeks. Falls
+                in the previous month unless the 1st happens to land on
                 firstDayOfWeek.
 */
 Date DateAndTime::gridStart(int year, unsigned month, Weekday firstDayOfWeek) {
@@ -1026,10 +1024,10 @@ Date DateAndTime::gridStart(int year, unsigned month, Weekday firstDayOfWeek) {
     weeksInMonthGrid(int year, unsigned month, Weekday firstDayOfWeek):
     - Params:   int year, unsigned month, Weekday firstDayOfWeek
     - Returns:  unsigned
-    - Desc:     How many week rows the month needs. Usually 5, 6 when the
-                month spills over, and 4 only for a non-leap February
-                beginning exactly on firstDayOfWeek. Widgets wanting a
-                fixed-height grid should just use 6.
+    - Desc:     How many week rows the month needs. Usually 5, 6 when the month
+                spills over, and 4 only for a non-leap February beginning
+                exactly on firstDayOfWeek. Widgets wanting a fixed-height grid
+                should just use 6.
 */
 unsigned DateAndTime::weeksInMonthGrid(int year, unsigned month, Weekday firstDayOfWeek) {
     const unsigned offset = columnOf(firstWeekdayOfMonth(year, month), firstDayOfWeek);
@@ -1199,8 +1197,8 @@ std::time_t DateAndTime::toTimestampLocal(const DateTime& dateTime) {
     - Params:   const DateTime& dateTime
     - Returns:  std::time_t
     - Desc:     Reads the DateTime as UTC and returns the instant it names.
-                Computed from the day count rather than through timegm, which
-                is not portable.
+                Computed from the day count rather than through timegm, which is
+                not portable.
 */
 std::time_t DateAndTime::toTimestampUTC(const DateTime& dateTime) {
     const int64_t seconds = toDaysSinceEpoch(dateTime.date) * 86400
@@ -1217,8 +1215,8 @@ std::time_t DateAndTime::toTimestampUTC(const DateTime& dateTime) {
     format(const Date& date, std::string_view pattern):
     - Params:   const Date& date, std::string_view pattern
     - Returns:  std::string
-    - Desc:     Renders the date through the token set documented on the
-                class. Time tokens resolve against midnight.
+    - Desc:     Renders the date through the token set documented on the class.
+                Time tokens resolve against midnight.
 */
 std::string DateAndTime::format(const Date& date, std::string_view pattern) {
     return formatFields(date, Time{}, pattern);
@@ -1240,8 +1238,8 @@ std::string DateAndTime::format(const DateTime& dateTime, std::string_view patte
     format(const Time& time, std::string_view pattern):
     - Params:   const Time& time, std::string_view pattern
     - Returns:  std::string
-    - Desc:     Renders a time of day. Date tokens resolve against the epoch,
-                so a pattern mixing the two is a mistake worth noticing.
+    - Desc:     Renders a time of day. Date tokens resolve against the epoch, so
+                a pattern mixing the two is a mistake worth noticing.
 */
 std::string DateAndTime::format(const Time& time, std::string_view pattern) {
     return formatFields(Date{}, time, pattern);
@@ -1318,10 +1316,10 @@ std::string DateAndTime::formatDuration(int64_t seconds, bool forceHours) {
     parseDate(std::string_view text, std::string_view pattern):
     - Params:   std::string_view text, std::string_view pattern
     - Returns:  std::optional<Date>
-    - Desc:     Reads a date written in the given pattern. The whole string
-                must be consumed and the result must be a real date, so a
-                partial or nonsense match reports nothing rather than a
-                plausible-looking wrong answer.
+    - Desc:     Reads a date written in the given pattern. The whole string must
+                be consumed and the result must be a real date, so a partial or
+                nonsense match reports nothing rather than a plausible-looking
+                wrong answer.
 */
 std::optional<Date> DateAndTime::parseDate(std::string_view text, std::string_view pattern) {
     DateTime out{};

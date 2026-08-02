@@ -133,6 +133,12 @@ inline Resizer* resizer(
     const std::string& name = ""
 ) { return new Resizer(modifier, options, name); }
 
+inline Terminal* terminal(
+    Modifier modifier = {},
+    TerminalOptions options = {},
+    const std::string& name = ""
+) { return new Terminal(modifier, options, name); }
+
 inline Textbox* textbox(
     Modifier modifier = {},
     TextboxOptions options = {},

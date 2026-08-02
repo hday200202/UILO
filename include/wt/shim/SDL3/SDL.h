@@ -76,6 +76,7 @@ using SDL_Scancode = Uint32;
 #define SDLK_C         0x00000063u
 #define SDLK_V         0x00000076u
 #define SDLK_X         0x00000078u
+#define SDLK_Z         0x0000007au
 
 #define SDLK_HOME      SDL_SCANCODE_TO_KEYCODE(74u)
 #define SDLK_PAGEUP    SDL_SCANCODE_TO_KEYCODE(75u)
@@ -87,6 +88,15 @@ using SDL_Scancode = Uint32;
 #define SDLK_UP        SDL_SCANCODE_TO_KEYCODE(82u)
 #define SDLK_KP_MINUS  SDL_SCANCODE_TO_KEYCODE(86u)
 #define SDLK_KP_PLUS   SDL_SCANCODE_TO_KEYCODE(87u)
+
+#define SDLK_LCTRL     SDL_SCANCODE_TO_KEYCODE(224u)
+#define SDLK_LSHIFT    SDL_SCANCODE_TO_KEYCODE(225u)
+#define SDLK_LALT      SDL_SCANCODE_TO_KEYCODE(226u)
+#define SDLK_LGUI      SDL_SCANCODE_TO_KEYCODE(227u)
+#define SDLK_RCTRL     SDL_SCANCODE_TO_KEYCODE(228u)
+#define SDLK_RSHIFT    SDL_SCANCODE_TO_KEYCODE(229u)
+#define SDLK_RALT      SDL_SCANCODE_TO_KEYCODE(230u)
+#define SDLK_RGUI      SDL_SCANCODE_TO_KEYCODE(231u)
 #define SDLK_KP_ENTER  SDL_SCANCODE_TO_KEYCODE(88u)
 
 // ---- Scancodes -----------------------------------------------------------

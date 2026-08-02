@@ -6,12 +6,12 @@ namespace uilo {
 
 /*
     Align:
-    - Desc: Where an element sits inside the slot its parent gives it. The
-            horizontal and vertical flags are independent bits, so they combine
-            with `|` -- Align::Left | Align::CenterY places an element against the
-            left edge, centred vertically. A container also reads the flags to
-            bucket its children into start, centre and end groups before laying
-            them out.
+    - Desc:     Where an element sits inside the slot its parent gives it. The
+                horizontal and vertical flags are independent bits, so they
+                combine with `|` -- Align::Left | Align::CenterY places an
+                element against the left edge, centred vertically. A container
+                also reads the flags to bucket its children into start, centre
+                and end groups before laying them out.
 */
 enum class Align : uint8_t {
     NONE        = 0,

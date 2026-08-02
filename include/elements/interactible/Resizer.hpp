@@ -6,20 +6,20 @@ namespace uilo {
 
 /*
     ResizerDir:
-    - Desc: Which neighbour a Resizer drags, and so which axis it works on. Left
-            and Top resize the previous sibling, Right and Bottom the next one;
-            Left/Right drag horizontally, Top/Bottom vertically.
+    - Desc:     Which neighbour a Resizer drags, and so which axis it works on.
+                Left and Top resize the previous sibling, Right and Bottom the
+                next one; Left/Right drag horizontally, Top/Bottom vertically.
 */
 enum class ResizerDir { Left, Right, Top, Bottom };
 
 /*
     ResizerOptions:
     - Desc:     Which neighbour the handle resizes, how wide its hit strip is,
-                what it
-            draws as, and the limits the drag is held within. The min, max and
-            step limits are Dimensions, so they can be given in pixels or as a
-            percent of the container -- a percent minimum keeps a panel usable at
-            any window size. A step above 0 quantises the drag to that increment.
+                what it draws as, and the limits the drag is held within. The
+                min, max and step limits are Dimensions, so they can be given in
+                pixels or as a percent of the container -- a percent minimum
+                keeps a panel usable at any window size. A step above 0
+                quantises the drag to that increment.
     - The fill is transparent by default, so a resizer stays invisible until a
       hover handler colours it in.
 */
@@ -62,18 +62,20 @@ private:
 
 /*
     Resizer:
-    - Desc: A drag handle placed inside a Row or Column beside the element it
-            resizes. It occupies a strip for hit detection but is invisible to
-            layout -- its siblings are placed as though it were not there, and it
-            sits at the boundary between them -- so adding one never shifts the
-            arrangement. It draws through UILO's post-render pass, which puts it
-            on top of everything including the neighbours it straddles.
+    - Desc:     A drag handle placed inside a Row or Column beside the element
+                it resizes. It occupies a strip for hit detection but is
+                invisible to layout -- its siblings are placed as though it were
+                not there, and it sits at the boundary between them -- so adding
+                one never shifts the arrangement. It draws through UILO's post-
+                render pass, which puts it on top of everything including the
+                neighbours it straddles.
     - The target and the container bounds are pushed in by Row and Column during
       layout rather than looked up here, because only the parent knows which
       sibling is adjacent once invisible children have been skipped.
-    - Double-clicking restores the target to the size it had when the handle first
-      attached, which is why the original dimension is captured on the first
-      setTarget rather than at construction -- there is no target yet then.
+    - Double-clicking restores the target to the size it had when the handle
+      first attached, which is why the original dimension is captured on the
+      first setTarget rather than at construction -- there is no target yet
+      then.
 */
 class Resizer : public Interactible {
 public:
@@ -118,6 +120,7 @@ private:
     bool      m_haveOriginalSize     = false;
 
     // Last left-click timestamp in SDL ticks, for double-click detection.
+    // 0 means no click yet, which is deliberately not a valid previous click.
     uint64_t m_lastClickMs = 0;
 };
 

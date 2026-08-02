@@ -25,8 +25,8 @@ namespace uilo {
 
 /*
     PosColorVertex:
-    - Desc: Vertex layout for untextured geometry: a screen-space position and a
-            packed colour. Used by every solid shape.
+    - Desc:     Vertex layout for untextured geometry: a screen-space position
+                and a packed colour. Used by every solid shape.
 */
 struct PosColorVertex {
     float    x, y;
@@ -36,8 +36,7 @@ struct PosColorVertex {
 /*
     PosColorUvVertex:
     - Desc:     Vertex layout for textured geometry, adding texture coordinates.
-                Used by
-            images, glyphs and framebuffer composites.
+                Used by images, glyphs and framebuffer composites.
 */
 struct PosColorUvVertex {
     float    x, y;
@@ -73,11 +72,10 @@ struct FontFace {
 /*
     Renderer:
     - Desc:     The renderer's private state, kept out of the public header so
-                bgfx and
-            SDL types never leak into anything that includes Renderer.hpp. Holds
-            the shader programs and uniforms, the offscreen targets and blur
-            ladder, the clip and rotation stacks, the solid-geometry batch, and
-            the texture and font caches.
+                bgfx and SDL types never leak into anything that includes
+                Renderer.hpp. Holds the shader programs and uniforms, the
+                offscreen targets and blur ladder, the clip and rotation stacks,
+                the solid-geometry batch, and the texture and font caches.
 */
 struct Renderer::Impl {
     /* bgfx shader programs */

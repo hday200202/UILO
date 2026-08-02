@@ -381,3 +381,67 @@ How to verify the merge
   carefully when accepting the new golden output.
   Probe source: tools/layout_probe.cpp (checked in, not wired into CMake --
   build instructions are in its header comment).
+
+
+================================================================================
+TERMINAL WIDGET -- done
+================================================================================
+From Notes.txt: "a built in terminal that interfaces with the operating system
+shell. Think like VSCode's terminal."
+
+Built in the shape this file suggested:
+
+  include/platform/Pty.{hpp,cpp}              forkpty spawn/read/write/resize
+  include/elements/widgets/Terminal.{hpp,cpp} screen model, VT parser, keys
+  examples/terminal.cpp                       a working shell in a window
+
+The VT parser was written rather than vendored -- libvterm would have been a
+third-party dependency for something that came out at a few hundred lines, and
+the screen model has to be UILO's own either way for rendering.
+
+What it covers
+  Plain output, control characters, SGR (16 colours, 256-colour and truecolour,
+  bold/italic/inverse), cursor addressing, erase-in-line/display, scroll
+  regions, alternate screen, OSC title, and scrollback with a configurable cap.
+  Keys are encoded to CSI sequences with application-cursor mode honoured, and
+  the grid is measured from the font, so resizing the window SIGWINCHes the
+  shell. Drag to select, Cmd+C / Cmd+V to copy and paste (Ctrl+Shift+C / V
+  as well), and a paste is fenced with bracketed-paste markers when the running
+  program has asked for them.
+
+Verified against a real shell
+  Output, tab stops, carriage return, SGR, erase+home, scrolling, scrollback and
+  exit detection; then the input path -- typed characters, Return, Backspace,
+  Tab completion, Up history, Ctrl+C, Ctrl+D -- driven through handleTextInput
+  and handleKeyInput rather than send(), so the key encoding is what is actually
+  under test; then grid measurement and SIGWINCH against a real renderer.
+
+Not done
+  * Windows. Pty.cpp's Windows branch fails cleanly with "needs ConPTY", so the
+    widget reports it could not start a shell rather than half-working.
+  * Mouse reporting (CSI ?1000h and friends), so a mouse-driven TUI will not see
+    clicks. Note this also means a drag inside such a program selects text
+    rather than reaching the program, which is the wrong answer once mouse
+    reporting exists -- whoever adds it should gate selection on it being off.
+  * Reflow on resize. The grid is resized and the shell is told, but wrapped
+    lines are not re-wrapped: a cell grid has already discarded the unwrapped
+    text that would be needed to do it.
+
+Clipboard and the Ctrl/Command split
+  Everywhere else in UILO, Control and Command are interchangeable for copy,
+  cut, paste and select-all -- see isShortcutModifier() in Interactible.hpp,
+  which accepts either on macOS and Control alone elsewhere.
+
+  The terminal is the one deliberate exception. Ctrl+C there is an interrupt,
+  not a copy, so folding the two together would take away the ability to stop a
+  running program. Its clipboard lives on Command and on the Ctrl+Shift forms
+  that Linux terminals use, and Ctrl alone always reaches the shell.
+
+Web
+  As predicted, the browser cannot host this. A page cannot fork a process, and
+  proxying one to the server would hand every visitor a shell on the host, which
+  is a deployment decision and not something UILO should do implicitly. Pty is
+  stubbed in wt/HeadlessBackend.cpp so the WT build still links, and Translator
+  renders Terminal as a monospace block carrying screenText(), falling back to
+  lastError() -- so a web build shows "a shell cannot be attached in the web
+  build" rather than an unexplained empty box.

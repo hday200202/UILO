@@ -12,11 +12,11 @@ namespace uilo {
 
 /*
     ElementType:
-    - Desc: Which kind of element an instance is, for the cases where behaviour
-            has to branch on it rather than on a virtual call: layout skipping
-            Resizers, hit-testing looking for Interactibles, and the Wt bridge
-            choosing which widget to build. Includes types that are planned but
-            not yet implemented.
+    - Desc:     Which kind of element an instance is, for the cases where
+                behaviour has to branch on it rather than on a virtual call:
+                layout skipping Resizers, hit-testing looking for Interactibles,
+                and the Wt bridge choosing which widget to build. Includes types
+                that are planned but not yet implemented.
 */
 enum class ElementType {
     NONE,
@@ -40,22 +40,24 @@ enum class ElementType {
     Knob,
     TextBox,
     Resizer,
+    Terminal,
 };
 
 class UILO;
 
 /*
     Element:
-    - Desc: Base class for everything UILO draws. An element owns its Modifier
-            (size, alignment, padding, callbacks), its resolved bounds, and the
-            flags that drive redrawing and deletion. Subclasses supply update()
-            and render(); the pointer-event checks have working defaults that
-            read the Modifier's callbacks. Ownership belongs to UILO rather than
-            to the parent: setUILO() puts the element in the element pool, and
-            erase() only marks it, so a handler is free to remove an element
-            while the tree is still being walked. Colors and gradients resolve
-            through the owning UILO's Palette, which is why an unbound element
-            falls back to its literal values.
+    - Desc:     Base class for everything UILO draws. An element owns its
+                Modifier (size, alignment, padding, callbacks), its resolved
+                bounds, and the flags that drive redrawing and deletion.
+                Subclasses supply update() and render(); the pointer-event
+                checks have working defaults that read the Modifier's callbacks.
+                Ownership belongs to UILO rather than to the parent: setUILO()
+                puts the element in the element pool, and erase() only marks it,
+                so a handler is free to remove an element while the tree is
+                still being walked. Colors and gradients resolve through the
+                owning UILO's Palette, which is why an unbound element falls
+                back to its literal values.
 */
 class Element {
 public:
@@ -99,6 +101,12 @@ public:
         bool momentum = false
     );
     virtual bool checkZoom(const Vec2f& mousePosition, float magnification);
+
+    // Whether a trackpad flick that ends over this element should coast. True
+    // for anything that scrolls a view; false for widgets where a scroll
+    // changes a value, since a coast there would keep cranking the value after
+    // the fingers have left.
+    virtual bool wantsScrollMomentum() const { return true; }
 
     void resize(const Rectf& parent);
 
@@ -147,8 +155,8 @@ inline bool Element::takesPointerEvents() const {
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
-    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise,
-                bool momentum
+    - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
+                momentum
     - Returns:  bool -- true when the event was consumed
     - Desc:     Two-axis scroll. Forwards delta.y to the single-axis overload,
                 so every widget is vertical-only without having to say so.

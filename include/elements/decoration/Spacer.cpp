@@ -6,8 +6,8 @@ namespace uilo {
 
 /*
     Spacer(Modifier modifier, SpacerOptions options, const std::string& name):
-    - Params:   Modifier modifier, SpacerOptions options,
-                const std::string& name
+    - Params:   Modifier modifier, SpacerOptions options, const std::string&
+                name
     - Returns:  Spacer
     - Desc:     Constructs a spacer from a modifier and its options, and tags it
                 as a Spacer so layout and the web bridge can identify it.
