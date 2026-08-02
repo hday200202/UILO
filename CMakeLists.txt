@@ -294,10 +294,13 @@ if(UILO_WT)
         "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/HeadlessBackend.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/Translator.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/UiloWt.cpp")
-elseif(APPLE)
+elseif(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # macOS: native scroll shim (Objective-C++) — gives us precise trackpad
     # deltas + OS momentum that SDL3's Cocoa backend drops.
     # (OBJCXX language already enabled in project() declaration above.)
+    #
+    # Note APPLE is true for iOS as well, and AppKit does not exist there. An
+    # iOS build takes MacStubs.cpp instead, exactly as Linux and Windows do.
     list(APPEND UILO_SRCS
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacScroll.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacWindow.mm"

@@ -3,7 +3,20 @@
 #include <cstdio>
 #include <cstring>
 
-#if defined(_WIN32)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+/* iOS has forkpty in its headers but a sandboxed app may not spawn processes,
+   so a terminal cannot work there at all -- it fails the same clean way the
+   unfinished Windows backend does rather than crashing at runtime. */
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+#define UILO_PTY_UNSUPPORTED 1
+#elif defined(_WIN32)
+#define UILO_PTY_UNSUPPORTED 1
+#endif
+
+#if defined(UILO_PTY_UNSUPPORTED)
 /* ConPTY is a different API shape and belongs in its own file. Until that
    exists every call fails cleanly, so Terminal reports "could not start a
    shell" rather than the build failing or the widget half-working. */
@@ -12,7 +25,11 @@ namespace uilo {
 Pty::~Pty() {}
 
 bool Pty::open(const std::string&, int, int) {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    m_error = "pty: iOS does not allow an app to spawn a shell";
+#else
     m_error = "pty: not implemented on Windows (needs ConPTY)";
+#endif
     return false;
 }
 void        Pty::close()                            {}

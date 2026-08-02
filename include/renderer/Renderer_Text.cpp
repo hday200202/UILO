@@ -3,6 +3,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #include "../assets/EmbeddedAssets.hpp"
+#include "../utils/Resources.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,7 +37,8 @@ bool readFile(const char* path, std::vector<uint8_t>& out) {
 
 constexpr int kAtlasW = 1024;
 constexpr int kAtlasH = 1024;
-constexpr const char* kEmbeddedFontCacheKey = "__UILO_EMBEDDED_DEFAULT_FONT__";
+constexpr const char* kEmbeddedFontCacheKey     = "__UILO_EMBEDDED_DEFAULT_FONT__";
+constexpr const char* kEmbeddedMonoFontCacheKey = "__UILO_EMBEDDED_MONO_FONT__";
 
 /*
     initAtlasFace(...):
@@ -183,17 +185,20 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
 Font Renderer::loadFont(const std::string& path) {
     auto& impl = *m_impl;
 
-    auto loadEmbeddedFallback = [&]() -> Font {
-        auto itEmbedded = impl.fontByPath.find(kEmbeddedFontCacheKey);
+    /* Either face that ships inside the binary, cached under its own key. */
+    auto loadBuiltIn = [&](const std::vector<uint8_t>& bytes,
+                           const char* cacheKey,
+                           const char* what) -> Font {
+        auto itEmbedded = impl.fontByPath.find(cacheKey);
         if (itEmbedded != impl.fontByPath.end()) {
             Font f; f.id = itEmbedded->second; return f;
         }
 
-        std::vector<uint8_t> ttf(EMBEDDED_FONT.begin(), EMBEDDED_FONT.end());
+        std::vector<uint8_t> ttf(bytes.begin(), bytes.end());
         stbtt_fontinfo probe{};
         if (!stbtt_InitFont(&probe, ttf.data(),
                            stbtt_GetFontOffsetForIndex(ttf.data(), 0))) {
-            std::fprintf(stderr, "[UILO] loadFont: embedded fallback font is invalid\n");
+            std::fprintf(stderr, "[UILO] loadFont: embedded %s font is invalid\n", what);
             return Font{};
         }
 
@@ -201,13 +206,24 @@ Font Renderer::loadFont(const std::string& path) {
         rec.ttfData = std::move(ttf);
         uint32_t id = (uint32_t)impl.fonts.size();
         impl.fonts.push_back(std::move(rec));
-        impl.fontByPath.emplace(kEmbeddedFontCacheKey, id);
+        impl.fontByPath.emplace(cacheKey, id);
 
         Font f; f.id = id; return f;
     };
 
+    auto loadEmbeddedFallback = [&]() -> Font {
+        return loadBuiltIn(EMBEDDED_FONT, kEmbeddedFontCacheKey, "fallback");
+    };
+
     if (path.empty()) {
         return loadEmbeddedFallback();
+    }
+
+    /* The reserved name Resources::fonts::mono resolves to. It is not a file,
+       so it must be answered before anything tries to read it off disk. */
+    if (path == kEmbeddedMonoFontPath) {
+        Font f = loadBuiltIn(EMBEDDED_MONO_FONT, kEmbeddedMonoFontCacheKey, "monospaced");
+        return f.valid() ? f : loadEmbeddedFallback();
     }
 
     auto it = impl.fontByPath.find(path);
