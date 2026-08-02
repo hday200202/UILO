@@ -23,7 +23,7 @@
 - [`scrollDown(int lines)`](#scrolldown)
 - [`newline()`](#newline)
 - [`putChar(char32_t c)`](#putchar)
-- [`useAlternateScreen(bool on)`](#usealternatescreen)
+- [`useAlternateScreen(bool on, bool saveRestore)`](#usealternatescreen)
 - [`indexedColor(int n)`](#indexedcolor)
 - [`applySgr()`](#applysgr)
 - [`handleCsi(char final)`](#handlecsi)
@@ -32,7 +32,7 @@
 - [`feed(const std::string& bytes)`](#feed)
 - [`contentArea()`](#contentarea)
 - [`gridTopY()`](#gridtopy)
-- [`remeasure()`](#remeasure)
+- [`remeasure(float dt)`](#remeasure)
 - [`update(Rectf& parentBounds, float dt)`](#update)
 - [`render()`](#render)
 - [`screenText()`](#screentext)
@@ -327,12 +327,13 @@ Writes one character at the cursor and advances it. Wrapping is deferred: runnin
 ### useAlternateScreen
 
 ```cpp
-useAlternateScreen(bool on)
+useAlternateScreen(bool on, bool saveRestore)
 ```
 
 **Parameters**
 
 - `bool on`
+- `bool saveRestore`
 
 **Returns** — void
 
@@ -455,12 +456,18 @@ The y of the grid's first row. A whole number of rows almost never divides the h
 ### remeasure
 
 ```cpp
-remeasure()
+remeasure(float dt)
 ```
+
+**Parameters**
+
+- `float dt`
 
 **Returns** — void
 
 Works out the cell size from the font and, from that and the current bounds, how many columns and rows fit. The width comes from a single glyph's advance, which is why the font has to be monospaced. When the grid changes shape the PTY is told, so the shell reflows to match.
+
+> A new size has to hold still for a moment before it is applied. Dragging a window edge steps through a new grid size every few pixels, and a full-screen program told about each one restarts its layout over and over while still working on the previous change -- which is what makes such a program crawl to catch up. One drag should cost one reshape.
 
 ---
 

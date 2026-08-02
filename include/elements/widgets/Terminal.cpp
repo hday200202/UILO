@@ -308,8 +308,9 @@ void Terminal::clearRegion(int fromCol, int fromRow, int toCol, int toRow) {
     for (int i = std::min(first, last); i <= std::max(first, last); ++i) {
         auto& c = m_grid[static_cast<size_t>(i)];
         c = TerminalCell{};
-        c.fg = m_pen.fg;
-        c.bg = m_pen.bg;
+        c.fg      = m_pen.fg;
+        c.bg      = m_pen.bg;
+        c.inverse = m_pen.inverse;
     }
     m_dirty = true;
 }
@@ -441,21 +442,42 @@ void Terminal::putChar(char32_t c) {
 
 
 /*
-    useAlternateScreen(bool on):
-    - Params:   bool on
+    useAlternateScreen(bool on, bool saveRestore):
+    - Params:   bool on, bool saveRestore
     - Returns:  void
     - Desc:     Swaps between the normal screen and the alternate one full-screen
                 programs draw on. The two are kept side by side and exchanged, so
                 leaving vim puts back exactly what the shell had on screen
                 before, and nothing the program drew reaches scrollback.
 */
-void Terminal::useAlternateScreen(bool on) {
+void Terminal::useAlternateScreen(bool on, bool saveRestore) {
     if (on == m_altScreen) return;
+
+    if (saveRestore) {
+        if (on) {
+            m_savedCol = m_curCol;
+            m_savedRow = m_curRow;
+            m_savedPen = m_pen;
+        } else {
+            /* Restoring the pen is the point: a program that signs off by
+               setting its own idea of the default colours -- btop ends with an
+               explicit black background and never returns it to default --
+               would otherwise leave every later erase filling with that colour
+               instead of the terminal's own background. */
+            m_curCol = m_savedCol;
+            m_curRow = m_savedRow;
+            m_pen    = m_savedPen;
+        }
+    }
+
     std::swap(m_grid, m_altGrid);
     m_altScreen = on;
 
     if (on) {
-        for (auto& c : m_grid) { c = TerminalCell{}; c.fg = m_pen.fg; c.bg = m_pen.bg; }
+        for (auto& c : m_grid) {
+            c = TerminalCell{};
+            c.fg = m_pen.fg; c.bg = m_pen.bg; c.inverse = m_pen.inverse;
+        }
         m_curCol = m_curRow = 0;
     }
     m_scrollTop = 0;
@@ -521,11 +543,8 @@ void Terminal::applySgr() {
             case 22: m_pen.bold = false;      break;
             case 23: m_pen.italic = false;    break;
             case 24: m_pen.underline = false; break;
-            case 7: {
-                std::swap(m_pen.fg, m_pen.bg);
-                if (m_pen.bg.a == 0) m_pen.bg = m_options.getForegroundColor();
-                break;
-            }
+            case 7:  m_pen.inverse = true;  break;
+            case 27: m_pen.inverse = false; break;
             case 39: m_pen.fg = m_options.getForegroundColor(); break;
             case 49: m_pen.bg = Color{0, 0, 0, 0};              break;
             case 38: case 48: {
@@ -683,9 +702,12 @@ void Terminal::handleCsi(char final) {
                 switch (v) {
                     case 25:   m_cursorVisible = on; break;
                     case 1:    m_appCursorKeys = on; break;
+                    /* 47 and 1047 only switch screens. 1049 also saves and
+                       restores the cursor and the current colours, which is
+                       what makes a full-screen program's exit leave no trace. */
                     case 47:
-                    case 1047:
-                    case 1049: useAlternateScreen(on); break;
+                    case 1047: useAlternateScreen(on, false); break;
+                    case 1049: useAlternateScreen(on, true);  break;
                     case 2004: m_bracketedPaste = on; break;
                     default: break;   /* mouse reporting modes: ignored */
                 }
@@ -861,16 +883,21 @@ float Terminal::gridTopY() const {
 
 
 /*
-    remeasure():
-    - Params:   none
+    remeasure(float dt):
+    - Params:   float dt
     - Returns:  void
     - Desc:     Works out the cell size from the font and, from that and the
                 current bounds, how many columns and rows fit. The width comes
                 from a single glyph's advance, which is why the font has to be
                 monospaced. When the grid changes shape the PTY is told, so the
                 shell reflows to match.
+    - A new size has to hold still for a moment before it is applied. Dragging a
+      window edge steps through a new grid size every few pixels, and a
+      full-screen program told about each one restarts its layout over and over
+      while still working on the previous change -- which is what makes such a
+      program crawl to catch up. One drag should cost one reshape.
 */
-void Terminal::remeasure() {
+void Terminal::remeasure(float dt) {
     if (!m_uiloRef) return;
     auto& renderer = m_uiloRef->getRenderer();
 
@@ -902,10 +929,32 @@ void Terminal::remeasure() {
     const int cols = std::max(1, static_cast<int>(area.size.x / m_cellW));
     const int rows = std::max(1, static_cast<int>(area.size.y / m_cellH));
 
-    if (cols != m_cols || rows != m_rows) {
-        resizeGrid(cols, rows);
-        if (m_pty.isOpen()) m_pty.resize(cols, rows);
+    if (cols == m_cols && rows == m_rows) {
+        m_pendingCols = cols;
+        m_pendingRows = rows;
+        return;
     }
+
+    /* First sizing lands at once -- there is nothing on screen to disturb and
+       the shell has not started yet. */
+    const bool firstSizing = m_grid.empty() || !m_pty.isOpen();
+
+    if (cols != m_pendingCols || rows != m_pendingRows) {
+        m_pendingCols = cols;
+        m_pendingRows = rows;
+        m_sizeSettled = 0.f;
+    } else {
+        m_sizeSettled += dt;
+    }
+
+    /* Long enough that a drag coalesces into one reshape, short enough that a
+       single resize still feels immediate. */
+    constexpr float kSettleSeconds = 0.12f;
+    if (!firstSizing && m_sizeSettled < kSettleSeconds) return;
+
+    m_sizeSettled = 0.f;
+    resizeGrid(cols, rows);
+    if (m_pty.isOpen()) m_pty.resize(cols, rows);
 }
 
 
@@ -922,7 +971,7 @@ void Terminal::remeasure() {
 */
 void Terminal::update(Rectf& parentBounds, float dt) {
     resize(parentBounds);
-    remeasure();
+    remeasure(dt);
 
     if (!m_started && m_options.getAutoStart() && m_uiloRef) start();
 
@@ -1018,6 +1067,16 @@ void Terminal::render() {
        grid so the last row finishes flush against the bottom inset. */
     const float gridTop = gridTopY();
 
+    /* Reverse video is applied here rather than stored swapped. A cell with no
+       background of its own takes the widget's, which is the only thing that
+       makes "inverse on the default background" come out right. */
+    auto effFg = [&](const TerminalCell& c) {
+        return c.inverse ? (c.bg.a == 0 ? bg : c.bg) : c.fg;
+    };
+    auto effBg = [&](const TerminalCell& c) {
+        return c.inverse ? c.fg : c.bg;
+    };
+
     Font font; font.id = m_fontId;
     const float pxH = static_cast<float>(m_options.getCharSize()) * scale;
 
@@ -1078,10 +1137,13 @@ void Terminal::render() {
         /* Background runs. */
         int c = 0;
         while (c < nCells) {
-            const Color col = line[c].bg;
+            const Color col = effBg(line[c]);
             int e = c + 1;
-            while (e < nCells && line[e].bg.r == col.r && line[e].bg.g == col.g
-                              && line[e].bg.b == col.b && line[e].bg.a == col.a) ++e;
+            while (e < nCells) {
+                const Color n = effBg(line[e]);
+                if (n.r != col.r || n.g != col.g || n.b != col.b || n.a != col.a) break;
+                ++e;
+            }
             if (col.a > 0) {
                 r.draw(Rect{{area.position.x + c * m_cellW, y},
                             {(e - c) * m_cellW, m_cellH}, col});
@@ -1095,20 +1157,22 @@ void Terminal::render() {
             const TerminalCell& first = line[c];
             if (first.ch == U' ' || first.ch == 0) { ++c; continue; }
 
+            const Color firstFg = effFg(first);
             int e = c;
             std::string run;
             while (e < nCells) {
                 const TerminalCell& cc = line[e];
                 if (cc.ch == U' ' || cc.ch == 0) break;
-                if (cc.fg.r != first.fg.r || cc.fg.g != first.fg.g ||
-                    cc.fg.b != first.fg.b || cc.fg.a != first.fg.a ||
+                const Color f = effFg(cc);
+                if (f.r != firstFg.r || f.g != firstFg.g ||
+                    f.b != firstFg.b || f.a != firstFg.a ||
                     cc.bold != first.bold || cc.italic != first.italic) break;
                 run += utf8Encode(cc.ch);
                 ++e;
             }
             if (!run.empty()) {
                 r.drawText(run, {area.position.x + c * m_cellW, y}, font, pxH,
-                           first.fg, TextStyle{first.bold, first.italic});
+                           firstFg, TextStyle{first.bold, first.italic});
             }
             c = (e > c) ? e : c + 1;
         }
