@@ -28,7 +28,7 @@ public:
     TextboxOptions() = default;
 
     // Font
-    TextboxOptions& setFont(const std::string& path) { m_fontPath = path; return *this; }
+    TextboxOptions& setFont(std::string_view path) { m_fontPath = std::string(path); return *this; }
 
     // Text appearance
     TextboxOptions& setCharSize(unsigned int n)      { m_charSize = n;         return *this; }

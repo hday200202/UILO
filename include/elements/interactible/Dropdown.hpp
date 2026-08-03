@@ -84,7 +84,7 @@ public:
     DropdownOptions& setArrowColor(Color c)              { m_arrowColor = c; m_hasArrowColor = true; return *this; }
     DropdownOptions& setArrowColorRole(const std::string& r) { m_arrowColorRole = r; m_hasArrowColor = true; return *this; }
 
-    DropdownOptions& setFont(const std::string& path) { m_fontPath = path; return *this; }
+    DropdownOptions& setFont(std::string_view path) { m_fontPath = std::string(path); return *this; }
 
     DropdownOptions& setSpacer(float s)                { m_spacer = s;           return *this; }
     DropdownOptions& setDividerThickness(float t)        { m_dividerThickness = t; return *this; }

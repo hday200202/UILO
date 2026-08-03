@@ -76,7 +76,7 @@ public:
     FileBrowserOptions& setTextPaddingLeft(float px)    { m_textPaddingLeft = px; return *this; }
 
     // Entry text
-    FileBrowserOptions& setFont(const std::string& path){ m_fontPath = path; return *this; }
+    FileBrowserOptions& setFont(std::string_view path){ m_fontPath = std::string(path); return *this; }
     FileBrowserOptions& setCharSize(unsigned int n)     { m_charSize = n; return *this; }
     FileBrowserOptions& setTextAlignY(Align a)          { m_textAlignY = a; return *this; }
     FileBrowserOptions& setBoldDirectories(bool v)      { m_boldDirectories = v; return *this; }

@@ -26,7 +26,7 @@ class TextOptions {
 public:
     TextOptions() = default;
 
-    TextOptions& setFont(const std::string& path)   { m_fontPath = path; return *this; }
+    TextOptions& setFont(std::string_view path)   { m_fontPath = std::string(path); return *this; }
     TextOptions& setContent(const std::string& s)   { m_content = s; return *this; }
     TextOptions& setCharSize(unsigned int n)        { m_charSize = n; return *this; }
     TextOptions& setColor(const Color& c)           { m_color = c; return *this; }
