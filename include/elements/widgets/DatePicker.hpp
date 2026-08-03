@@ -101,7 +101,7 @@ public:
     DatePickerOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
     DatePickerOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
     DatePickerOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
-    DatePickerOptions& setFont(const std::string& path)   { m_fontPath = path; return *this; }
+    DatePickerOptions& setFont(std::string_view path)   { m_fontPath = std::string(path); return *this; }
 
     // Header (month title + navigation) ---------------------------------
     DatePickerOptions& setShowHeader(bool v)              { m_showHeader = v; return *this; }

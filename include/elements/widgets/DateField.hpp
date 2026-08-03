@@ -75,7 +75,7 @@ public:
     DateFieldOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
 
     // Text --------------------------------------------------------------
-    DateFieldOptions& setFont(const std::string& path)        { m_fontPath = path; return *this; }
+    DateFieldOptions& setFont(std::string_view path)        { m_fontPath = std::string(path); return *this; }
     DateFieldOptions& setCharSize(unsigned int n)             { m_charSize = n; return *this; }
     DateFieldOptions& setTextColor(const Color& c)                 { m_textColor = c; return *this; }
     DateFieldOptions& setTextColorRole(const std::string& r)       { m_textColorRole = r; return *this; }

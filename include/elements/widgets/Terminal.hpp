@@ -55,7 +55,7 @@ public:
     TerminalOptions& setAutoStart(bool v)                { m_autoStart = v; return *this; }
 
     // Text
-    TerminalOptions& setFont(const std::string& path)    { m_fontPath = path; return *this; }
+    TerminalOptions& setFont(std::string_view path)    { m_fontPath = std::string(path); return *this; }
     TerminalOptions& setCharSize(unsigned int n)         { m_charSize = n; return *this; }
     // Multiplier on the font's own line height, for tightening or opening up
     // the rows without changing the glyph size.
