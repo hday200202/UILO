@@ -9,9 +9,7 @@
 
 #include <Wt/WContainerWidget.h>
 
-#include "UiloWt.hpp"
-
-namespace uilo { class UILO; }
+#include "../UILO.hpp"
 
 namespace uilo::wt::detail {
 
@@ -37,12 +35,15 @@ class KnobWidget;
 */
 class Translator {
 public:
-    Translator(Wt::WApplication& app, UILO& uilo, const Config& config);
+    // pageParent is the container the page hosts are created under; the shared
+    // UILO supplies the active page and the floating layer.
+    Translator(Wt::WApplication& app, Wt::WContainerWidget* pageParent,
+               UILO& uilo, const WebConfig& config);
 
-    /* Builds the widgets for `page`'s root container as children of `into`. */
-    void build(Page& page, Wt::WContainerWidget* into);
-
-    /* Re-reads every translated element and applies whatever changed. */
+    // Reconciles the whole view against the UILO: shows the active page
+    // (translating it the first time it is visited), mirrors the floating
+    // layer, and re-applies every widget's current style/content. This is the
+    // one call every event makes, and the initial render.
     void sync();
 
 private:
@@ -113,6 +114,14 @@ private:
     /* Applies a node's current style, and its content when it has any. */
     void apply(Node& node);
 
+    /* Follows UILO's active page: translates it into a hidden host the first
+       time it is shown, then swaps which host is visible. Runs at the top of
+       sync(), so navigation via setPage() takes effect on the next event. */
+    void reconcilePages();
+
+    /* Translates one page's root container into `host`. */
+    void translatePageInto(Page* page, Wt::WContainerWidget* host);
+
     /* Shows the overlays whose backdrop is still floating and hides the rest,
        translating any backdrop not seen before. Runs at the top of sync(). */
     void syncFloating(const std::vector<Element*>& floating);
@@ -136,9 +145,14 @@ private:
         std::vector<Node>     nodes;
     };
 
-    Wt::WApplication& m_app;
-    UILO&             m_uilo;
-    Config            m_config;
+    Wt::WApplication&     m_app;
+    Wt::WContainerWidget* m_pageParent;   /* page hosts are created under this */
+    UILO&                 m_uilo;
+    WebConfig             m_config;
+
+    /* One host per page visited, shown/hidden as the active page changes. */
+    std::unordered_map<Page*, Wt::WContainerWidget*> m_pageHosts;
+    Page*                                            m_shownPage = nullptr;
 
     std::vector<Node>                            m_nodes;
     std::vector<FloatingLayer>                   m_floatingLayers;

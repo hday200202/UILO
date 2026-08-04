@@ -20,6 +20,32 @@ namespace uilo {
 
 class Interactible;
 
+#ifdef UILO_WT
+namespace wt {
+/*
+    WebConfig:
+    - Desc: Server-side settings for UILO::runWeb -- the things that have no
+            desktop equivalent because they describe the page and the HTTP
+            server, not the UI. The UI itself (pages, palette, callbacks) is set
+            on the UILO instance exactly as on desktop.
+*/
+struct WebConfig {
+    std::string title       = "UILO";
+    int         port        = 8080;
+    std::string address     = "0.0.0.0";
+    std::string docRoot     = "docroot";                       // static files, served at /
+    std::string resourcesDir = "ext/UILO/ext/wt/resources";    // Wt's bundled JS/themes
+
+    // Font mapping: UILO loads a .ttf by path, the browser needs a CSS family,
+    // and charSize is a pixel height (ascent+descent) whereas CSS font-size
+    // sizes the em square. Defaults are fine for most apps.
+    std::string fontFamily =
+        "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+    float       charSizeToFontSize = 0.86f;
+};
+}
+#endif
+
 /*
     UILO:
     - Desc:     The top-level controller. It owns the pages and the element
@@ -65,7 +91,17 @@ public:
     void addPage(Page* page);
     void setPage(const std::string& pageName);
     void setActivePage(Page* page);
+    Page* getActivePage() const { return m_activePage; }
     void setScale(float scale);
+
+#ifdef UILO_WT
+    // Serves this UILO over the web (Wt) and blocks until the server stops --
+    // the web counterpart of the desktop pollEvents/update/render loop. Set up
+    // the UILO exactly as on desktop (addPage/setPage/setPalette/callbacks)
+    // first; runWeb translates the active page, drives it from browser events,
+    // and follows setPage() for navigation. `config` is server-side only.
+    int runWeb(const wt::WebConfig& config = {});
+#endif
 
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
     void unregisterOverlay(Element* e);

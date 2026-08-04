@@ -2,182 +2,131 @@
 
 #include "UiloWt.hpp"
 #include "Translator.hpp"
+#include "../UILO.hpp"
 
 #include <Wt/WApplication.h>
 #include <Wt/WContainerWidget.h>
 #include <Wt/WCssStyleSheet.h>
 #include <Wt/WEnvironment.h>
+#include <Wt/WServer.h>
 #include <Wt/WTimer.h>
 
-#include <algorithm>
-#include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "../renderer/Renderer.hpp"
 
-namespace uilo::wt {
+namespace uilo {
+namespace wt {
 namespace {
 
 /*
     UiloApplication:
-    - Desc:     One browser session. Owns that session's UILO instance, the tree
-                the builder produced, and the Wt widgets translated from it.
-                Implements Session, so the builder never sees the Wt side.
+    - Desc: One browser connection. Renders the shared UILO into this
+            connection's Wt widgets and keeps them in step through a Translator.
+            There is no per-application UILO or builder any more -- every
+            connection reflects the one UILO that runWeb() was called on.
 */
-class UiloApplication : public Wt::WApplication, public Session {
+class UiloApplication : public Wt::WApplication {
 public:
-    UiloApplication(const Wt::WEnvironment& env, const Builder& build, const Config& config)
-        : Wt::WApplication(env), m_translator(*this, m_ui, config) {
+    UiloApplication(const Wt::WEnvironment& env, UILO& ui, const WebConfig& config)
+        : Wt::WApplication(env), m_ui(ui) {
         setTitle(Wt::WString::fromUTF8(config.title));
         addBaseRules();
-
-        /* The renderer is the headless no-op from the UILO_WT build. */
-        m_ui.setRenderer(m_renderer);
-        m_ui.setPalette(config.palette);
 
         m_host = root()->addWidget(std::make_unique<Wt::WContainerWidget>());
         m_host->setStyleClass("uilo-root");
 
-        /* Anything the builder registers with addPage() lands in m_pages; the
-           page it returns is simply the one to open on. */
-        Page* initial = build(*this);
-        if (initial) addPage(initial);
-        if (m_pages.empty()) return;
+        m_translator = std::make_unique<detail::Translator>(*this, m_host, m_ui, config);
 
-        /* A deep link wins over the builder's choice, so a bookmarked page
-           opens where it was bookmarked. */
-        const std::string fromUrl = pageFromPath(internalPath());
-        const std::string first   = initial ? initial->getName() : m_order.front();
-        show(m_pages.count(fromUrl) ? fromUrl : first, false);
-
-        internalPathChanged().connect([this](const std::string& path) {
-            /* Back/forward and typed URLs arrive here. */
-            const std::string name = pageFromPath(path);
-            if (m_pages.count(name)) show(name, false);
-        });
+        // First render: reconcilePages() translates and shows the active page.
+        m_translator->sync();
     }
 
-    void addPage(Page* page) override {
-        if (!page || m_pages.count(page->getName())) return;
-
-        /* Hands the page (and, through it, every element) to UILO, which owns
-           it for the rest of the session. */
-        m_ui.addPage(page);
-        m_ui.setPage(page->getName());
-
-        auto* host = m_host->addWidget(std::make_unique<Wt::WContainerWidget>());
-        host->setStyleClass("uilo-page");
-        host->setHidden(true);
-        m_translator.build(*page, host);
-
-        m_pages.emplace(page->getName(), host);
-        m_order.push_back(page->getName());
-    }
-
-    void showPage(const std::string& name) override { show(name, true); }
-
-    std::string currentPage() const override { return m_current; }
-
-    void onPageChanged(std::function<void(const std::string&)> fn) override {
-        m_onPageChanged.push_back(std::move(fn));
-    }
-
-    UILO& ui() override { return m_ui; }
-    void  sync() override { m_translator.sync(); }
-    Wt::WApplication& application() override { return *this; }
-
-    void setPalette(const Palette& palette) override {
-        m_ui.setPalette(palette);
-        m_translator.sync();
-    }
-
-    void every(std::chrono::milliseconds interval, std::function<void()> fn) override {
-        auto* timer = addChild(std::make_unique<Wt::WTimer>());
-        timer->setInterval(interval);
-        timer->timeout().connect([this, fn = std::move(fn)] {
-            fn();
-            m_translator.sync();
-        });
-        timer->start();
-    }
+    // Re-reads the UILO and pushes what changed. Every event runs this through
+    // the translator; the timer helper calls it directly.
+    void sync() { m_translator->sync(); }
 
 private:
-    /* Pages are addressed as "/name". The leading slash is all that separates
-       the two forms, so the conversion is a trim in each direction. */
-    static std::string pageFromPath(const std::string& path) {
-        std::string name = path;
-        while (!name.empty() && name.front() == '/') name.erase(name.begin());
-        while (!name.empty() && name.back()  == '/') name.pop_back();
-        return name;
-    }
-
-    void show(const std::string& name, bool pushUrl) {
-        auto it = m_pages.find(name);
-        if (it == m_pages.end() || name == m_current) return;
-
-        if (auto prev = m_pages.find(m_current); prev != m_pages.end())
-            prev->second->setHidden(true);
-        it->second->setHidden(false);
-        m_current = name;
-
-        /* Keeps UILO's own notion of the active page in step, so getElement()
-           and anything else reading it agree with what is on screen. */
-        m_ui.setPage(name);
-
-        if (pushUrl) setInternalPath("/" + name, false);
-        for (const auto& fn : m_onPageChanged) fn(name);
-
-        m_translator.sync();
-    }
-
     void addBaseRules() {
         auto& sheet = styleSheet();
         sheet.addRule("html, body",
                       "margin:0;padding:0;width:100%;height:100%;overflow:hidden;");
         sheet.addRule(".uilo-root", "position:absolute;inset:0;overflow:hidden;");
-        /* Every page fills the same box; only one is ever un-hidden. */
+        // Every page fills the same box; only the active one is un-hidden.
         sheet.addRule(".uilo-page", "position:absolute;inset:0;overflow:hidden;");
-        /* A floating layer (a popup and its backdrop) sits above the page,
-           filling the window the same way. */
-        sheet.addRule(".uilo-overlay", "position:absolute;inset:0;overflow:hidden;z-index:1000;");
-        /* A flex item defaults to a content-based minimum size, which would
-           stop children shrinking to the size UILO gives them. */
+        // A floating layer (a popup and its backdrop) sits above the page.
+        sheet.addRule(".uilo-overlay",
+                      "position:absolute;inset:0;overflow:hidden;z-index:1000;");
+        // Flex items default to a content-based minimum, which would stop
+        // children shrinking to the size UILO gives them; UILO has no such floor.
         sheet.addRule(".uilo-el", "box-sizing:border-box;min-width:0;min-height:0;");
-        /* Resizer handles sit invisible until pointed at, the way the UILO
-           examples fade theirs in from a per-frame handler. */
         sheet.addRule(".uilo-resizer-bar", "opacity:0;transition:opacity .15s;");
         sheet.addRule(".uilo-resizer:hover .uilo-resizer-bar", "opacity:1;");
     }
 
-    Renderer           m_renderer;
-    UILO               m_ui;
-    detail::Translator m_translator;
-
-    Wt::WContainerWidget*                             m_host = nullptr;
-    std::map<std::string, Wt::WContainerWidget*>      m_pages;   /* name -> host */
-    std::vector<std::string>                          m_order;   /* registration order */
-    std::string                                       m_current;
-    std::vector<std::function<void(const std::string&)>> m_onPageChanged;
+    UILO&                               m_ui;
+    Wt::WContainerWidget*               m_host = nullptr;
+    std::unique_ptr<detail::Translator> m_translator;
 };
 
 } // namespace
 
+
+Wt::WApplication& application() {
+    return *Wt::WApplication::instance();
+}
+
+void every(std::chrono::milliseconds interval, std::function<void()> fn) {
+    auto* app = dynamic_cast<UiloApplication*>(Wt::WApplication::instance());
+    if (!app) return;
+    auto* timer = app->addChild(std::make_unique<Wt::WTimer>());
+    timer->setInterval(interval);
+    timer->timeout().connect([app, fn = std::move(fn)] { fn(); app->sync(); });
+    timer->start();
+}
+
+} // namespace wt
+
+
 /*
-    run(int argc, char** argv, Builder build, Config config):
-    - Params:   int argc, char** argv, Builder build, Config config
-    - Returns:  int
-    - Desc:     Starts the Wt application server with the caller's builder. Each
-                browser session gets its own UILO and Translator, so sessions
-                share the Theme but never each other's element trees or
-                palettes.
+    UILO::runWeb(const WebConfig& config):
+    - Serves this UILO over the web and blocks until the server stops. Set the
+      UILO up exactly as on desktop first (addPage/setPage/setPalette); this
+      stands up Wt, points every browser connection at this instance, and
+      returns the server's exit code. No render/update loop and no argv -- the
+      server settings come from the config.
 */
-int run(int argc, char** argv, Builder build, Config config) {
-    return Wt::WRun(argc, argv,
-        [build = std::move(build), config = std::move(config)](const Wt::WEnvironment& env) {
-            return std::make_unique<UiloApplication>(env, build, config);
+int UILO::runWeb(const wt::WebConfig& config) {
+    // The web build never draws, but UILO still expects a renderer to exist.
+    static Renderer headless;
+    setRenderer(headless);
+
+    // Wt is configured from a command line; synthesize one from the config so
+    // the caller passes nothing.
+    const std::string port = std::to_string(config.port);
+    std::vector<std::string> args = {
+        "uilo",
+        "--docroot",      config.docRoot,
+        "--http-address", config.address,
+        "--http-port",    port,
+    };
+    if (!config.resourcesDir.empty()) {
+        args.emplace_back("--resources-dir");
+        args.push_back(config.resourcesDir);
+    }
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (std::string& a : args) argv.push_back(a.data());
+
+    UILO& ui = *this;
+    return Wt::WRun(static_cast<int>(argv.size()), argv.data(),
+        [&ui, config](const Wt::WEnvironment& env) {
+            return std::make_unique<wt::UiloApplication>(env, ui, config);
         });
 }
 
-} // namespace uilo::wt
+} // namespace uilo
 
 #endif   /* UILO_WT */
