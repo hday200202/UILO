@@ -539,16 +539,9 @@ void appendMaterial(std::string& css, const Material& mat, Color elementColor) {
 
 } // namespace
 
-/*
-    Translator(Wt::WApplication& app, UILO& uilo, const Config& config):
-    - Params:   Wt::WApplication& app, UILO& uilo, const Config& config
-    - Returns:  T
-    - Desc:     ------------------------------------------------------------
-                --------------- Translator ---------------------------------
-                ------------------------------------------
-*/
-Translator::Translator(Wt::WApplication& app, UILO& uilo, const Config& config)
-    : m_app(app), m_uilo(uilo), m_config(config) {}
+Translator::Translator(Wt::WApplication& app, Wt::WContainerWidget* pageParent,
+                       UILO& uilo, const WebConfig& config)
+    : m_app(app), m_pageParent(pageParent), m_uilo(uilo), m_config(config) {}
 
 /*
     styleKey(const std::string& css, const PseudoRules& pseudo):
@@ -1662,6 +1655,7 @@ void Translator::apply(Node& n) {
                 restyling, so the overlay's widgets exist to receive it.
 */
 void Translator::sync() {
+    reconcilePages();
     syncFloating(m_uilo.getFloatingElements());
 
     for (Node& n : m_nodes) apply(n);
@@ -2086,15 +2080,41 @@ void Translator::translateChildren(Container* container, Wt::WContainerWidget* p
 }
 
 /*
-    build(Page& page, Wt::WContainerWidget* into):
-    - Params:   Page& page, Wt::WContainerWidget* into
-    - Returns:  none
-    - Desc:     Walks a page once and creates a widget for every element in it.
-                Called once per session; everything afterwards goes through
-                sync().
+    reconcilePages():
+    - Follows UILO's active page. The first time a page is shown it is
+      translated into a fresh hidden host; then the previous host is hidden and
+      the active one shown. Navigation is therefore just setPage() in a handler
+      -- the next sync() moves the view here.
 */
-void Translator::build(Page& page, Wt::WContainerWidget* into) {
-    Container* root = page.getRoot();
+void Translator::reconcilePages() {
+    Page* active = m_uilo.getActivePage();
+    if (!active || active == m_shownPage) return;
+
+    auto it = m_pageHosts.find(active);
+    if (it == m_pageHosts.end()) {
+        auto* host = m_pageParent->addWidget(std::make_unique<Wt::WContainerWidget>());
+        host->setStyleClass("uilo-page");
+        host->setHidden(true);
+        translatePageInto(active, host);
+        it = m_pageHosts.emplace(active, host).first;
+    }
+
+    if (m_shownPage) {
+        auto prev = m_pageHosts.find(m_shownPage);
+        if (prev != m_pageHosts.end()) prev->second->setHidden(true);
+    }
+    it->second->setHidden(false);
+    m_shownPage = active;
+}
+
+/*
+    translatePageInto(Page* page, Wt::WContainerWidget* host):
+    - Walks a page once and creates a widget for every element in it, as
+      children of `host`. Called the first time a page is shown; everything
+      afterwards goes through sync().
+*/
+void Translator::translatePageInto(Page* page, Wt::WContainerWidget* host) {
+    Container* root = page->getRoot();
     if (!root) return;
 
     Node node;
@@ -2104,7 +2124,7 @@ void Translator::build(Page& page, Wt::WContainerWidget* into) {
        ultimately a fraction of the viewport. */
     node.heightExpr = "100vh";
 
-    translate(root, into, node);
+    translate(root, host, node);
 }
 
 } // namespace uilo::wt::detail
