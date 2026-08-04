@@ -794,7 +794,6 @@ Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
 
     Modifier mod = Modifier()
         .setWidth(Dimension{100.f / 7.f, true})
-        .setOuterPadding(o.getCellSpacing())
         .setOnLeftClick([this, date, adjacent](Element*) { handleDayClicked(date, adjacent); })
         .setOnHoverEnter([this, date](Element*) { setHoverDate(date); })
         .setOnHoverExit([this, date](Element*) {
@@ -805,8 +804,10 @@ Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
 
     auto* cell = new Row(
         mod,
-        RowOptions().inheritRounding(o.getCellRoundingOpt(),
-                                     DatePickerOptions::getCellRoundingOptFallback()),
+        RowOptions()
+            .setOuterPadding(o.getCellSpacing())
+            .inheritRounding(o.getCellRoundingOpt(),
+                             DatePickerOptions::getCellRoundingOptFallback()),
         contains{});
     cell->addElement(label);
 
@@ -910,9 +911,9 @@ Element* DatePicker::buildFooterButton(const std::string& label, bool primary,
             .setWidth(Dimension{o.getButtonWidth(), false})
             .setHeight(100_pct)
             .setAlign(Align::CenterY)
-            .setOuterPadding(2.f)
             .setOnLeftClick([action = std::move(action)](Element*) { action(); }),
         ButtonOptions()
+            .setOuterPadding(2.f)
             .setColor(fill)
             .setColorRole(fillRole)
             .inheritRounding(o.getButtonRoundingOpt(),

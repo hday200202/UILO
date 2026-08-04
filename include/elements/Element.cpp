@@ -1,4 +1,6 @@
 #include "Element.hpp"
+
+#include <algorithm>
 #include "../UILO.hpp"
 
 namespace uilo {
@@ -144,9 +146,32 @@ void Element::tick(Rectf& parentBounds, float dt) {
                 placed against that inset box according to its alignment flags,
                 defaulting to the top-left corner.
 */
+/*
+    contentArea():
+    - Params:   none
+    - Returns:  Rectf
+    - Desc:     Where this element's content belongs: its bounds inset on all
+                four sides by the inner padding its Options reports. The element
+                still draws its own background and is hit-tested against the
+                full bounds, so inner padding moves the content and nothing
+                else.
+*/
+Rectf Element::contentArea() const {
+    const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
+    const float ip    = getInnerPadding() * scale;
+    if (ip <= 0.f) return m_bounds;
+
+    return Rectf{
+        { m_bounds.position.x + ip, m_bounds.position.y + ip },
+        { std::max(0.f, m_bounds.size.x - 2.f * ip),
+          std::max(0.f, m_bounds.size.y - 2.f * ip) }
+    };
+}
+
+
 void Element::resize(const Rectf& parent) {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-    float op = m_modifier.getOuterPadding() * scale;
+    float op = getOuterPadding() * scale;
 
     auto resolveScaled = [&](Dimension dim, float parentSize) -> float {
         return dim.percent ? (dim.value / 100.f * parentSize) : (dim.value * scale);

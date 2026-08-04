@@ -16,6 +16,7 @@
 - [`resolveGradient(...)`](#resolvegradient)
 - [`tick(Rectf& parentBounds, float dt)`](#tick)
 - [`resize(const Rectf& parent)`](#resize)
+- [`contentArea()`](#contentarea)
 - [`claimsPointerEvents()`](#claimspointerevents)
 - [`checkLeftClick(const Vec2f& mousePosition)`](#checkleftclick)
 - [`checkRightClick(const Vec2f& mousePosition)`](#checkrightclick)
@@ -162,6 +163,18 @@ resize(const Rectf& parent)
 **Returns** — void
 
 Works out the element's own bounds inside the slot its parent gave it. A percent dimension is taken against the slot; a pixel dimension is multiplied by [UILO](../UILO.hpp.md#uilo)'s scale. Outer padding shrinks the element on all four sides and insets the box it is aligned within, so padding never moves a sibling. The element is then placed against that inset box according to its alignment flags, defaulting to the top-left corner.
+
+---
+
+### contentArea
+
+```cpp
+contentArea()
+```
+
+**Returns** — [Rectf](../utils/Math.hpp.md#rectf)
+
+Where this element's content belongs: its bounds inset on all four sides by the inner padding its Options reports. The element still draws its own background and is hit-tested against the full bounds, so inner padding moves the content and nothing else.
 
 ---
 

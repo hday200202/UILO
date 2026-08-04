@@ -20,6 +20,14 @@ class SpacerOptions {
 public:
     SpacerOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    SpacerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    SpacerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+
     SpacerOptions& setColor(const Color& c)           { m_color = c; return *this; }
     SpacerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
     SpacerOptions& setRounding(float r)               { m_rounding = r; return *this; }
@@ -39,6 +47,7 @@ public:
     float              getOutlineThickness() const { return m_outlineThickness; }
 
 private:
+    std::optional<float> m_outerPadding;
     Color                m_color = Color{0, 0, 0, 0};
     std::string          m_colorRole;
     std::optional<float> m_rounding;
@@ -76,6 +85,8 @@ inline float SpacerOptions::getRounding() const {
 */
 class Spacer : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     explicit Spacer(
         Modifier modifier,
         SpacerOptions options = {},

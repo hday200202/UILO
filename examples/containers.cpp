@@ -229,9 +229,8 @@ Container* buildRootContainer(UILO& ui) {
         contains {
             row(
                 Modifier()
-                    .setHeight(96_px)
-                    .setOuterPadding(8.f),
-                panelRow,
+                    .setHeight(96_px),
+                RowOptions(panelRow).setOuterPadding(8.f),
                 contains {
                     slider(
                         Modifier()
@@ -257,9 +256,9 @@ Container* buildRootContainer(UILO& ui) {
                 contains {
                     filebrowser(
                         Modifier()
-                            .setOuterPadding(8.f)
                             .setWidth(320_px),
                         FileBrowserOptions()
+                            .setOuterPadding(8.f)
                             .setRootPath("../")
                             .setFont("assets/fonts/Montserrat.ttf")
                             .setOnFileClicked([](const std::filesystem::path& p) {
@@ -294,9 +293,8 @@ Container* buildRootContainer(UILO& ui) {
                     ),
 
                     column(
-                        Modifier()
-                            .setOuterPadding(8.f),
-                        panelCol,
+                        Modifier(),
+                        ColumnOptions(panelCol).setOuterPadding(8.f),
                         contains{
                             button(
                                 Modifier()
@@ -468,9 +466,8 @@ Container* buildRootContainer(UILO& ui) {
             // constants, so a typo is a compile error rather than a blank slot.
             row(
                 Modifier()
-                    .setHeight(256_px)
-                    .setOuterPadding(8.f),
-                panelRow,
+                    .setHeight(256_px),
+                RowOptions(panelRow).setOuterPadding(8.f),
                 contains {
                     row(
                         Modifier().setHeight(48_px).setAlign(Align::CenterX | Align::CenterY),

@@ -35,6 +35,19 @@ class IconOptions {
 public:
     IconOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    IconOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    IconOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the box the glyph is fitted into. Unset follows
+    // Theme::setInnerPadding().
+    IconOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    IconOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     // Source
     IconOptions& setIcon(std::string_view name)    { m_name = std::string(name); return *this; }
     IconOptions& setFile(const std::string& path)  { m_file = path; return *this; }
@@ -70,6 +83,8 @@ public:
     float getSupersample()            const { return m_supersample; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     std::string m_name;
     std::string m_file;
     std::string m_markup;
@@ -129,6 +144,9 @@ inline bool IconOptions::hasStrokeWidth() const {
 */
 class Icon : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+    float getInnerPadding() const override { return m_options.getInnerPadding(); }
+
     explicit Icon(
         Modifier modifier,
         IconOptions options = {},

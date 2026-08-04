@@ -19,13 +19,14 @@ static Palette makePalette() {
 
 static Container* buildRoot() {
     return column(
-        Modifier().setOuterPadding(16.f),
-        ColumnOptions().setColorRole("app.bg"),
+        Modifier(),
+        ColumnOptions().setOuterPadding(16.f).setColorRole("app.bg"),
         contains{
             // Vertical fade, rounded. Position-named setters read top->bottom.
             row(
-                Modifier().setHeight(22_pct).setOuterPadding(8.f),
+                Modifier().setHeight(22_pct),
                 RowOptions()
+                    .setOuterPadding(8.f)
                     .setGradient(Gradient()
                         .setTop(Color{240, 120, 90})
                         .setBottom(Color{140, 40, 80}))
@@ -34,8 +35,9 @@ static Container* buildRoot() {
 
             // Horizontal gradient built from palette roles: follows theme.
             row(
-                Modifier().setHeight(22_pct).setOuterPadding(8.f),
+                Modifier().setHeight(22_pct),
                 RowOptions()
+                    .setOuterPadding(8.f)
                     .setGradient(Gradient()
                         .setLeft("accent")
                         .setRight("panel"))
@@ -44,8 +46,9 @@ static Container* buildRoot() {
 
             // Four explicit corners, each named by where it sits.
             row(
-                Modifier().setHeight(22_pct).setOuterPadding(8.f),
+                Modifier().setHeight(22_pct),
                 RowOptions()
+                    .setOuterPadding(8.f)
                     .setGradient(Gradient()
                         .setTopLeft(Color{80, 170, 255})
                         .setTopRight(Color{170, 80, 255})
@@ -57,8 +60,8 @@ static Container* buildRoot() {
             // Named palette gradient + a gradient button that swaps its
             // gradient from a hover callback.
             row(
-                Modifier().setHeight(22_pct).setOuterPadding(8.f),
-                RowOptions().setGradientRole("hero").setRounding(18.f),
+                Modifier().setHeight(22_pct),
+                RowOptions().setOuterPadding(8.f).setGradientRole("hero").setRounding(18.f),
                 {
                     button(
                         Modifier()

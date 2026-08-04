@@ -209,7 +209,7 @@ bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
     }
 
     const float scale = m_uiloRef->getScale();
-    const float padU  = m_target->getModifier().getOuterPadding();
+    const float padU  = m_target->getOuterPadding();
     m_dragStartW      = m_target->getBounds().size.x / scale + 2.f * padU;
     m_dragStartH      = m_target->getBounds().size.y / scale + 2.f * padU;
     m_dragStart       = mousePosition;

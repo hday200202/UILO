@@ -51,6 +51,13 @@ class DatePickerOptions {
 public:
     DatePickerOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    DatePickerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    DatePickerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     // Behaviour ---------------------------------------------------------
     DatePickerOptions& setMode(DatePickerMode m)          { m_mode = m; return *this; }
     DatePickerOptions& setFirstDayOfWeek(Weekday d)       { m_firstDayOfWeek = d; return *this; }
@@ -93,7 +100,11 @@ public:
     DatePickerOptions& setBackgroundColor(const Color& c)          { m_bgColor = c; return *this; }
     DatePickerOptions& setBackgroundColorRole(const std::string& r){ m_bgColorRole = r; return *this; }
     DatePickerOptions& setRounding(float r)               { m_rounding = r; return *this; }
+    // setInnerPadding is the spelling every other Options uses; setPadding is
+    // kept as its alias.
+    DatePickerOptions& setInnerPadding(float px)          { m_padding = px; return *this; }
     DatePickerOptions& setPadding(float px)               { m_padding = px; return *this; }
+    float              getInnerPadding()            const { return m_padding; }
 
     // Outline -------------------------------------------------------------
     // A border around the card, drawn inside its bounds. Follows
@@ -369,6 +380,7 @@ public:
     static constexpr float getButtonRoundingOptFallback() { return 6.f; }
 
 private:
+    std::optional<float> m_outerPadding;
     DatePickerMode m_mode          = DatePickerMode::Single;
     Weekday m_firstDayOfWeek       = Weekday::Sunday;
     bool m_showAdjacent            = true;
@@ -584,6 +596,8 @@ inline float DatePickerOptions::getButtonRounding() const {
 */
 class DatePicker : public Column {
 public:
+    float getOuterPadding() const override { return m_dpOptions.getOuterPadding(); }
+
     explicit DatePicker(Modifier modifier, DatePickerOptions options = {}, const std::string& name = "");
 
     const DatePickerOptions& getOptions() const { return m_dpOptions; }

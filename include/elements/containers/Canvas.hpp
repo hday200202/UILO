@@ -34,6 +34,19 @@ class CanvasOptions {
 public:
     CanvasOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    CanvasOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    CanvasOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the area its children are positioned in. Unset follows
+    // Theme::setInnerPadding().
+    CanvasOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    CanvasOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     // Backdrop fill. A gradient takes precedence over color when active;
     // setGradientRole names a gradient stored in the Palette and wins over
     // the literal gradient when it resolves.
@@ -131,6 +144,8 @@ public:
     bool          getZoomAxisY()       const { return m_zoomAxisY; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     Color       m_color         = Color{0, 0, 0, 0};
     std::string m_colorRole;
     Gradient    m_gradient;
@@ -190,6 +205,9 @@ inline float CanvasOptions::getRounding() const {
 */
 class Canvas : public Container {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+    float getInnerPadding() const override { return m_options.getInnerPadding(); }
+
     Canvas(
         Modifier modifier,
         CanvasOptions options,

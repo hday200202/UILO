@@ -431,9 +431,9 @@ Element* FileBrowser::buildHeader() {
     auto* header = new Row(
         Modifier()
             .setHeight(Dimension{o.getHeaderHeight(), false})
-            .setOuterPadding(o.getHeaderPadding())
             .ignoreScroll(true),
         RowOptions()
+            .setOuterPadding(o.getHeaderPadding())
             .setColor(o.getHeaderColor())
             .setColorRole(o.getHeaderColorRole())
             .inheritRounding(o.getHeaderRoundingOpt(),
@@ -742,8 +742,7 @@ Element* FileBrowser::buildRow(FSEntry* entry, int depth) {
             .setBold(isDir && o.getBoldDirectories()));
 
     Modifier rowModifier = Modifier()
-        .setHeight(Dimension{o.getEntryHeight(), false})
-        .setOuterPadding(o.getEntryPadding());
+        .setHeight(Dimension{o.getEntryHeight(), false});
 
     rowModifier.setOnLeftClick([this, path, isDir](Element*) {
         handleEntryClicked(path, isDir);
@@ -761,6 +760,7 @@ Element* FileBrowser::buildRow(FSEntry* entry, int depth) {
     RowOptions rowOpts = RowOptions()
         .setColor(baseColor)
         .setColorRole(baseRole)
+        .setOuterPadding(o.getEntryPadding())
         .inheritRounding(o.getEntryRoundingOpt(),
                          FileBrowserOptions::getEntryRoundingOptFallback());
 

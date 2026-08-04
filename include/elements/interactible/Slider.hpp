@@ -52,6 +52,13 @@ enum class SliderOrientation { Horizontal, Vertical };
 class SliderOptions {
 public:
     SliderOptions() = default;
+
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    SliderOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    SliderOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
     
     SliderOptions& setTrackColor(Color c)               { m_trackColor = c;         return *this; }
     SliderOptions& setTrackColorRole(const std::string& r) { m_trackColorRole = r;  return *this; }
@@ -92,6 +99,7 @@ public:
     const ValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
+    std::optional<float> m_outerPadding;
     Color            m_trackColor      = Color{60, 60, 60, 255};
     std::string          m_trackColorRole = "panelAlt";
     Color            m_fillColor       = Color::White;
@@ -151,6 +159,8 @@ inline float SliderOptions::getThumbRounding() const {
 */
 class Slider : public Interactible {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     Slider(
         Modifier modifier,
         SliderOptions options = {},

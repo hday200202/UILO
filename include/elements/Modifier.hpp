@@ -141,8 +141,6 @@ public:
     template <class F> Modifier& setOnUpdateStart(F&& f);
     template <class F> Modifier& setOnUpdateEnd(F&& f);
 
-    Modifier& setOuterPadding(float padding);
-    Modifier& clearOuterPadding();
     Modifier& setVisible(bool visible);
     Modifier& ignoreScroll(bool ignore);
     Modifier& setFreePosition(const Vec2f& freePos);
@@ -160,7 +158,6 @@ public:
     const FuncPtr&       getOnUpdateStart()  const;
     const FuncPtr&       getOnUpdateEnd()    const;
     const ScrollFuncPtr& getOnScroll()       const;
-    float                getOuterPadding()   const;
     bool                 getVisible()        const;
     bool                 getIgnoreScroll()   const;
     Vec2f                getFreePosition()   const;
@@ -181,7 +178,6 @@ private:
     FuncPtr       m_onUpdateEnd;
     ScrollFuncPtr m_onScroll;
 
-    std::optional<float> m_outerPadding;
     bool                 m_visible      = true;
     bool                 m_ignoreScroll = false;
     Vec2f                m_freePosition = {0.f, 0.f};

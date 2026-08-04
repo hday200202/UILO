@@ -299,17 +299,21 @@ void Canvas::update(Rectf& parentBounds, float dt) {
            children both pick up the per-axis zoom. */
         const Dimension dw = child->getModifier().getWidth();
         const Dimension dh = child->getModifier().getHeight();
-        const float intrinsicW = dw.percent ? (dw.value * 0.01f * m_bounds.size.x)
+        /* Positions are relative to the content area, so inner padding insets
+           the whole canvas surface rather than only its edges. */
+        const Rectf area = contentArea();
+
+        const float intrinsicW = dw.percent ? (dw.value * 0.01f * area.size.x)
                                             : (dw.value * baseScale);
-        const float intrinsicH = dh.percent ? (dh.value * 0.01f * m_bounds.size.y)
+        const float intrinsicH = dh.percent ? (dh.value * 0.01f * area.size.y)
                                             : (dh.value * baseScale);
         const float finalW = intrinsicW * m_zoomX;
         const float finalH = intrinsicH * m_zoomY;
 
         Rectf childBounds;
         childBounds.position = {
-            m_bounds.position.x + (canvasPos.x - m_pan.x) * m_zoomX,
-            m_bounds.position.y + (canvasPos.y - m_pan.y) * m_zoomY,
+            area.position.x + (canvasPos.x - m_pan.x) * m_zoomX,
+            area.position.y + (canvasPos.y - m_pan.y) * m_zoomY,
         };
         childBounds.size = { finalW, finalH };
 

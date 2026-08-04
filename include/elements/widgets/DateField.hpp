@@ -37,6 +37,13 @@ class DateFieldOptions {
 public:
     DateFieldOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    DateFieldOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    DateFieldOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     // Value -------------------------------------------------------------
     // DateAndTime pattern for the value once one is picked.
     DateFieldOptions& setFormat(const std::string& pattern)  { m_format = pattern; return *this; }
@@ -65,7 +72,11 @@ public:
     DateFieldOptions& setHoverColorRole(const std::string& r)      { m_hoverColorRole = r; return *this; }
     DateFieldOptions& setRounding(float r)                    { m_rounding = r; return *this; }
     // Inset at each end of the row, ahead of the icon and after the chevron.
+    // setInnerPadding is the spelling every other Options uses; setPadding is
+    // kept as its alias.
+    DateFieldOptions& setInnerPadding(float px)               { m_padding = px; return *this; }
     DateFieldOptions& setPadding(float px)                    { m_padding = px; return *this; }
+    float             getInnerPadding()                 const { return m_padding; }
 
     // Outline -------------------------------------------------------------
     // A border around the field, drawn inside its bounds. Follows
@@ -181,6 +192,7 @@ public:
     static constexpr float getRoundingOptFallback() { return 8.f; }
 
 private:
+    std::optional<float> m_outerPadding;
     std::string m_format      = "MMM D, YYYY";
     std::string m_placeholder = "Pick a date";
     std::optional<Date> m_initialDate;
@@ -282,6 +294,8 @@ inline const std::string& DateFieldOptions::getFontPath() const {
 */
 class DateField : public Row {
 public:
+    float getOuterPadding() const override { return m_dfOptions.getOuterPadding(); }
+
     explicit DateField(Modifier modifier, DateFieldOptions options = {}, const std::string& name = "");
 
     const DateFieldOptions& getOptions() const { return m_dfOptions; }

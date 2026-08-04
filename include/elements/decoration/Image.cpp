@@ -268,7 +268,7 @@ void Image::render() {
         : literal;
 
     m_uiloRef->getRenderer().drawImage(
-        m_bounds, tex, tint, {{0.f, 0.f}, {1.f, 1.f}},
+        contentArea(), tex, tint, {{0.f, 0.f}, {1.f, 1.f}},
         m_options.getFlipH(), m_options.getFlipV(),
         m_options.getClipEllipse());
 }

@@ -29,6 +29,13 @@ class DropdownOptions {
 public:
     DropdownOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    DropdownOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    DropdownOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     DropdownOptions& setHeaderColor(Color c)      { m_headerColor = c;    return *this; }
     DropdownOptions& setHeaderColorRole(const std::string& r) { m_headerColorRole = r; return *this; }
     DropdownOptions& setHeaderRounding(float r)       { m_headerRounding = r; return *this; }
@@ -170,6 +177,7 @@ public:
     static constexpr float getPopupRoundingOptFallback() { return 0.f; }
 
 private:
+    std::optional<float> m_outerPadding;
     Color        m_headerColor     = Color{60, 60, 60, 255};
     std::string  m_headerColorRole  = "panelAlt";
     std::optional<float>        m_headerRounding;
@@ -237,6 +245,8 @@ private:
 */
 class Dropdown : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     Dropdown(
         Modifier modifier,
         DropdownOptions options,

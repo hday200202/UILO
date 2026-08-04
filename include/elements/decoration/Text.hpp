@@ -26,6 +26,19 @@ class TextOptions {
 public:
     TextOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    TextOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    TextOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the box the text is laid out in. Unset follows
+    // Theme::setInnerPadding().
+    TextOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    TextOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     TextOptions& setFont(std::string_view path)   { m_fontPath = std::string(path); return *this; }
     TextOptions& setContent(const std::string& s)   { m_content = s; return *this; }
     TextOptions& setCharSize(unsigned int n)        { m_charSize = n; return *this; }
@@ -54,6 +67,8 @@ public:
     Align              getTextAlignY()    const { return m_textAlignY; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     std::string                 m_fontPath;
     std::string                 m_content;
     std::optional<unsigned int> m_charSize;
@@ -118,6 +133,9 @@ inline unsigned int TextOptions::getCharSize() const {
 */
 class Text : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+    float getInnerPadding() const override { return m_options.getInnerPadding(); }
+
     explicit Text(
         Modifier modifier,
         TextOptions options = {},

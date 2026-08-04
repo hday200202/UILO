@@ -969,7 +969,7 @@ std::string ownHeightExpr(Element* el, Axis parentAxis, bool parentScrolls,
                           const std::string& parentHeight) {
     const Modifier& mod = el->getModifier();
     const Dimension h   = mod.getHeight();
-    const float op      = mod.getOuterPadding();
+    const float op      = el->getOuterPadding();
 
     if (!h.percent) return px(h.value - 2.f * op);
 
@@ -1021,7 +1021,13 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         css += std::string("cursor:") + c + ";";
     }
 
-    const float op = mod.getOuterPadding();
+    const float op = el->getOuterPadding();
+
+    /* Inner padding is CSS padding. UILO sizes with border-box, so it insets the
+       content without growing the element -- which is what the native side does
+       through contentBounds()/contentArea(). */
+    const float ip = el->getInnerPadding();
+    if (ip > 0.f) css += "padding:" + px(ip) + ";";
 
 
     /* Box: size, spacing and placement within the parent */

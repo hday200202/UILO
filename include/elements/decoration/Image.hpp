@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../utils/Theme.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -24,6 +26,19 @@ class ImageOptions {
 public:
     ImageOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    ImageOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    ImageOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the box the image is fitted into. Unset follows
+    // Theme::setInnerPadding().
+    ImageOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    ImageOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     ImageOptions& setPath(const std::string& path)    { m_path = path; return *this; }
     ImageOptions& setColor(const Color& c)            { m_color = c; return *this; }
     ImageOptions& setColorRole(const std::string& r)  { m_colorRole = r; return *this; }
@@ -45,6 +60,8 @@ public:
     bool               getFlipV()             const { return m_flipV; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     std::string m_path;
     Color       m_color = Color::White;
     std::string m_colorRole;
@@ -79,6 +96,9 @@ private:
 */
 class Image : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+    float getInnerPadding() const override { return m_options.getInnerPadding(); }
+
     explicit Image(
         Modifier modifier,
         ImageOptions options = {},
