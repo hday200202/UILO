@@ -27,6 +27,13 @@ class TextboxOptions {
 public:
     TextboxOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    TextboxOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    TextboxOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     // Font
     TextboxOptions& setFont(std::string_view path) { m_fontPath = std::string(path); return *this; }
 
@@ -43,7 +50,10 @@ public:
     TextboxOptions& setBackgroundColor(Color c)  { m_bgColor = c;          return *this; }
     TextboxOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole = r; return *this; }
     TextboxOptions& setRounding(float r)             { m_rounding = r;         return *this; }
-    // Uniform padding (sets all four sides)
+    // Uniform padding: setInnerPadding is the spelling every other Options
+    // uses, setPadding is kept as its alias, and the per-side setters below
+    // override either one.
+    TextboxOptions& setInnerPadding(float p)         { m_paddingLeft = m_paddingRight = m_paddingTop = m_paddingBottom = p; return *this; }
     TextboxOptions& setPadding(float p)              { m_paddingLeft = m_paddingRight = m_paddingTop = m_paddingBottom = p; return *this; }
     TextboxOptions& setPaddingLeft(float p)          { m_paddingLeft = p;       return *this; }
     TextboxOptions& setPaddingRight(float p)         { m_paddingRight = p;      return *this; }
@@ -182,6 +192,7 @@ public:
     const std::function<void(const std::string&)>& getOnEnterPressed()  const { return m_onEnterPressed; }
 
 private:
+    std::optional<float> m_outerPadding;
     std::string        m_fontPath;
     std::optional<unsigned int> m_charSize;
     Color              m_textColor        = Color::White;
@@ -299,6 +310,8 @@ inline float TextboxOptions::getRounding() const {
 */
 class Textbox : public Interactible {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     explicit Textbox(
         Modifier modifier,
         TextboxOptions options = {},

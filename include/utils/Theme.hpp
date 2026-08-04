@@ -63,6 +63,9 @@ public:
     Theme& setRounding(float r)               { m_rounding = r; return *this; }
     /* Inset applied to every element that has not asked for its own. */
     Theme& setOuterPadding(float px)          { m_outerPadding = px; return *this; }
+    /* Gap between an element's edge and its content, for every element that
+       holds content and has not asked for its own. */
+    Theme& setInnerPadding(float px)          { m_innerPadding = px; return *this; }
     Theme& setCharSize(unsigned int n)         { m_charSize = n; return *this; }
     /* Path to a .ttf, or empty for the embedded default face. */
     Theme& setFont(const std::string& path)    { m_font = path; return *this; }
@@ -71,6 +74,7 @@ public:
     Theme& clearPalette()         { m_palette.reset();      return *this; }
     Theme& clearRounding()        { m_rounding.reset();     return *this; }
     Theme& clearOuterPadding()    { m_outerPadding.reset(); return *this; }
+    Theme& clearInnerPadding()    { m_innerPadding.reset(); return *this; }
     Theme& clearCharSize()        { m_charSize.reset();     return *this; }
     Theme& clearFont()            { m_font.reset();         return *this; }
     Theme& clearIconStrokeWidth() { m_iconStroke.reset();   return *this; }
@@ -80,6 +84,7 @@ public:
     const std::optional<Palette>&      paletteOpt()      const { return m_palette; }
     const std::optional<float>&        roundingOpt()     const { return m_rounding; }
     const std::optional<float>&        outerPaddingOpt() const { return m_outerPadding; }
+    const std::optional<float>&        innerPaddingOpt() const { return m_innerPadding; }
     const std::optional<unsigned int>& charSizeOpt()     const { return m_charSize; }
     const std::optional<std::string>&  fontOpt()         const { return m_font; }
     const std::optional<float>&        iconStrokeOpt()   const { return m_iconStroke; }
@@ -89,6 +94,7 @@ public:
        then the. */
     static float        resolveRounding(const std::optional<float>& own, float fallback);
     static float        resolveOuterPadding(const std::optional<float>& own, float fallback);
+    static float        resolveInnerPadding(const std::optional<float>& own, float fallback);
     static unsigned int resolveCharSize(const std::optional<unsigned int>& own, unsigned int fallback);
     static float        resolveIconStrokeWidth(const std::optional<float>& own, float fallback);
     /* A font path uses "" for unset, the convention everywhere else in the
@@ -104,6 +110,7 @@ private:
     std::optional<Palette>      m_palette;
     std::optional<float>        m_rounding;
     std::optional<float>        m_outerPadding;
+    std::optional<float>        m_innerPadding;
     std::optional<unsigned int> m_charSize;
     std::optional<std::string>  m_font;
     std::optional<float>        m_iconStroke;

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <optional>
+
+#include "../../utils/Theme.hpp"
+
 #include "Interactible.hpp"
 
 namespace uilo {
@@ -25,6 +29,14 @@ enum class ResizerDir { Left, Right, Top, Bottom };
 */
 class ResizerOptions {
 public:
+
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    ResizerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    ResizerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     ResizerOptions& setDirection(ResizerDir d)      { m_direction       = d; return *this; }
     ResizerOptions& setThickness(float t)           { m_thickness       = t; return *this; }
     ResizerOptions& setColor(Color c)   { m_color = c; return *this; }
@@ -48,6 +60,7 @@ public:
     Dimension  getResizeHeightStep()const { return m_resizeHeightStep; }
 
 private:
+    std::optional<float> m_outerPadding;
     ResizerDir m_direction       = ResizerDir::Right;
     float      m_thickness       = 8.f;
     Color   m_color = Color{0,0,0,0};
@@ -79,6 +92,8 @@ private:
 */
 class Resizer : public Interactible {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     explicit Resizer(
         Modifier modifier = {},
         ResizerOptions options = {},

@@ -253,13 +253,16 @@ void Column::update(Rectf& parentBounds, float dt) {
                 column.
 */
 void Column::updateScrollable(float dt, float scale) {
+    /* Children live inside the inner padding; the container's own bounds do not move. */
+    const Rectf area = contentArea();
+
     std::vector<Element*> pinnedTop;
     std::vector<Element*> pinnedMid;
     std::vector<Element*> pinnedBottom;
 
     auto resolvedPinnedH = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? (m_bounds.size.y * dim.value / 100.f) : dim.value * scale;
+        return dim.percent ? (area.size.y * dim.value / 100.f) : dim.value * scale;
     };
 
     float pinnedTopH = 0.f;
@@ -290,20 +293,20 @@ void Column::updateScrollable(float dt, float scale) {
         float cursorY = startY;
         for (auto* child : group) {
             const float rh = resolvedPinnedH(child);
-            Rectf slot{{m_bounds.position.x, cursorY}, {m_bounds.size.x, rh}};
+            Rectf slot{{area.position.x, cursorY}, {area.size.x, rh}};
             child->tick(slot, dt);
             cursorY += rh;
         }
     };
 
-    layoutPinnedGroup(pinnedTop, m_bounds.position.y);
-    layoutPinnedGroup(pinnedMid, m_bounds.position.y + (m_bounds.size.y - pinnedMidH) * 0.5f);
-    layoutPinnedGroup(pinnedBottom, m_bounds.position.y + m_bounds.size.y - pinnedBottomH);
+    layoutPinnedGroup(pinnedTop, area.position.y);
+    layoutPinnedGroup(pinnedMid, area.position.y + (area.size.y - pinnedMidH) * 0.5f);
+    layoutPinnedGroup(pinnedBottom, area.position.y + area.size.y - pinnedBottomH);
 
     /* Whatever the pinned strips did not take is the scrolling viewport. */
-    Rectf scrollViewport = m_bounds;
+    Rectf scrollViewport = area;
     scrollViewport.position.y += pinnedTopH;
-    scrollViewport.size.y = std::max(0.f, m_bounds.size.y - pinnedTopH - pinnedBottomH);
+    scrollViewport.size.y = std::max(0.f, area.size.y - pinnedTopH - pinnedBottomH);
     m_scrollViewportHeight = scrollViewport.size.y;
 
     /* Lay the scrolling children out, displaced by the scroll offset. */
@@ -348,6 +351,9 @@ void Column::updateScrollable(float dt, float scale) {
                 the bottom edge.
 */
 void Column::updateFlow(float dt, float scale) {
+    /* Children live inside the inner padding; the container's own bounds do not move. */
+    const Rectf area = contentArea();
+
     /* First pass: bucket the children by alignment, and total how much height is
        fixed against how many percent units are asking for the rest. */
     std::vector<Element*> top;
@@ -373,7 +379,7 @@ void Column::updateFlow(float dt, float scale) {
 
     /* What is left after the fixed-height children, and the height of a single
        percent-unit slot. */
-    const float remaining   = m_bounds.size.y - totalFixed;
+    const float remaining   = area.size.y - totalFixed;
     const float pctSlotH    = totalPct > 0.f ? (remaining * 100.f / totalPct) : remaining;
 
     /* resolvedH is what a child draws at; slotSizeY is what advances the cursor,
@@ -412,17 +418,17 @@ void Column::updateFlow(float dt, float scale) {
             else                                        slotY = cursorY;
 
             Rectf slot;
-            slot.position   = { m_bounds.position.x, slotY };
-            slot.size       = { m_bounds.size.x, sh};
+            slot.position   = { area.position.x, slotY };
+            slot.size       = { area.size.x, sh};
             child->tick(slot, dt);
             cursorY += rh;
         }
     };
 
     /* Top from the top edge, mid centred, bottom anchored to the bottom edge. */
-    layoutGroup(top, m_bounds.position.y);
-    layoutGroup(mid, m_bounds.position.y + (m_bounds.size.y - midH) * 0.5f);
-    layoutGroup(bot, m_bounds.position.y + m_bounds.size.y - botH);
+    layoutGroup(top, area.position.y);
+    layoutGroup(mid, area.position.y + (area.size.y - midH) * 0.5f);
+    layoutGroup(bot, area.position.y + area.size.y - botH);
 }
 
 
@@ -443,6 +449,9 @@ void Column::updateFlow(float dt, float scale) {
                 neighbour its direction points at as the element it drags.
 */
 void Column::layoutResizers(float dt, float scale) {
+    /* Children live inside the inner padding; the container's own bounds do not move. */
+    const Rectf area = contentArea();
+
     for (size_t i = 0; i < m_children.size(); ++i) {
         auto* child = m_children[i];
         if (child->getType() != ElementType::Resizer) continue;
@@ -460,16 +469,16 @@ void Column::layoutResizers(float dt, float scale) {
         }
 
         float bEdge = prevEl ? (prevEl->getBounds().position.y + prevEl->getBounds().size.y
-                                + prevEl->getModifier().getOuterPadding() * scale)
-                             : m_bounds.position.y;
+                                + prevEl->getOuterPadding() * scale)
+                             : area.position.y;
         float tEdge = nextEl ? (nextEl->getBounds().position.y
-                                - nextEl->getModifier().getOuterPadding() * scale)
-                             : (m_bounds.position.y + m_bounds.size.y);
+                                - nextEl->getOuterPadding() * scale)
+                             : (area.position.y + area.size.y);
 
         const bool hasPrev = (prevEl != nullptr);
         const bool hasNext = (nextEl != nullptr);
         float boundY = hasPrev && hasNext ? (bEdge + tEdge) * 0.5f
-                                          : (hasPrev ? bEdge : (hasNext ? tEdge : (m_bounds.position.y + m_bounds.size.y * 0.5f)));
+                                          : (hasPrev ? bEdge : (hasNext ? tEdge : (area.position.y + area.size.y * 0.5f)));
 
         float lftX = 0.f;
         float rgtX = 0.f;
@@ -484,12 +493,12 @@ void Column::layoutResizers(float dt, float scale) {
             lftX = nextEl->getBounds().position.x;
             rgtX = nextEl->getBounds().position.x + nextEl->getBounds().size.x;
         } else {
-            lftX = m_bounds.position.x;
-            rgtX = m_bounds.position.x + m_bounds.size.x;
+            lftX = area.position.x;
+            rgtX = area.position.x + area.size.x;
         }
 
         Dimension hitDim = r->getModifier().getHeight();
-        float hitH = hitDim.percent ? (m_bounds.size.y * hitDim.value / 100.f)
+        float hitH = hitDim.percent ? (area.size.y * hitDim.value / 100.f)
                                     : hitDim.value * scale;
         const float spanW = std::max(0.f, rgtX - lftX);
         const Dimension widthDim = r->getModifier().getWidth();
@@ -535,13 +544,17 @@ void Column::layoutResizers(float dt, float scale) {
 void Column::tickHiddenChildren(float dt) {
     if (!m_uiloRef || !m_uiloRef->isForcingTreeUpdate()) return;
 
+    /* Children live inside the inner padding; the container's own bounds do not move. */
+    const Rectf area = contentArea();
+
+
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
         if (child->getModifier().getVisible()) continue;
 
         Rectf slot = child->getBounds();
         if (slot.size.x <= 0.f || slot.size.y <= 0.f) {
-            slot.position = m_bounds.position;
+            slot.position = area.position;
             slot.size = {0.f, 0.f};
         }
         child->tick(slot, dt);

@@ -49,6 +49,13 @@ class TerminalOptions {
 public:
     TerminalOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    TerminalOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    TerminalOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
     // Shell. Empty follows $SHELL, then /bin/sh.
     TerminalOptions& setShell(const std::string& s)      { m_shell = s; return *this; }
     // Start the shell on the first update rather than waiting for start().
@@ -67,7 +74,11 @@ public:
     TerminalOptions& setForegroundColor(const Color& c)          { m_fgColor = c; return *this; }
     TerminalOptions& setForegroundColorRole(const std::string& r){ m_fgColorRole = r; return *this; }
     TerminalOptions& setRounding(float r)                { m_rounding = r; return *this; }
+    // Gap between the widget's edge and the character grid. setInnerPadding is
+    // the spelling every other Options uses; setPadding is kept as its alias.
+    TerminalOptions& setInnerPadding(float p)             { m_padding = p; return *this; }
     TerminalOptions& setPadding(float p)                 { m_padding = p; return *this; }
+    float            getInnerPadding()             const { return m_padding; }
 
     // Cursor
     TerminalOptions& setCursorColor(const Color& c)           { m_cursorColor = c; return *this; }
@@ -118,6 +129,7 @@ public:
     const std::function<void(const std::string&)>& getOnOutput() const { return m_onOutput; }
 
 private:
+    std::optional<float> m_outerPadding;
     std::string m_shell;
     bool        m_autoStart = true;
 
@@ -241,6 +253,8 @@ inline float TerminalOptions::getRounding() const {
 */
 class Terminal : public Interactible {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     explicit Terminal(
         Modifier modifier,
         TerminalOptions options = {},
@@ -351,6 +365,9 @@ private:
     void sendKey(SDL_Keycode key, bool shift, bool ctrl);
 
     // ---- geometry -----------------------------------------------------
+    // Deliberately shadows Element::contentArea(): a terminal insets by its
+    // own TerminalOptions::setPadding rather than the generic inner padding,
+    // because the grid has to be measured against exactly this rect.
     Rectf contentArea() const;
     float gridTopY() const;
     void  remeasure(float dt);

@@ -98,10 +98,33 @@ int main() {
     /* Outer padding shrinks the child inside its own slot without moving siblings. */
     runCase("row flow: outer padding",
         row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
-            spacer(Modifier().setWidth(200_px).setHeight(100_pct).setOuterPadding(12.f)),
-            spacer(Modifier().setWidth(200_px).setHeight(100_pct).setOuterPadding(0.f)),
-            spacer(Modifier().setWidth(30_pct).setHeight(60_pct).setOuterPadding(25.f)
-                             .setAlign(Align::CenterX | Align::CenterY)),
+            spacer(Modifier().setWidth(200_px).setHeight(100_pct),
+                   SpacerOptions().setOuterPadding(12.f)),
+            spacer(Modifier().setWidth(200_px).setHeight(100_pct),
+                   SpacerOptions().setOuterPadding(0.f)),
+            spacer(Modifier().setWidth(30_pct).setHeight(60_pct)
+                             .setAlign(Align::CenterX | Align::CenterY),
+                   SpacerOptions().setOuterPadding(25.f)),
+        }), parent);
+
+    /* Inner padding insets the area children are laid out in, without moving
+       the container itself. Both spacers should start 20px in and be 40px
+       shorter than the row. */
+    runCase("row flow: inner padding",
+        row(Modifier().setWidth(100_pct).setHeight(100_pct),
+            RowOptions().setInnerPadding(20.f), contains{
+            sp(200_px, 100_pct), sp(200_px, 100_pct),
+        }), parent);
+
+    /* Inner and outer padding compose: the outer one shrinks each child in its
+       own slot, the inner one shrinks the slots. */
+    runCase("column flow: inner + outer padding",
+        column(Modifier().setWidth(100_pct).setHeight(100_pct),
+               ColumnOptions().setInnerPadding(10.f), contains{
+            spacer(Modifier().setWidth(100_pct).setHeight(100_px),
+                   SpacerOptions().setOuterPadding(5.f)),
+            spacer(Modifier().setWidth(100_pct).setHeight(100_px),
+                   SpacerOptions()),
         }), parent);
 
     /* Scrollable row: overflowing content, offset still at rest. */

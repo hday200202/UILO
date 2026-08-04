@@ -39,6 +39,19 @@ class FileBrowserOptions {
 public:
     FileBrowserOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    FileBrowserOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    FileBrowserOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the area its entries are laid out in. Unset follows
+    // Theme::setInnerPadding().
+    FileBrowserOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    FileBrowserOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     // Source
     FileBrowserOptions& setRootPath(const std::string& p)   { m_rootPath = p; return *this; }
 
@@ -308,6 +321,8 @@ public:
     static constexpr float getHeaderRoundingOptFallback() { return 0.f; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     std::string m_rootPath;
 
     Color       m_bgColor       = Color{0, 0, 0, 0};
@@ -543,6 +558,9 @@ inline float FileBrowserOptions::getDirectoryArrowBlockWidth() const {
 */
 class FileBrowser : public Column {
 public:
+    float getOuterPadding() const override { return m_fbOptions.getOuterPadding(); }
+    float getInnerPadding() const override { return m_fbOptions.getInnerPadding(); }
+
     explicit FileBrowser(
         Modifier modifier,
         FileBrowserOptions options = {},

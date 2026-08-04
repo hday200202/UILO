@@ -410,8 +410,13 @@ void Icon::render() {
     const Color tint = m_uiloRef->getPalette().resolve(
         m_options.getColorRole(), m_options.getColor());
 
-    const uint32_t pxW = static_cast<uint32_t>(std::lround(m_bounds.size.x));
-    const uint32_t pxH = static_cast<uint32_t>(std::lround(m_bounds.size.y));
+    /* Rasterise at the size the glyph will actually be drawn at, which is the
+       content area rather than the whole box once inner padding is in play. */
+    const Rectf area = contentArea();
+    if (area.size.x <= 0.f || area.size.y <= 0.f) return;
+
+    const uint32_t pxW = static_cast<uint32_t>(std::lround(area.size.x));
+    const uint32_t pxH = static_cast<uint32_t>(std::lround(area.size.y));
     if (!ensureRaster(pxW, pxH, tint)) return;
 
     Texture tex;
@@ -419,19 +424,19 @@ void Icon::render() {
     tex.width  = static_cast<uint16_t>(m_rasterTexW);
     tex.height = static_cast<uint16_t>(m_rasterTexH);
 
-    Rectf dst = m_bounds;
+    Rectf dst = area;
     if (m_options.getPreserveAspect()) {
         /* Letterbox: the raster is aspect-correct, so centre it. */
         const float aspect = static_cast<float>(m_rasterTexW) /
                              static_cast<float>(m_rasterTexH);
-        float w = m_bounds.size.x;
+        float w = area.size.x;
         float h = w / aspect;
-        if (h > m_bounds.size.y) {
-            h = m_bounds.size.y;
+        if (h > area.size.y) {
+            h = area.size.y;
             w = h * aspect;
         }
-        dst.position.x = m_bounds.position.x + (m_bounds.size.x - w) * 0.5f;
-        dst.position.y = m_bounds.position.y + (m_bounds.size.y - h) * 0.5f;
+        dst.position.x = area.position.x + (area.size.x - w) * 0.5f;
+        dst.position.y = area.position.y + (area.size.y - h) * 0.5f;
         dst.size = { w, h };
     }
 

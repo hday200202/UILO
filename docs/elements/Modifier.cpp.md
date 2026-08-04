@@ -9,8 +9,6 @@
 - [`setWidth(Dimension dim)`](#setwidth)
 - [`setHeight(Dimension dim)`](#setheight)
 - [`setAlign(Align alignment)`](#setalign)
-- [`setOuterPadding(float padding)`](#setouterpadding)
-- [`clearOuterPadding()`](#clearouterpadding)
 - [`setVisible(bool visible)`](#setvisible)
 - [`ignoreScroll(bool ignore)`](#ignorescroll)
 - [`setFreePosition(const Vec2f& freePos)`](#setfreeposition)
@@ -27,7 +25,6 @@
 - [`getOnUpdateStart()`](#getonupdatestart)
 - [`getOnUpdateEnd()`](#getonupdateend)
 - [`getOnScroll()`](#getonscroll)
-- [`getOuterPadding()`](#getouterpadding)
 - [`getVisible()`](#getvisible)
 - [`getIgnoreScroll()`](#getignorescroll)
 - [`getFreePosition()`](#getfreeposition)
@@ -82,34 +79,6 @@ setAlign(Align alignment)
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
 Sets where the element sits inside the slot its parent gives it. Horizontal and vertical flags combine with `|`.
-
----
-
-### setOuterPadding
-
-```cpp
-setOuterPadding(float padding)
-```
-
-**Parameters**
-
-- `float padding`
-
-**Returns** — [Modifier](Modifier.hpp.md#modifier)&
-
-Inset on all four sides, within the slot the parent gives this element. Shrinks the element rather than moving its siblings.
-
----
-
-### clearOuterPadding
-
-```cpp
-clearOuterPadding()
-```
-
-**Returns** — [Modifier](Modifier.hpp.md#modifier)&
-
-Hands a manually set padding back to the theme, so the element follows Theme::setOuterPadding() again.
 
 ---
 
@@ -324,18 +293,6 @@ getOnScroll()
 **Returns** — const ScrollFuncPtr&
 
 The scroll handler, empty when none was set.
-
----
-
-### getOuterPadding
-
-```cpp
-getOuterPadding()
-```
-
-**Returns** — float
-
-The inset to apply, resolved in three steps: the value this element was given, then the active Theme's, then 0. Resolved on every read, so changing the Theme re-spaces a tree that is already on screen.
 
 ---
 

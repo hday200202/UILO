@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
 
     constexpr int kRows = 30, kCols = 30;
     Column* root = column(
-        Modifier().setOuterPadding(4.f),
-        ColumnOptions().setColor(Color{24, 25, 34, 255}));
+        Modifier(),
+        ColumnOptions().setOuterPadding(4.f).setColor(Color{24, 25, 34, 255}));
     root->addElement(text(
         Modifier().setHeight(Dimension{24.f, false}),
         TextOptions().setContent("The quick brown fox jumps over the lazy dog 0123456789")
@@ -74,17 +74,16 @@ int main(int argc, char** argv) {
         TextOptions().setContent("UILO render bench - draw calls & CPU ms")
                      .setCharSize(18).setColor(Color{200, 220, 255, 255})));
     for (int r = 0; r < kRows; ++r) {
-        Row* rowEl = row(Modifier().setHeight(Dimension{100.f / kRows, true})
-                                   .setOuterPadding(1.f),
-                         RowOptions());
+        Row* rowEl = row(Modifier().setHeight(Dimension{100.f / kRows, true}),
+                         RowOptions().setOuterPadding(1.f));
         for (int c = 0; c < kCols; ++c) {
             const uint8_t cr = (uint8_t)(40 + (r * 7 + c * 13) % 180);
             const uint8_t cg = (uint8_t)(40 + (r * 11 + c * 5) % 180);
             const uint8_t cb = (uint8_t)(60 + (r * 3 + c * 17) % 160);
             rowEl->addElement(
-                row(Modifier().setWidth(Dimension{100.f / kCols, true})
-                              .setOuterPadding(1.f),
-                    RowOptions().setColor(Color{cr, cg, cb, 255})));
+                row(Modifier().setWidth(Dimension{100.f / kCols, true}),
+                    RowOptions().setOuterPadding(1.f)
+                                .setColor(Color{cr, cg, cb, 255})));
         }
         root->addElement(rowEl);
     }

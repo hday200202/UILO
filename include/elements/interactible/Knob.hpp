@@ -1,5 +1,9 @@
 #pragma once
 
+#include <optional>
+
+#include "../../utils/Theme.hpp"
+
 #include <functional>
 #include <SDL3/SDL.h>
 
@@ -39,6 +43,13 @@ enum class KnobArcDir { Clockwise, CounterClockwise };
 class KnobOptions {
 public:
     KnobOptions() = default;
+
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    KnobOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    KnobOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
 
     // Colors
     KnobOptions& setBodyColor(Color c)        { m_bodyColor = c;       return *this; }
@@ -112,6 +123,7 @@ public:
     const KnobValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
+    std::optional<float> m_outerPadding;
     Color m_bodyColor          = Color{55, 58, 74};
     std::string m_bodyColorRole      = "panel";
     Color m_outlineColor       = Color::Transparent;
@@ -159,6 +171,8 @@ private:
 */
 class Knob : public Interactible {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     Knob(
         Modifier modifier,
         KnobOptions options = {},

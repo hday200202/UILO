@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
 
 Page* buildMainPage() {
     return page(
-        column(Modifier().setOuterPadding(0.f), ColumnOptions(), contains {
+        column(Modifier(), ColumnOptions().setOuterPadding(0.f), contains {
             terminal(
                 Modifier(),
                 TerminalOptions()

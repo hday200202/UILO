@@ -94,7 +94,6 @@ Container* buildTopBar() {
     return row(
         Modifier()
             .setHeight(64_px)
-            .setOuterPadding(4.f)
             .setOnHoverEnter( [](Row* r) { 
                 r->getOptions().setColorRole("panelHover"); 
             })
@@ -102,6 +101,7 @@ Container* buildTopBar() {
                 r->getOptions().setColorRole("panel"); 
             }),
         RowOptions()
+            .setOuterPadding(4.f)
             .setColorRole("panel"),
         contains{}
     );
@@ -117,9 +117,9 @@ Container* buildFilebrowser(const std::filesystem::path& path) {
     return filebrowser(
         Modifier()
             .setAlign(Align::Left | Align::Top)
-            .setWidth(256_px)
-            .setOuterPadding(4.f),
+            .setWidth(256_px),
         FileBrowserOptions()
+            .setOuterPadding(4.f)
             .setRootPath(path.string())
             .setScrollSpeed(50.f)
             // .setSelectedColorRole("accent")
@@ -133,9 +133,9 @@ Container* buildFilebrowser(const std::filesystem::path& path) {
 */
 Container* buildMainContentContainer() {
     return column(
-        Modifier()
-            .setOuterPadding(4.f),
+        Modifier(),
         ColumnOptions()
+            .setOuterPadding(4.f)
             .setColorRole("panel")
             .setScrollable(true),
     contains {
@@ -165,9 +165,9 @@ Container* buildMainContentContainer() {
 Container* buildBottomBar() {
     return row(
         Modifier()
-            .setOuterPadding(4.f)
             .setHeight(256_px),
         RowOptions()
+            .setOuterPadding(4.f)
             .setColorRole("panel"),
         contains {
             terminal(
@@ -194,9 +194,9 @@ Container* buildBottomBar() {
 Container* buildMainContentContainerChildRow(const std::string& text) {
     return row(
         Modifier()
-            .setOuterPadding(4.f)
             .setHeight(64_px),
         RowOptions()
+            .setOuterPadding(4.f)
             .setColorRole("infoPanel")
     );
 }
@@ -211,10 +211,10 @@ Container* panel(
 ) {
     if (isColumn) return column(
         Modifier()
-            .setOuterPadding(4.f)
             .setWidth(width)
             .setHeight(height),
         ColumnOptions()
+            .setOuterPadding(4.f)
             .setColorRole("panel")
             .setScrollable(scrollable),
         children
@@ -222,10 +222,10 @@ Container* panel(
 
     return row(
         Modifier()
-            .setOuterPadding(4.f)
             .setWidth(width)
             .setHeight(height),
         RowOptions()
+            .setOuterPadding(4.f)
             .setColorRole("panel")
             .setScrollable(scrollable),
         children
@@ -274,7 +274,8 @@ Page* buildMainPage() {
         column(
             Modifier(),
             ColumnOptions()
-                .setColorRole("background"),
+                .setColorRole("background")
+                .setInnerPadding(4.f),
         contains{
             row(
                 Modifier(),

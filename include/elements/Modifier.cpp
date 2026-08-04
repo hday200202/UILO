@@ -44,26 +44,6 @@ Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *thi
 
 
 /*
-    setOuterPadding(float padding):
-    - Params:   float padding
-    - Returns:  Modifier&
-    - Desc:     Inset on all four sides, within the slot the parent gives this
-                element. Shrinks the element rather than moving its siblings.
-*/
-Modifier& Modifier::setOuterPadding(float padding) { m_outerPadding = padding; return *this; }
-
-
-/*
-    clearOuterPadding():
-    - Params:   none
-    - Returns:  Modifier&
-    - Desc:     Hands a manually set padding back to the theme, so the element
-                follows Theme::setOuterPadding() again.
-*/
-Modifier& Modifier::clearOuterPadding()            { m_outerPadding.reset();  return *this; }
-
-
-/*
     setVisible(bool visible):
     - Params:   bool visible
     - Returns:  Modifier&
@@ -224,18 +204,6 @@ const FuncPtr& Modifier::getOnUpdateEnd() const { return m_onUpdateEnd; }
     - Desc:     The scroll handler, empty when none was set.
 */
 const ScrollFuncPtr& Modifier::getOnScroll() const { return m_onScroll; }
-
-
-/*
-    getOuterPadding():
-    - Params:   none
-    - Returns:  float
-    - Desc:     The inset to apply, resolved in three steps: the value this
-                element was given, then the active Theme's, then 0. Resolved on
-                every read, so changing the Theme re-spaces a tree that is
-                already on screen.
-*/
-float Modifier::getOuterPadding() const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
 
 
 /*

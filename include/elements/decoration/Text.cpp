@@ -173,15 +173,15 @@ void Text::update(Rectf& parentBounds, float dt) {
     /* No explicit char size, so the height drives it. */
     if (!m_options.hasCharSize()) {
         const unsigned int autoCs = std::max(1u,
-            static_cast<unsigned int>(m_bounds.size.y * 0.6f / scale));
+            static_cast<unsigned int>(contentArea().size.y * 0.6f / scale));
         if (autoCs != m_charSize) {
             m_charSize   = autoCs;
             needRebuild  = true;
         }
     }
 
-    if (m_options.getWrap() && m_bounds.size.x != m_lastWrapWidth) {
-        m_lastWrapWidth = m_bounds.size.x;
+    if (m_options.getWrap() && contentArea().size.x != m_lastWrapWidth) {
+        m_lastWrapWidth = contentArea().size.x;
         needRebuild = true;
     }
     if (scale != m_lastScale) {
@@ -220,15 +220,17 @@ void Text::render() {
     const TextMetrics& m = m_cachedMetrics;
 
     /* Place the measured block inside the element's own bounds. */
-    Vec2f pos = m_bounds.position;
+    /* Laid out inside the inner padding rather than against the raw bounds. */
+    const Rectf area = contentArea();
+    Vec2f pos = area.position;
     switch (m_options.getTextAlignX()) {
-        case Align::CenterX: pos.x += (m_bounds.size.x - m.size.x) * 0.5f; break;
-        case Align::Right:   pos.x += (m_bounds.size.x - m.size.x);        break;
+        case Align::CenterX: pos.x += (area.size.x - m.size.x) * 0.5f; break;
+        case Align::Right:   pos.x += (area.size.x - m.size.x);        break;
         default: break;
     }
     switch (m_options.getTextAlignY()) {
-        case Align::CenterY: pos.y += (m_bounds.size.y - m.size.y) * 0.5f; break;
-        case Align::Bottom:  pos.y += (m_bounds.size.y - m.size.y);        break;
+        case Align::CenterY: pos.y += (area.size.y - m.size.y) * 0.5f; break;
+        case Align::Bottom:  pos.y += (area.size.y - m.size.y);        break;
         default: break;
     }
 

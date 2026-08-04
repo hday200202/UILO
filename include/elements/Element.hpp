@@ -108,6 +108,19 @@ public:
     // the fingers have left.
     virtual bool wantsScrollMomentum() const { return true; }
 
+    // Padding lives in each widget's Options rather than in Modifier: not every
+    // element can hold content, so having the outer one on Modifier and the
+    // inner one on Options would split a single idea across two objects. Layout
+    // is generic, so it asks through these and each widget answers from its own
+    // Options. Zero for an element whose Options does not offer one.
+    virtual float getOuterPadding() const { return 0.f; }
+    virtual float getInnerPadding() const { return 0.f; }
+
+    // The element's bounds inset by its inner padding: where its content goes.
+    // Never inverted -- padding wider than the box collapses the area to zero
+    // rather than turning it inside out.
+    Rectf contentArea() const;
+
     void resize(const Rectf& parent);
 
     virtual void collectResizers(std::vector<Element*>&) {}

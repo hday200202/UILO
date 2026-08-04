@@ -123,16 +123,15 @@ Two details worth knowing up front:
 
 ## Core Concepts
 
-### Modifier — layout and events
+### Modifier — position, size and events
 
-Every element takes a `Modifier` for what all elements share: size, alignment, callbacks, padding, visibility, cursor.
+`Modifier` carries what every element shares: where it sits and how big it is, plus its callbacks. Anything about how an element *looks* — padding included — belongs to its Options.
 
 ```cpp
 Modifier()
     .setWidth(50_pct)                      // 50% of the space left by fixed siblings
     .setHeight(100_px)
     .setAlign(Align::CenterX | Align::Top) // one flag per axis, OR'd
-    .setOuterPadding(8.f)
     .setCursor(CursorType::Hand)           // while the pointer is over it
     .setOnLeftClick([](Element* e)  { /* ... */ })
     .setOnHoverEnter([](Element* e) { /* ... */ })
@@ -172,6 +171,34 @@ SliderOptions()
     .setOrientation(SliderOrientation::Horizontal)
     .setOnValueChanged([](float v) { /* ... */ })
 ```
+
+### Padding
+
+Both kinds live in the Options, not the Modifier — not every element can hold
+content, so keeping the outer one on `Modifier` and the inner one on Options
+would split one idea across two objects.
+
+```cpp
+RowOptions()
+    .setOuterPadding(8.f)   // space outside the row, inside the slot its parent gave it
+    .setInnerPadding(12.f)  // space between the row's edge and its children
+```
+
+- **Outer padding** shrinks the element within its own slot, so it never displaces
+  a sibling. Every Options has it.
+- **Inner padding** insets the element's content. Only elements that hold content
+  have it: the containers (`Row`, `Column`, `Canvas`), `Button` (its label),
+  `Text`, `Image`, `Icon`, and `FileBrowser`. `Textbox`, `Terminal`, `DatePicker`
+  and `DateField` have it too, where `setPadding` is kept as an alias for the
+  same thing.
+
+They compose: an inner padding of 10 on a column plus an outer padding of 5 on a
+child puts that child 15 from the column's edge. Neither moves the container
+itself — its background, outline and hit area still use its full bounds.
+
+Both fall back to `Theme::setOuterPadding()` / `Theme::setInnerPadding()` when
+unset, and `clearOuterPadding()` / `clearInnerPadding()` return an element to
+following the theme.
 
 ### Dimension literals
 
@@ -405,7 +432,7 @@ The floating layer is the only thing ticked, hit-tested and drawn above the page
 
 ## Key APIs
 
-### UILO
+### UILO (application)
 
 ```cpp
 UILO(Renderer& renderer, Page* page);
@@ -441,9 +468,8 @@ Mousebinds& getMousebinds();
 
 ```cpp
 .setWidth(Dimension)     .setHeight(Dimension)    .setAlign(Align)
-.setOuterPadding(float)  .clearOuterPadding()     .setVisible(bool)
-.setCursor(CursorType)   .clearCursor()           .ignoreScroll(bool)
-.setFreePosition(Vec2f)  .setMaterial(Material)
+.setVisible(bool)        .ignoreScroll(bool)      .setFreePosition(Vec2f)
+.setCursor(CursorType)   .clearCursor()           .setMaterial(Material)
 
 .setOnLeftClick(cb)      .setOnRightClick(cb)
 .setOnHoverEnter(cb)     .setOnHoverExit(cb)      .setOnHover(cb)

@@ -3,7 +3,7 @@
 Generated from the block comments in `include/` by `tools/gen_docs.py`.
 Edit the comments, not these files.
 
-80 files, 97 types, 825 functions.
+80 files, 97 types, 824 functions.
 
 ## elements
 

@@ -11,6 +11,7 @@
 - [`reset()`](#reset)
 - [`resolveRounding(const std::optional&lt;float&gt;& own, float fallback)`](#resolverounding)
 - [`resolveOuterPadding(const std::optional&lt;float&gt;& own, float fallback)`](#resolveouterpadding)
+- [`resolveInnerPadding(const std::optional&lt;float&gt;& own, float fallback)`](#resolveinnerpadding)
 - [`resolveCharSize(const std::optional&lt;unsigned int&gt;& own, unsigned int fallback)`](#resolvecharsize)
 - [`resolveIconStrokeWidth(const std::optional&lt;float&gt;& own, float fallback)`](#resolveiconstrokewidth)
 - [`resolveFont(const std::string& own)`](#resolvefont)
@@ -90,6 +91,23 @@ resolveOuterPadding(const std::optional<float>& own, float fallback)
 **Returns** — float
 
 As resolveRounding(), for an element's inset.
+
+---
+
+### resolveInnerPadding
+
+```cpp
+resolveInnerPadding(const std::optional<float>& own, float fallback)
+```
+
+**Parameters**
+
+- `const std::optional<float>& own`
+- `float fallback`
+
+**Returns** — float
+
+As resolveOuterPadding(), for the gap between an element's edge and the content it holds.
 
 ---
 

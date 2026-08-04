@@ -68,6 +68,20 @@ float Theme::resolveOuterPadding(const std::optional<float>& own, float fallback
 
 
 /*
+    resolveInnerPadding(const std::optional<float>& own, float fallback):
+    - Params:   const std::optional<float>& own, float fallback
+    - Returns:  float
+    - Desc:     As resolveOuterPadding(), for the gap between an element's edge
+                and the content it holds.
+*/
+float Theme::resolveInnerPadding(const std::optional<float>& own, float fallback) {
+    if (own) return *own;
+    if (const auto& themed = current().innerPaddingOpt()) return *themed;
+    return fallback;
+}
+
+
+/*
     resolveCharSize(const std::optional<unsigned int>& own, unsigned int fallback):
     - Params:   const std::optional<unsigned int>& own, unsigned int fallback
     - Returns:  unsigned int

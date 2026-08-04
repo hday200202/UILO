@@ -22,6 +22,19 @@ class ButtonOptions {
 public:
     ButtonOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    ButtonOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    ButtonOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the box its label sits in. Unset follows
+    // Theme::setInnerPadding().
+    ButtonOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    ButtonOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     ButtonOptions& setColor(const Color& c)              { m_color = c; return *this; }
     ButtonOptions& setColorRole(const std::string& r)    { m_colorRole = r; return *this; }
     ButtonOptions& setGradient(const Gradient& g)        { m_gradient = g; return *this; }
@@ -52,6 +65,8 @@ public:
     Text* getLabel() const { return m_label; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     Color       m_color = Color{0, 0, 0, 0};
     std::string m_colorRole;
     Gradient    m_gradient;
@@ -119,6 +134,9 @@ inline float ButtonOptions::getRounding() const {
 */
 class Button : public Row {
 public:
+    float getOuterPadding() const override { return m_buttonOptions.getOuterPadding(); }
+    float getInnerPadding() const override { return m_buttonOptions.getInnerPadding(); }
+
     explicit Button(
         Modifier modifier,
         ButtonOptions options = {},

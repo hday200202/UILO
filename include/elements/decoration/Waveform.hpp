@@ -50,6 +50,14 @@ class WaveformOptions {
 public:
     WaveformOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    WaveformOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    WaveformOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+
     WaveformOptions& setColor(Color c)                  { m_color = c; return *this; }
     WaveformOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
 
@@ -96,6 +104,7 @@ public:
     float              getGain()                    const { return m_gain; }
 
 private:
+    std::optional<float> m_outerPadding;
     Color       m_color = Color{255, 255, 255, 255};
     std::string m_colorRole;
     Color       m_leftColor = Color{0, 0, 0, 0};   /* a == 0 -> use m_color */
@@ -142,6 +151,8 @@ inline float WaveformOptions::getRounding() const {
 */
 class Waveform : public Element {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+
     explicit Waveform(
         Modifier modifier,
         WaveformOptions options = {},

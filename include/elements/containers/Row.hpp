@@ -22,6 +22,19 @@ class RowOptions {
 public:
     RowOptions() = default;
 
+    // Space kept outside this element, inside the slot its parent gave it. It
+    // shrinks the element rather than displacing a sibling. Unset follows
+    // Theme::setOuterPadding().
+    RowOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
+    RowOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
+    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+
+    // Space kept between this element's edge and the area its children are laid out in. Unset follows
+    // Theme::setInnerPadding().
+    RowOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
+    RowOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
+    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+
     // Background
     RowOptions& setColor(const Color& c)              { m_color = c; return *this; }
     RowOptions& setColorRole(const std::string& r)    { m_colorRole = r; return *this; }
@@ -105,6 +118,8 @@ public:
     const std::string& getZoomLink()  const { return m_zoomLink; }
 
 private:
+    std::optional<float> m_outerPadding;
+    std::optional<float> m_innerPadding;
     Color       m_color = Color{0, 0, 0, 0};
     std::string m_colorRole;
     Gradient    m_gradient;
@@ -191,6 +206,9 @@ inline float RowOptions::getRounding() const {
 */
 class Row : public Container {
 public:
+    float getOuterPadding() const override { return m_options.getOuterPadding(); }
+    float getInnerPadding() const override { return m_options.getInnerPadding(); }
+
     using Container::Container;
 
     explicit Row(
