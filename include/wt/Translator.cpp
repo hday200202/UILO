@@ -14,6 +14,7 @@
 #include <Wt/WCssStyleSheet.h>
 #include <Wt/WImage.h>
 #include <Wt/WJavaScript.h>
+#include <Wt/WEvent.h>
 #include <Wt/WLineEdit.h>
 #include <Wt/WLink.h>
 #include <Wt/WSlider.h>
@@ -228,6 +229,7 @@ struct Background {
     Color       outlineColor{0, 0, 0, 0};
     std::string outlineColorRole;
     float       outlineThickness = 0.f;
+    bool        showScrollbar = false;   /* keep the native scrollbar visible */
 };
 
 /*
@@ -254,7 +256,7 @@ bool backgroundOf(Element* el, Background& out) {
             out = { o.getColor(), o.getColorRole(), o.getGradient(),
                     o.getGradientRole(), o.getRounding(), o.getScrollable(),
                     o.getOutlineColor(), o.getOutlineColorRole(),
-                    o.getOutlineThickness() };
+                    o.getOutlineThickness(), o.getShowScrollbar() };
             return true;
         }
         case ElementType::Column:
@@ -263,7 +265,7 @@ bool backgroundOf(Element* el, Background& out) {
             out = { o.getColor(), o.getColorRole(), o.getGradient(),
                     o.getGradientRole(), o.getRounding(), o.getScrollable(),
                     o.getOutlineColor(), o.getOutlineColorRole(),
-                    o.getOutlineThickness() };
+                    o.getOutlineThickness(), o.getShowScrollbar() };
             return true;
         }
         case ElementType::Spacer: {
@@ -1349,10 +1351,12 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         if (bg.scrollable) {
             css += isRowLike(el->getType()) ? "overflow-x:auto;overflow-y:hidden;"
                                             : "overflow-y:auto;overflow-x:hidden;";
-            /* Hide the native scrollbar while keeping the container scrollable
-               (wheel/touch/keys still work). */
-            css += "scrollbar-width:none;-ms-overflow-style:none;";
-            pseudo.emplace_back("::-webkit-scrollbar", "display:none;");
+            /* Hide the native scrollbar by default (wheel/touch/keys still work);
+               setShowScrollbar(true) keeps it on -- what a long page wants. */
+            if (!bg.showScrollbar) {
+                css += "scrollbar-width:none;-ms-overflow-style:none;";
+                pseudo.emplace_back("::-webkit-scrollbar", "display:none;");
+            }
         } else {
             css += "overflow:hidden;";
         }
@@ -1929,6 +1933,15 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
                 if (o.getMaxLength() > 0)    e->setMaxLength(o.getMaxLength());
                 if (o.getPasswordMode())     e->setEchoMode(Wt::EchoMode::Password);
                 e->changed().connect([this, tb, e] {
+                    tb->setString(e->text().toUTF8());
+                    if (const auto& cb = tb->getOptions().getOnStringChanged())
+                        cb(e->text().toUTF8());
+                    sync();
+                });
+                /* Live updates: report every keystroke through onStringChanged
+                   (changed() alone only fires on commit), so filters and the
+                   like react as the user types. */
+                e->keyWentUp().connect([this, tb, e](const Wt::WKeyEvent&) {
                     tb->setString(e->text().toUTF8());
                     if (const auto& cb = tb->getOptions().getOnStringChanged())
                         cb(e->text().toUTF8());

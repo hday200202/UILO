@@ -1,0 +1,31 @@
+# Normalize line endings across platforms.
+# Anything git detects as text is stored with LF in the repository and
+# checked out with LF, regardless of each developer's core.autocrlf setting.
+* text=auto eol=lf
+
+# Source
+*.hpp   text eol=lf
+*.cpp   text eol=lf
+*.h     text eol=lf
+*.mm    text eol=lf
+*.sc    text eol=lf
+*.py    text eol=lf
+
+# Build / config
+*.cmake text eol=lf
+*.txt   text eol=lf
+*.sh    text eol=lf
+*.md    text eol=lf
+*.svg   text eol=lf
+
+# Binary — never touch these
+*.ttf   binary
+*.lib   binary
+*.a     binary
+*.so    binary
+*.dylib binary
+*.dll   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
