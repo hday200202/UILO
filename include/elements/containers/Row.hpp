@@ -51,6 +51,7 @@ public:
 
     // Scrolling
     RowOptions& setScrollable(bool v)                { m_scrollable = v; return *this; }
+    RowOptions& setShowScrollbar(bool v)             { m_showScrollbar = v; return *this; }
     RowOptions& setScrollSpeed(float s)              { m_scrollSpeed = s; return *this; }
     RowOptions& setScrollMin(float v)                { m_scrollMin = v; m_scrollMinSet = true; return *this; }
     RowOptions& setScrollMax(float v)                { m_scrollMax = v; m_scrollMaxSet = true; return *this; }
@@ -92,6 +93,7 @@ public:
     float              getOutlineThickness() const { return m_outlineThickness; }
 
     bool               getScrollable()  const { return m_scrollable; }
+    bool               getShowScrollbar() const { return m_showScrollbar; }
     float              getScrollSpeed() const { return m_scrollSpeed; }
     float              getScrollMin()   const { return m_scrollMin; }
     float              getScrollMax()   const { return m_scrollMax; }
@@ -133,6 +135,7 @@ private:
     float       m_outlineThickness = 0.f;
 
     bool        m_scrollable   = false;
+    bool        m_showScrollbar = false;
     float       m_scrollSpeed  = 40.f;
     float       m_scrollMin    = 0.f;
     float       m_scrollMax    = 0.f;
