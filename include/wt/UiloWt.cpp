@@ -23,15 +23,34 @@ namespace {
 
 /*
     UiloApplication:
-    - Desc: One browser connection. Renders the shared UILO into this
-            connection's Wt widgets and keeps them in step through a Translator.
-            There is no per-application UILO or builder any more -- every
-            connection reflects the one UILO that runWeb() was called on.
+    - Desc: One browser connection. Renders a UILO into this connection's Wt
+            widgets and keeps them in step through a Translator.
+
+            Which UILO depends on how the server was started. The shared form
+            takes one by reference and every connection reflects it. The
+            per-session form hands over a WebApp this application then owns, so
+            the UILO -- and the application state behind it -- is this
+            connection's alone and dies with it.
 */
 class UiloApplication : public Wt::WApplication {
 public:
     UiloApplication(const Wt::WEnvironment& env, UILO& ui, const WebConfig& config)
         : Wt::WApplication(env), m_ui(ui) {
+        init(config);
+    }
+
+    UiloApplication(const Wt::WEnvironment& env, std::unique_ptr<WebApp> owned,
+                    const WebConfig& config)
+        : Wt::WApplication(env), m_owned(std::move(owned)), m_ui(m_owned->ui()) {
+        init(config);
+    }
+
+    // Re-reads the UILO and pushes what changed. Every event runs this through
+    // the translator; the timer helper calls it directly.
+    void sync() { m_translator->sync(); }
+
+private:
+    void init(const WebConfig& config) {
         setTitle(Wt::WString::fromUTF8(config.title));
         addBaseRules();
 
@@ -44,11 +63,6 @@ public:
         m_translator->sync();
     }
 
-    // Re-reads the UILO and pushes what changed. Every event runs this through
-    // the translator; the timer helper calls it directly.
-    void sync() { m_translator->sync(); }
-
-private:
     void addBaseRules() {
         auto& sheet = styleSheet();
         sheet.addRule("html, body",
@@ -66,6 +80,9 @@ private:
         sheet.addRule(".uilo-resizer:hover .uilo-resizer-bar", "opacity:1;");
     }
 
+    // m_owned is declared first on purpose: in the per-session form m_ui is a
+    // reference into it, and members are initialised in declaration order.
+    std::unique_ptr<WebApp>             m_owned;   // null in the shared form
     UILO&                               m_ui;
     Wt::WContainerWidget*               m_host = nullptr;
     std::unique_ptr<detail::Translator> m_translator;
@@ -90,6 +107,45 @@ void every(std::chrono::milliseconds interval, std::function<void()> fn) {
 } // namespace wt
 
 
+namespace wt {
+namespace {
+
+/*
+    serverArgs():
+    - Wt is configured from a command line; synthesize one from the config so
+      the caller passes nothing. Returned as strings -- WRun wants char*, which
+      the callers point at these.
+*/
+std::vector<std::string> serverArgs(const WebConfig& config) {
+    std::vector<std::string> args = {
+        "uilo",
+        "--docroot",      config.docRoot,
+        "--http-address", config.address,
+        "--http-port",    std::to_string(config.port),
+    };
+    if (!config.resourcesDir.empty()) {
+        args.emplace_back("--resources-dir");
+        args.push_back(config.resourcesDir);
+    }
+    return args;
+}
+
+
+/*
+    argPointers():
+    - The char* view of serverArgs()'s strings that WRun takes.
+*/
+std::vector<char*> argPointers(std::vector<std::string>& args) {
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (std::string& a : args) argv.push_back(a.data());
+    return argv;
+}
+
+} // namespace
+} // namespace wt
+
+
 /*
     UILO::runWeb(const WebConfig& config):
     - Serves this UILO over the web and blocks until the server stops. Set the
@@ -97,33 +153,56 @@ void every(std::chrono::milliseconds interval, std::function<void()> fn) {
       stands up Wt, points every browser connection at this instance, and
       returns the server's exit code. No render/update loop and no argv -- the
       server settings come from the config.
+
+      Every connection shares this instance, and Wt drives connections from
+      different threads: two browsers are two views of one UI, with no lock
+      between them. Use the factory overload for anything multi-user.
 */
 int UILO::runWeb(const wt::WebConfig& config) {
     // The web build never draws, but UILO still expects a renderer to exist.
     static Renderer headless;
     setRenderer(headless);
 
-    // Wt is configured from a command line; synthesize one from the config so
-    // the caller passes nothing.
-    const std::string port = std::to_string(config.port);
-    std::vector<std::string> args = {
-        "uilo",
-        "--docroot",      config.docRoot,
-        "--http-address", config.address,
-        "--http-port",    port,
-    };
-    if (!config.resourcesDir.empty()) {
-        args.emplace_back("--resources-dir");
-        args.push_back(config.resourcesDir);
-    }
-    std::vector<char*> argv;
-    argv.reserve(args.size());
-    for (std::string& a : args) argv.push_back(a.data());
+    std::vector<std::string> args = wt::serverArgs(config);
+    std::vector<char*>       argv = wt::argPointers(args);
 
     UILO& ui = *this;
     return Wt::WRun(static_cast<int>(argv.size()), argv.data(),
         [&ui, config](const Wt::WEnvironment& env) {
             return std::make_unique<wt::UiloApplication>(env, ui, config);
+        });
+}
+
+
+/*
+    UILO::runWeb(factory, const WebConfig& config):
+    - The per-session counterpart: serves an app whose UILO is built fresh for
+      each browser connection, and blocks until the server stops.
+
+      `factory` runs once per connection, on that connection's own thread, and
+      builds that session's UILO the same way a desktop app builds its one
+      (addPage/setPage/setPalette). The WebApp it returns is owned by the
+      connection and destroyed with it, so sessions share no pages, no palette
+      and no application state -- and cannot race each other's widget trees.
+
+      Anything the factory itself touches is still shared, so whatever it reads
+      (a global theme, a file on disk) has to be safe to read from several
+      threads at once.
+*/
+int UILO::runWeb(std::function<std::unique_ptr<wt::WebApp>()> factory,
+                 const wt::WebConfig& config) {
+    // One headless renderer for every session: the web build never draws, and
+    // UILO only requires that a renderer exist.
+    static Renderer headless;
+
+    std::vector<std::string> args = wt::serverArgs(config);
+    std::vector<char*>       argv = wt::argPointers(args);
+
+    return Wt::WRun(static_cast<int>(argv.size()), argv.data(),
+        [factory, config](const Wt::WEnvironment& env) {
+            std::unique_ptr<wt::WebApp> app = factory();
+            app->ui().setRenderer(headless);
+            return std::make_unique<wt::UiloApplication>(env, std::move(app), config);
         });
 }
 

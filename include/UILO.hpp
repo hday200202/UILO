@@ -19,6 +19,7 @@
 namespace uilo {
 
 class Interactible;
+class UILO;
 
 #ifdef UILO_WT
 namespace wt {
@@ -42,6 +43,24 @@ struct WebConfig {
     std::string fontFamily =
         "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     float       charSizeToFontSize = 0.86f;
+};
+
+
+/*
+    WebApp:
+    - Desc: One browser session's UILO, plus whatever else has to stay alive for
+            as long as that session does. Implement it on the type that owns
+            your UILO and hand a factory to the per-session runWeb: the server
+            makes one per connection and destroys it when the connection ends,
+            so every browser gets its own pages, palette and application state.
+
+            The single-instance runWeb needs none of this -- there, every
+            connection shares the one UILO it was called on.
+*/
+class WebApp {
+public:
+    virtual ~WebApp() = default;
+    virtual UILO& ui() = 0;
 };
 }
 #endif
@@ -100,7 +119,18 @@ public:
     // the UILO exactly as on desktop (addPage/setPage/setPalette/callbacks)
     // first; runWeb translates the active page, drives it from browser events,
     // and follows setPage() for navigation. `config` is server-side only.
+    //
+    // Every connection shares this one instance: two browsers are two views of
+    // the same UI, and they are driven from different threads. Single-user
+    // tools want this; anything else wants the factory form below.
     int runWeb(const wt::WebConfig& config = {});
+
+    // Per-session form. `factory` is called once per browser connection, on
+    // that connection's thread, and the WebApp it returns lives and dies with
+    // the connection -- so each browser gets its own UILO and its own state,
+    // and no two sessions touch the same tree.
+    static int runWeb(std::function<std::unique_ptr<wt::WebApp>()> factory,
+                      const wt::WebConfig& config = {});
 #endif
 
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
