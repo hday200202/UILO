@@ -42,6 +42,30 @@ bool Container::isDirty() const {
 
 
 /*
+    floatingAt(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  Element* -- the floating child that owns the pointer, or nullptr
+    - Desc:     The topmost visible floating child containing the position.
+                Whoever finds one stops there: a floating child is a surface laid
+                over its siblings, so it takes the event whether or not anything
+                in it claims pointer events. Were it offered the event and then
+                allowed to decline, a panel of plain labels would let the button
+                underneath light up through it. Searched in reverse because the
+                last child is drawn last, and an invisible one is not there at
+                all.
+*/
+Element* Container::floatingAt(const Vec2f& mousePosition) const {
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+        Element* child = *it;
+        const Modifier& mod = child->getModifier();
+        if (!mod.isFloating() || !mod.getVisible()) continue;
+        if (child->getBounds().contains(mousePosition)) return child;
+    }
+    return nullptr;
+}
+
+
+/*
     checkLeftClick(const Vec2f& mousePosition):
     - Params:   const Vec2f& mousePosition
     - Returns:  bool -- true when the click was claimed here or below
@@ -51,23 +75,21 @@ bool Container::isDirty() const {
                 an indent Spacer -- sit inside a clickable row without
                 swallowing the press. Resizers are skipped; they are hit-tested
                 separately because they sit outside the layout flow.
+    - A floating child under the pointer short-circuits all of that: it is the
+      only thing offered the click, and the event is reported consumed however it
+      answers.
 */
 bool Container::checkLeftClick(const Vec2f& mousePosition) {
-    bool childClicked = false;
-
     /* A press on a draggable floating child starts a drag rather than being
        treated as an ordinary click on it. */
-    if (beginFloatingDrag(mousePosition)) return claimsPointerEvents();
+    if (beginFloatingDrag(mousePosition)) return true;
 
-    /* Floating children are on top, so they get the pointer first, topmost
-       (last drawn) first. */
-    for (auto it = m_children.rbegin(); it != m_children.rend() && !childClicked; ++it) {
-        Element* child = *it;
-        if (!child->getModifier().isFloating()) continue;
-        if (child->getBounds().contains(mousePosition))
-            childClicked |= child->checkLeftClick(mousePosition);
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkLeftClick(mousePosition);
+        return true;
     }
 
+    bool childClicked = false;
     for (auto& child : m_children) {
         if (childClicked) break;
         if (child->getType() == ElementType::Resizer) continue;
@@ -92,15 +114,12 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
     - Desc:     As checkLeftClick, for the right button.
 */
 bool Container::checkRightClick(const Vec2f& mousePosition) {
-    bool childClicked = false;
-
-    for (auto it = m_children.rbegin(); it != m_children.rend() && !childClicked; ++it) {
-        Element* child = *it;
-        if (!child->getModifier().isFloating()) continue;
-        if (child->getBounds().contains(mousePosition))
-            childClicked |= child->checkRightClick(mousePosition);
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkRightClick(mousePosition);
+        return true;
     }
 
+    bool childClicked = false;
     for (auto& child : m_children) {
         if (childClicked) break;
         if (child->getModifier().isFloating()) continue;
@@ -127,27 +146,29 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
                 container claims the hover itself only when no child did and the
                 cursor is inside it, and requests the hand cursor when it has a
                 click handler of its own.
+    - When a floating child owns the pointer, every other child is told the cursor
+      is nowhere and the container does not claim the hover either: it is behind
+      the panel, so its own handlers have no business firing.
 */
 bool Container::checkHover(const Vec2f& mousePosition) {
-    bool childHovered = false;
+    static constexpr Vec2f kNowhere{-1e9f, -1e9f};
 
-    /* Topmost first, so a floating panel shields what it covers. */
-    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
-        Element* child = *it;
-        if (!child->getModifier().isFloating()) continue;
-        if (child->checkHover(mousePosition)) childHovered = true;
-    }
+    Element* top = floatingAt(mousePosition);
+    bool childHovered = false;
 
     for (auto& child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
-        if (child->getModifier().isFloating()) continue;
-        /* Anything under a floating child is told the pointer is elsewhere, so
-           its hover state clears instead of sticking. */
-        if (child->checkHover(childHovered ? Vec2f{-1e9f, -1e9f} : mousePosition))
+        /* Only the owner is told where the pointer is; the rest have to hear that
+           it is nowhere so their hover clears. A floating child that is not the
+           owner is blind either way -- otherwise a hidden one, whose stale bounds
+           still cover the cursor, would light up. */
+        const bool owns  = child == top;
+        const bool blind = !owns && (top || child->getModifier().isFloating());
+        if (child->checkHover(blind ? kNowhere : mousePosition))
             childHovered = true;
     }
 
-    const bool inside = !childHovered && m_bounds.contains(mousePosition);
+    const bool inside = !childHovered && !top && m_bounds.contains(mousePosition);
 
     if (inside && !m_hovered) {
         m_hovered = true; m_dirty = true;
@@ -159,7 +180,7 @@ bool Container::checkHover(const Vec2f& mousePosition) {
 
     if (inside && m_uiloRef && m_modifier.getOnLeftClick())
         m_uiloRef->requestCursor(CursorType::Hand, 1);
-    return childHovered || (inside && claimsPointerEvents());
+    return childHovered || top != nullptr || (inside && claimsPointerEvents());
 }
 
 
@@ -172,6 +193,8 @@ bool Container::checkHover(const Vec2f& mousePosition) {
                 the first that takes it, and otherwise falls back to the
                 Modifier's onScroll handler. A plain Container does not scroll
                 itself -- Row and Column override this.
+    - A floating child under the pointer swallows the event even when it scrolls
+      nothing, or the view behind it would slide out from under the cursor.
 */
 bool Container::checkScroll(
     const Vec2f& mousePosition,
@@ -179,9 +202,16 @@ bool Container::checkScroll(
     bool precise,
     bool momentum
 ) {
-    for (auto& child : m_children)
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
+
+    for (auto& child : m_children) {
+        if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+    }
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta);
@@ -205,9 +235,16 @@ bool Container::checkScroll(
     bool precise,
     bool momentum
 ) {
-    for (auto& child : m_children)
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
+
+    for (auto& child : m_children) {
+        if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+    }
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta.y);
@@ -225,12 +262,22 @@ bool Container::checkScroll(
     - Desc:     Offers the zoom to every child under the cursor without stopping
                 at the first taker, so the deepest or last-drawn one wins. A
                 Canvas drawn over its siblings needs that to claim the gesture.
+                A floating child under the pointer takes the gesture alone, which
+                is also what stops Row and Column from zooming themselves under
+                one.
 */
 bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkZoom(mousePosition, magnification);
+        return true;
+    }
+
     bool consumed = false;
-    for (auto& child : m_children)
+    for (auto& child : m_children) {
+        if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             if (child->checkZoom(mousePosition, magnification)) consumed = true;
+    }
     return consumed;
 }
 

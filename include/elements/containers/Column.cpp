@@ -878,6 +878,8 @@ void Column::setZoomY(float z) {
                 marks a trackpad's pixel delta, which is scaled against
                 scrollSpeed differently from a wheel's discrete step because the
                 OS already supplies the momentum tail.
+    - A floating child under the pointer takes the event and the column does not
+      scroll, so the view does not slide out from under a panel laid over it.
 */
 bool Column::checkScroll(
     const Vec2f& mousePosition,
@@ -886,6 +888,11 @@ bool Column::checkScroll(
     bool momentum
 ) {
     if (!m_bounds.contains(mousePosition)) return false;
+
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
 
     if (m_options.getScrollable()) {
         for (auto* child : m_children)
@@ -921,6 +928,11 @@ bool Column::checkScroll(
     bool momentum
 ) {
     if (!m_bounds.contains(mousePosition)) return false;
+
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
 
     bool consumed = false;
     for (auto* child : m_children)

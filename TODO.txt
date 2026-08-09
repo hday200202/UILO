@@ -385,8 +385,11 @@ How to verify the merge
   cases that exercise divergence 1, where Row's resizer bounds should change.
   Case 12 ("column flow: resizers, cross-axis align") is the one to read
   carefully when accepting the new golden output.
-  Probe source: tools/layout_probe.cpp (checked in, not wired into CMake --
-  build instructions are in its header comment).
+  Probe source: tools/layout_probe.cpp, run with `tools/probe.sh layout`
+  (--baseline saves the golden output, --check diffs against it).
+  tools/pointer_probe.cpp is its counterpart for pointer events -- who ends up
+  hovered, whose handlers fire, what a floating child shields -- and checks
+  itself: `tools/probe.sh pointer`.
 
 
 ================================================================================

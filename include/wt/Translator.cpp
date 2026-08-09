@@ -217,6 +217,22 @@ Axis axisOf(Element* el) {
     return isRowLike(el->getType()) ? Axis::Row : Axis::Column;
 }
 
+/*
+    hasFloatingChild(Container* c):
+    - Params:   Container* c
+    - Returns:  bool
+    - Desc:     Whether the container holds a floating child. Such a child is
+                absolutely positioned against the container, so the container has
+                to be a containing block for it -- and only then, since making
+                every box positioned would move them all into the browser's
+                positioned-descendant paint layer for nothing.
+*/
+bool hasFloatingChild(Container* c) {
+    for (Element* child : c->getChildren())
+        if (child->getModifier().isFloating()) return true;
+    return false;
+}
+
 /* Row, Column and Button all carry the same background vocabulary but on
    unrelated options types, so each caller unpacks it into this. */
 struct Background {
@@ -979,6 +995,31 @@ std::string ownHeightExpr(Element* el, Axis parentAxis, bool parentScrolls,
 }
 
 /*
+    floatingHeightExpr(Element* el, float parentInnerPadding, const std::string& parentHeight):
+    - Params:   Element* el, float parentInnerPadding, const std::string&
+                parentHeight
+    - Returns:  std::string
+    - Desc:     ownHeightExpr for a floating element. Its height always follows
+                from the parent, whichever axis the parent lays out on, because it
+                is placed rather than distributed -- and outer padding does not
+                shrink it, since it has no siblings to be spaced from. The
+                fraction of the parent's inner padding is taken off instead: the
+                percentage is of the content area, not the whole box.
+*/
+std::string floatingHeightExpr(Element* el, float parentInnerPadding,
+                               const std::string& parentHeight) {
+    const Dimension h = el->getModifier().getHeight();
+    if (!h.percent) return px(h.value);
+    if (parentHeight.empty()) return {};
+
+    const float frac = h.value / 100.f;
+    std::string expr = "calc(" + parentHeight + " * " + num(frac) + ")";
+    if (parentInnerPadding > 0.f)
+        expr = "calc(" + expr + " - " + px(2.f * parentInnerPadding * frac) + ")";
+    return expr;
+}
+
+/*
     styleFor(const Node& n, PseudoRules& pseudo):
     - Params:   const Node& n, PseudoRules& pseudo
     - Returns:  std::string
@@ -1028,6 +1069,32 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
     /* Box: size, spacing and placement within the parent */
     if (n.isRoot) {
         css += "position:absolute;inset:0;";
+    } else if (mod.isFloating()) {
+        /*
+            Outside the flow, exactly as natively: no flex, no margin, no
+            alignment, just a box at its free position. The containing block is
+            the parent's padding box, so the parent's inner padding is added to
+            every offset and taken off every percentage -- that is the content
+            area UILO measures against.
+        */
+        const float pip = n.parentInnerPadding;
+        auto against = [&](Dimension d, float extra) -> std::string {
+            if (!d.percent) return px(d.value + extra);
+            std::string span = pip > 0.f ? "(100% - " + px(2.f * pip) + ")"
+                                         : std::string("100%");
+            std::string expr = "calc(" + span + " * " + num(d.value / 100.f);
+            if (extra != 0.f) expr += " + " + px(extra);
+            return expr + ")";
+        };
+
+        css += "position:absolute;";
+        css += "left:"   + against(mod.getFreeX(), pip) + ";";
+        css += "top:"    + against(mod.getFreeY(), pip) + ";";
+        css += "width:"  + against(mod.getWidth(),  0.f) + ";";
+        css += "height:" + against(mod.getHeight(), 0.f) + ";";
+        /* Over its siblings, under a Resizer's drag strip. */
+        css += "z-index:4;";
+        if (mod.isDraggable()) css += "cursor:grab;";
     } else {
         const Dimension mainDim  = n.axis == Axis::Row ? mod.getWidth()  : mod.getHeight();
         const Dimension crossDim = n.axis == Axis::Row ? mod.getHeight() : mod.getWidth();
@@ -1341,10 +1408,17 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
     }
 
     /* Container flow */
-    if (dynamic_cast<Container*>(el)) {
+    if (auto* container = dynamic_cast<Container*>(el)) {
         css += "display:flex;";
         css += isRowLike(el->getType()) ? "flex-direction:row;" : "flex-direction:column;";
         css += "align-items:flex-start;";
+
+        /* A floating child positions itself against this box, and the overflow
+           rule below is what clips it to the container the way UILO does. The
+           root and a floating container are already positioned, and this would
+           be a later declaration overriding the one that placed them. */
+        if (hasFloatingChild(container) && !n.isRoot && !mod.isFloating())
+            css += "position:relative;";
 
         /* UILO clips children to the container's (rounded) bounds; a
            scrollable one instead lets them overflow along its own axis. */
@@ -2037,9 +2111,19 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
                 sync();
             });
         }
-        /* Reproduce UILO's hit-testing on the web. */
-        if (el->takesPointerEvents())
+        /*
+            Reproduce UILO's hit-testing on the web. A floating element stops
+            every pointer event whatever it holds: natively it owns the pointer by
+            being on top, and here the browser already keeps the press off its
+            siblings, but a bubbling event would still reach the container it sits
+            in and light it up through the panel.
+        */
+        if (el->takesPointerEvents() || mod.isFloating())
             interactive->clicked().preventPropagation();
+        if (mod.isFloating()) {
+            interactive->mouseWentOver().preventPropagation();
+            interactive->mouseWentOut().preventPropagation();
+        }
     }
 
     m_nodes.push_back(node);
@@ -2059,13 +2143,20 @@ void Translator::translate(Element* el, Wt::WContainerWidget* parent, Node node)
     - Desc:     UILO lays a container out in three groups -- start, centre, end
                 -- and draws them in that order regardless of child order, so
                 the widgets are emitted grouped the same way.
+    - Floating children are held back and emitted last. They take no part in the
+      flow and their alignment means nothing, and being last in the DOM is what
+      puts them over their siblings once they are absolutely positioned.
 */
 void Translator::translateChildren(Container* container, Wt::WContainerWidget* parent,
                                    Axis axis, bool scrolls,
                                    const std::string& parentHeight) {
     std::vector<Element*> groups[3];
-    for (Element* child : container->getChildren())
-        groups[bucketOf(child->getModifier().getAlign(), axis)].push_back(child);
+    std::vector<Element*> floating;
+
+    for (Element* child : container->getChildren()) {
+        if (child->getModifier().isFloating()) floating.push_back(child);
+        else groups[bucketOf(child->getModifier().getAlign(), axis)].push_back(child);
+    }
 
     /* Auto margins absorb whatever space the sized children leave, which is
        how the centre group gets centred and the end group reaches the far edge. */
@@ -2089,6 +2180,15 @@ void Translator::translateChildren(Container* container, Wt::WContainerWidget* p
 
             translate(child, parent, node);
         }
+    }
+
+    for (Element* child : floating) {
+        Node node;
+        node.axis               = axis;
+        node.parentScrolls      = scrolls;
+        node.parentInnerPadding = container->getInnerPadding();
+        node.heightExpr         = floatingHeightExpr(child, node.parentInnerPadding, parentHeight);
+        translate(child, parent, node);
     }
 }
 

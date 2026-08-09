@@ -410,22 +410,35 @@ void UILO::update() {
         if (static_cast<Resizer*>(r)->isDragging()) { draggingResizer = r; break; }
     }
 
+    static constexpr Vec2f kNowhere{-1e9f, -1e9f};
+
     if (draggingResizer) {
-        static constexpr Vec2f kNowhere{-1e9f, -1e9f};
         for (auto* r : m_resizers)
             if (r != draggingResizer) r->checkHover(kNowhere);
         draggingResizer->checkHover(mouse);
         for (auto& ov : m_overlays) ov.element->checkHover(kNowhere);
-        if (hoveredBackdrop) hoveredBackdrop->checkHover(kNowhere);
+        for (Element* backdrop : m_backdrops) backdrop->checkHover(kNowhere);
         root->checkHover(kNowhere);
     } else {
         for (auto* r : m_resizers) r->checkHover(mouse);
+
+        /* Topmost overlay under the pointer: later registrations draw over
+           earlier ones, so the search runs backwards. */
         Element* hoveredOverlay = nullptr;
+        for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+            if (it->element->getBounds().contains(mouse)) { hoveredOverlay = it->element; break; }
+
+        /* Every layer is visited, and each one the pointer is not on is told it
+           is nowhere. Skipping them instead would leave a widget the pointer has
+           moved off lit up underneath the popup that now covers it. */
         for (auto& ov : m_overlays)
-            if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
-        if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
-        else if (hoveredBackdrop) hoveredBackdrop->checkHover(mouse);
-        else                     root->checkHover(mouse);
+            ov.element->checkHover(ov.element == hoveredOverlay ? mouse : kNowhere);
+
+        const bool covered = hoveredOverlay != nullptr;
+        for (Element* backdrop : m_backdrops)
+            backdrop->checkHover(!covered && backdrop == hoveredBackdrop ? mouse : kNowhere);
+
+        root->checkHover(covered || hoveredBackdrop ? kNowhere : mouse);
     }
 
     if (m_pendingCursor != m_activeCursor) {
@@ -447,8 +460,8 @@ void UILO::update() {
 
         if (!resizerClicked) {
             Element* clickedOverlay = nullptr;
-            for (auto& ov : m_overlays)
-                if (ov.element->getBounds().contains(mouse)) { clickedOverlay = ov.element; break; }
+            for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+                if (it->element->getBounds().contains(mouse)) { clickedOverlay = it->element; break; }
 
             if (clickedOverlay) clickedOverlay->checkLeftClick(mouse);
             else {
@@ -537,8 +550,8 @@ void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool mome
     if (!momentum) m_mousePos = pos;
     m_inMomentumScroll = momentum;
     Element* scrollOverlay = nullptr;
-    for (auto& ov : m_overlays)
-        if (ov.element->getBounds().contains(pos)) { scrollOverlay = ov.element; break; }
+    for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+        if (it->element->getBounds().contains(pos)) { scrollOverlay = it->element; break; }
     if (scrollOverlay) scrollOverlay->checkScroll(pos, delta, precise, momentum);
     else               m_activePage->m_rootContainer->checkScroll(pos, delta, precise, momentum);
     m_inMomentumScroll = false;
@@ -556,8 +569,8 @@ void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
     if (!m_activePage || magnification == 0.f) return;
     m_mousePos = pos;
     Element* overlay = nullptr;
-    for (auto& ov : m_overlays)
-        if (ov.element->getBounds().contains(pos)) { overlay = ov.element; break; }
+    for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+        if (it->element->getBounds().contains(pos)) { overlay = it->element; break; }
     if (overlay) overlay->checkZoom(pos, magnification);
     else         m_activePage->m_rootContainer->checkZoom(pos, magnification);
 }
@@ -582,9 +595,14 @@ bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
         while (cur) {
             Container* c = dynamic_cast<Container*>(cur);
             if (!c) return cur;
-            Element* next = nullptr;
-            for (auto* child : c->getChildren())
-                if (child->getBounds().contains(pos)) next = child;
+            /* A floating child owns the pointer outright, so the walk follows it
+               and never reaches what it covers. */
+            Element* next = c->floatingAt(pos);
+            if (!next)
+                for (auto* child : c->getChildren()) {
+                    if (child->getModifier().isFloating()) continue;
+                    if (child->getBounds().contains(pos)) next = child;
+                }
             if (!next) return cur;
             cur = next;
         }
@@ -592,8 +610,8 @@ bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
     };
 
     Element* root = nullptr;
-    for (auto& ov : m_overlays)
-        if (ov.element->getBounds().contains(pos)) { root = ov.element; break; }
+    for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+        if (it->element->getBounds().contains(pos)) { root = it->element; break; }
     if (!root && m_activePage) root = m_activePage->m_rootContainer;
     if (!root) return false;
 

@@ -845,6 +845,8 @@ void Row::setZoomX(float z) {
                 vertical wheel events bubble to a parent that can use them.
                 `precise` marks a trackpad's pixel delta, which is scaled
                 differently from a wheel's discrete step.
+    - A floating child under the pointer takes the event and the row does not
+      scroll, so the view does not slide out from under a panel laid over it.
 */
 bool Row::checkScroll(
     const Vec2f& mousePosition,
@@ -853,6 +855,11 @@ bool Row::checkScroll(
     bool momentum
 ) {
     if (!m_bounds.contains(mousePosition)) return false;
+
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
 
     if (m_options.getScrollable()) {
         for (auto* child : m_children)
@@ -889,6 +896,11 @@ bool Row::checkScroll(
     bool momentum
 ) {
     if (!m_bounds.contains(mousePosition)) return false;
+
+    if (Element* top = floatingAt(mousePosition)) {
+        top->checkScroll(mousePosition, delta, precise, momentum);
+        return true;
+    }
 
     bool consumed = false;
     for (auto* child : m_children)
