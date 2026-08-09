@@ -69,6 +69,13 @@ private:
            derived from the tree ("48px", "calc(100vh * 0.5)"). */
         std::string heightExpr;
 
+        /* The parent container's inner padding. An absolutely positioned child
+           resolves left/top and percentages against its containing block's
+           padding box, while UILO measures a floating child's free position and
+           size against the content area, so the difference has to be added back
+           by hand. Only read for a floating element. */
+        float parentInnerPadding = 0.f;
+
         /* Last style applied, kept as both the declaration text (to detect a
            change) and the class name it was interned as (to remove when it. */
         std::string appliedCss;

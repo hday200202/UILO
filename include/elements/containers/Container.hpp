@@ -52,6 +52,9 @@ public:
     // True while the pointer is dragging one of them.
     bool isDraggingFloating() const { return m_dragChild != nullptr; }
     bool beginFloatingDrag(const Vec2f& mousePosition);
+    // The floating child the pointer is over, which owns every event that lands
+    // there. Public because UILO hit-tests outside the tree walk as well.
+    Element* floatingAt(const Vec2f& mousePosition) const;
 
     void addElement(Element* element);
     void setUILO(UILO& uiloRef) override;

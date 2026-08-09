@@ -441,10 +441,12 @@ Container* buildPane() {
 }
 ```
 
-Floating children draw above their non-floating siblings and are hit-tested
-before them, so one shields what it covers. Because they are clipped by their
-container, put a window-level thing — a HUD, a file dialog — in the page's root
-container. `examples/containers.cpp` builds its draggable FPS HUD exactly that
+Floating children draw above their non-floating siblings and take every pointer
+event that lands on them — hover, clicks, scroll, pinch — whether or not they do
+anything with it. A panel of plain labels still shields the button under it: the
+button does not light up, does not change the cursor, and never sees the press.
+Because they are clipped by their container, put a window-level thing — a HUD, a
+file dialog — in the page's root container. `examples/containers.cpp` builds its draggable FPS HUD exactly that
 way, and a floating file dialog is just:
 
 ```cpp
