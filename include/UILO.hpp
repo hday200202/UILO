@@ -136,10 +136,14 @@ public:
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
     void unregisterOverlay(Element* e);
 
-    Element* addFloating(FreeElement f);
-    void removeFloating(Element* e);
+    // Popup infrastructure, not the way to float an ordinary element -- use
+    // Modifier::setFloating for that. A backdrop is laid out at window size and
+    // drawn above the page, which is how a Dropdown list or a DatePicker
+    // calendar escapes the container it belongs to.
+    Element* addPopupBackdrop(Element* e);
+    void     removePopupBackdrop(Element* e);
 
-    std::vector<Element*> getFloatingElements() const;
+    std::vector<Element*> getPopupBackdrops() const;
 
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
@@ -207,15 +211,10 @@ private:
     std::vector<OverlayEntry> m_overlays;
     std::vector<Element*>     m_resizers;
 
-    struct FloatingEntry {
-        Element*  element   = nullptr;
-        Dimension xPos      = 0_px;
-        Dimension yPos      = 0_px;
-        bool      draggable = false;
-        bool      dragging  = false;
-        Vec2f     dragOffset{};
-    };
-    std::vector<FloatingEntry> m_floating;
+    /* Full-window popup backdrops. Position and dragging used to live here too;
+       an ordinary floating element is a normal child now, so a backdrop is just
+       an element laid out against the window. */
+    std::vector<Element*> m_backdrops;
 
     Page* m_activePage = nullptr;
 
@@ -285,7 +284,7 @@ inline void UILO::setRenderer(Renderer& renderer) {
 
 
 /*
-    getFloatingElements():
+    getPopupBackdrops():
     - Params:   none
     - Returns:  std::vector<Element*> -- in insertion order
     - Desc:     The elements currently in the floating layer. Native rendering
@@ -294,10 +293,10 @@ inline void UILO::setRenderer(Renderer& renderer) {
                 mirror popups -- a picker adds its backdrop here when it opens
                 -- into an on-top overlay.
 */
-inline std::vector<Element*> UILO::getFloatingElements() const {
+inline std::vector<Element*> UILO::getPopupBackdrops() const {
     std::vector<Element*> out;
-    out.reserve(m_floating.size());
-    for (const FloatingEntry& f : m_floating) out.push_back(f.element);
+    out.reserve(m_backdrops.size());
+    for (Element* e : m_backdrops) out.push_back(e);
     return out;
 }
 

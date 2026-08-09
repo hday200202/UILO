@@ -71,7 +71,51 @@ Modifier& Modifier::ignoreScroll(bool ignore) { m_ignoreScroll = ignore; return 
     - Returns:  Modifier&
     - Desc:     Position for an element placed outside the layout flow.
 */
-Modifier& Modifier::setFreePosition(const Vec2f& freePos) { m_freePosition = freePos; return *this; }
+Modifier& Modifier::setFreePosition(const Vec2f& freePos) {
+    m_freeX = Dimension{freePos.x, false};
+    m_freeY = Dimension{freePos.y, false};
+    return *this;
+}
+
+
+/*
+    setFreePosition(Dimension x, Dimension y):
+    - Params:   Dimension x, Dimension y
+    - Returns:  Modifier&
+    - Desc:     Where a floating element sits, measured from its container's
+                content corner. A percent dimension is taken against the
+                container's own size, so a panel can sit at 50_pct and stay
+                centred as the pane resizes. Ignored unless setFloating.
+*/
+Modifier& Modifier::setFreePosition(Dimension x, Dimension y) {
+    m_freeX = x;
+    m_freeY = y;
+    return *this;
+}
+
+
+/*
+    setFloating(bool floating):
+    - Params:   bool floating
+    - Returns:  Modifier&
+    - Desc:     Takes the element out of its container's flow. It consumes no
+                space, ignores setAlign, and is placed at its free position
+                instead; everything else about being a child is unchanged, so it
+                is updated in tree order and clipped by its container.
+*/
+Modifier& Modifier::setFloating(bool floating) { m_floating = floating; return *this; }
+
+
+/*
+    setDraggable(bool draggable):
+    - Params:   bool draggable
+    - Returns:  Modifier&
+    - Desc:     Lets the pointer move a floating element by dragging it, which
+                writes back to its free position. Ignored unless the element is
+                floating, since a child in the flow is positioned by its
+                container.
+*/
+Modifier& Modifier::setDraggable(bool draggable) { m_draggable = draggable; return *this; }
 
 
 /*
@@ -225,12 +269,31 @@ bool Modifier::getIgnoreScroll() const { return m_ignoreScroll; }
 
 
 /*
-    getFreePosition():
+    getFreeX() / getFreeY():
     - Params:   none
     - Returns:  Vec2f
     - Desc:     The position for an element placed outside the layout flow.
 */
-Vec2f Modifier::getFreePosition() const { return m_freePosition; }
+Dimension Modifier::getFreeX() const { return m_freeX; }
+Dimension Modifier::getFreeY() const { return m_freeY; }
+
+
+/*
+    isFloating():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether the element is outside its container's flow.
+*/
+bool Modifier::isFloating() const { return m_floating; }
+
+
+/*
+    isDraggable():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether a floating element may be moved by the pointer.
+*/
+bool Modifier::isDraggable() const { return m_draggable; }
 
 
 /*

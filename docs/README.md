@@ -3,7 +3,7 @@
 Generated from the block comments in `include/` by `tools/gen_docs.py`.
 Edit the comments, not these files.
 
-80 files, 97 types, 824 functions.
+79 files, 97 types, 834 functions.
 
 ## elements
 
@@ -104,7 +104,6 @@ Edit the comments, not these files.
 - [Translator.cpp](wt/Translator.cpp.md) — `KnobWidget`, `KnobGeometry`, `kTextboxJs`
 - [Translator.hpp](wt/Translator.hpp.md) — `Translator`
 - [UiloWt.cpp](wt/UiloWt.cpp.md) — `UiloApplication`
-- [UiloWt.hpp](wt/UiloWt.hpp.md) — `Config`, `Session`
 
 ## (root)
 
@@ -113,7 +112,7 @@ Edit the comments, not these files.
 - [Palette.cpp](Palette.cpp.md)
 - [Palette.hpp](Palette.hpp.md) — `Palette`
 - [UILO.cpp](UILO.cpp.md)
-- [UILO.hpp](UILO.hpp.md) — `UILO`
+- [UILO.hpp](UILO.hpp.md) — `WebConfig`, `WebApp`, `UILO`
 
 ## All types
 
@@ -125,7 +124,6 @@ Edit the comments, not these files.
 - [Color](utils/Color.hpp.md#color)
 - [Column](elements/containers/Column.hpp.md#column)
 - [ColumnOptions](elements/containers/Column.hpp.md#columnoptions)
-- [Config](wt/UiloWt.hpp.md#config)
 - [Container](elements/containers/Container.hpp.md#container)
 - [CursorType](utils/Cursor.hpp.md#cursortype)
 - [Date](utils/DateAndTime.hpp.md#date)
@@ -181,7 +179,6 @@ Edit the comments, not these files.
 - [Resources](utils/Resources.hpp.md#resources)
 - [Row](elements/containers/Row.hpp.md#row)
 - [RowOptions](elements/containers/Row.hpp.md#rowoptions)
-- [Session](wt/UiloWt.hpp.md#session)
 - [Slider](elements/interactible/Slider.hpp.md#slider)
 - [SliderOptions](elements/interactible/Slider.hpp.md#slideroptions)
 - [SliderOrientation](elements/interactible/Slider.hpp.md#sliderorientation)
@@ -209,6 +206,8 @@ Edit the comments, not these files.
 - [WaveformLayout](elements/decoration/Waveform.hpp.md#waveformlayout)
 - [WaveformOptions](elements/decoration/Waveform.hpp.md#waveformoptions)
 - [WaveformStyle](elements/decoration/Waveform.hpp.md#waveformstyle)
+- [WebApp](UILO.hpp.md#webapp)
+- [WebConfig](UILO.hpp.md#webconfig)
 - [Weekday](utils/DateAndTime.hpp.md#weekday)
 - [WeekdayLabelStyle](elements/widgets/DatePicker.hpp.md#weekdaylabelstyle)
 - [cb_traits](elements/Modifier.hpp.md#cb-traits)

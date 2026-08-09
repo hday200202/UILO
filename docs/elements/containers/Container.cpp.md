@@ -14,6 +14,9 @@
 - [`checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum)`](#checkscroll)
 - [`checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum)`](#checkscroll)
 - [`checkZoom(const Vec2f& mousePosition, float magnification)`](#checkzoom)
+- [`tickFloating(float dt)`](#tickfloating)
+- [`renderFloating(float rounding)`](#renderfloating)
+- [`beginFloatingDrag(const Vec2f& mousePosition)`](#beginfloatingdrag)
 - [`addElement(Element* element)`](#addelement)
 - [`pruneChildren()`](#prunechildren)
 - [`setUILO(UILO& uiloRef)`](#setuilo)
@@ -151,6 +154,54 @@ checkZoom(const Vec2f& mousePosition, float magnification)
 **Returns** — bool -- true when the gesture was consumed
 
 Offers the zoom to every child under the cursor without stopping at the first taker, so the deepest or last-drawn one wins. A [Canvas](Canvas.hpp.md#canvas) drawn over its siblings needs that to claim the gesture.
+
+---
+
+### tickFloating
+
+```cpp
+tickFloating(float dt)
+```
+
+**Parameters**
+
+- `float dt`
+
+**Returns** — void
+
+Places and updates the container's floating children. Their slot is the content area rather than a share of the flow, so a free position of zero puts one in the container's top-left corner, inside its inner padding. A drag in progress is applied first, so the child lands at its new position in the same frame it moved rather than one frame behind the pointer.
+
+---
+
+### renderFloating
+
+```cpp
+renderFloating(float rounding)
+```
+
+**Parameters**
+
+- `float rounding`
+
+**Returns** — void
+
+Draws the floating children above everything else the container holds, clipped to the container so a floating panel cannot spill out of the pane it belongs to. `rounding` comes from the container's own Options, which [Container](Container.hpp.md#container) cannot see.
+
+---
+
+### beginFloatingDrag
+
+```cpp
+beginFloatingDrag(const Vec2f& mousePosition)
+```
+
+**Parameters**
+
+- `const Vec2f& mousePosition`
+
+**Returns** — bool -- true when a drag was started
+
+Starts dragging the topmost draggable floating child under the pointer. The grab offset is kept so the element does not jump to centre itself on the cursor.
 
 ---
 

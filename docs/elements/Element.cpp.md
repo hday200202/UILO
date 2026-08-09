@@ -164,6 +164,8 @@ resize(const Rectf& parent)
 
 Works out the element's own bounds inside the slot its parent gave it. A percent dimension is taken against the slot; a pixel dimension is multiplied by [UILO](../UILO.hpp.md#uilo)'s scale. Outer padding shrinks the element on all four sides and insets the box it is aligned within, so padding never moves a sibling. The element is then placed against that inset box according to its alignment flags, defaulting to the top-left corner.
 
+> A floating element skips all of that after sizing: it is placed at its free position relative to the slot's corner, since it is outside the flow and has neither siblings to be spaced from nor an alignment box to sit in.
+
 ---
 
 ### contentArea

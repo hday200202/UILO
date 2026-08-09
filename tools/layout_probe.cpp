@@ -127,6 +127,28 @@ int main() {
                    SpacerOptions()),
         }), parent);
 
+    /* A floating child takes no space in the flow and sits at its free position
+       relative to the container's content corner, ignoring its alignment. The two
+       non-floating spacers should split the row as if it were not there. */
+    runCase("row flow: floating child",
+        row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
+            sp(100_pct, 100_pct),
+            spacer(Modifier().setWidth(120_px).setHeight(60_px)
+                             .setFloating(true)
+                             .setFreePosition(30_px, 40_px)
+                             .setAlign(Align::Right | Align::Bottom)),
+            sp(100_pct, 100_pct),
+        }), parent);
+
+    /* Free position may be a percentage of the container. */
+    runCase("column flow: floating child, percent position",
+        column(Modifier().setWidth(100_pct).setHeight(100_pct),
+               ColumnOptions().setInnerPadding(10.f), contains{
+            spacer(Modifier().setWidth(200_px).setHeight(50_px)
+                             .setFloating(true)
+                             .setFreePosition(50_pct, 25_pct)),
+        }), parent);
+
     /* Scrollable row: overflowing content, offset still at rest. */
     runCase("row scrollable: overflow, offset 0",
         row(Modifier().setWidth(100_pct).setHeight(100_pct),

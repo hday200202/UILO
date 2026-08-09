@@ -12,6 +12,9 @@
 - [`setVisible(bool visible)`](#setvisible)
 - [`ignoreScroll(bool ignore)`](#ignorescroll)
 - [`setFreePosition(const Vec2f& freePos)`](#setfreeposition)
+- [`setFreePosition(Dimension x, Dimension y)`](#setfreeposition)
+- [`setFloating(bool floating)`](#setfloating)
+- [`setDraggable(bool draggable)`](#setdraggable)
 - [`setMaterial(const Material& m)`](#setmaterial)
 - [`setCursor(CursorType cursor)`](#setcursor)
 - [`clearCursor()`](#clearcursor)
@@ -27,7 +30,9 @@
 - [`getOnScroll()`](#getonscroll)
 - [`getVisible()`](#getvisible)
 - [`getIgnoreScroll()`](#getignorescroll)
-- [`getFreePosition()`](#getfreeposition)
+- [`getFreeX() / getFreeY()`](#getfreex)
+- [`isFloating()`](#isfloating)
+- [`isDraggable()`](#isdraggable)
 - [`getMaterial()`](#getmaterial)
 - [`getCursor()`](#getcursor)
 - [`hasCursor()`](#hascursor)
@@ -127,6 +132,55 @@ setFreePosition(const Vec2f& freePos)
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
 Position for an element placed outside the layout flow.
+
+---
+
+### setFreePosition
+
+```cpp
+setFreePosition(Dimension x, Dimension y)
+```
+
+**Parameters**
+
+- `Dimension x`
+- `Dimension y`
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Where a floating element sits, measured from its container's content corner. A percent dimension is taken against the container's own size, so a panel can sit at 50_pct and stay centred as the pane resizes. Ignored unless setFloating.
+
+---
+
+### setFloating
+
+```cpp
+setFloating(bool floating)
+```
+
+**Parameters**
+
+- `bool floating`
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Takes the element out of its container's flow. It consumes no space, ignores setAlign, and is placed at its free position instead; everything else about being a child is unchanged, so it is updated in tree order and clipped by its container.
+
+---
+
+### setDraggable
+
+```cpp
+setDraggable(bool draggable)
+```
+
+**Parameters**
+
+- `bool draggable`
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Lets the pointer move a floating element by dragging it, which writes back to its free position. Ignored unless the element is floating, since a child in the flow is positioned by its container.
 
 ---
 
@@ -320,15 +374,39 @@ Whether the element is pinned inside a scrollable parent.
 
 ---
 
-### getFreePosition
+### getFreeX
 
 ```cpp
-getFreePosition()
+getFreeX() / getFreeY()
 ```
 
 **Returns** — [Vec2f](../utils/Math.hpp.md#vec2f)
 
 The position for an element placed outside the layout flow.
+
+---
+
+### isFloating
+
+```cpp
+isFloating()
+```
+
+**Returns** — bool
+
+Whether the element is outside its container's flow.
+
+---
+
+### isDraggable
+
+```cpp
+isDraggable()
+```
+
+**Returns** — bool
+
+Whether a floating element may be moved by the pointer.
 
 ---
 

@@ -409,26 +409,62 @@ auto* go = button(
 
 `setOnUpdateStart` / `setOnUpdateEnd` run every frame, which is where per-frame animation goes — `Resizer` fades in `examples/text-editor.cpp` are done this way, using `getDeltaTime()`.
 
-### Floating elements and overlays
+### Floating elements
 
-Anything positioned in window space rather than in the layout:
+A floating element is an ordinary child that has stepped out of the flow. It
+takes no space from its siblings, ignores `setAlign`, and sits at its free
+position measured from its container's content corner:
 
 ```cpp
-void addPanel(UILO& app) {
-    app.addFloating(freeColumn(
-        Modifier()
-            .setWidth(220_px)
-            .setHeight(120_px)
-            .setFreePosition({40.f, 40.f}),
-        ColumnOptions()
-            .setColorRole("panel")
-            .setRounding(8.f),
-        contains{ /* ... */ }
-    ));
+Container* buildPane() {
+    return column(
+        Modifier().setWidth(100_pct).setHeight(100_pct),
+        ColumnOptions().setColorRole("panel"),
+        contains{
+            /* Ordinary flow content. */
+            row(Modifier().setHeight(100_pct), RowOptions(), contains{}),
+
+            /* Floats over it. Still a child: updated in tree order, and clipped
+               by this column so it cannot spill into a neighbouring pane. */
+            column(
+                Modifier()
+                    .setFloating(true)
+                    .setDraggable(true)             // the pointer can move it
+                    .setFreePosition(12_px, 12_px)  // or 50_pct, against the container
+                    .setWidth(220_px)
+                    .setHeight(120_px),
+                ColumnOptions().setColorRole("panelAlt").setRounding(8.f),
+                contains{ /* ... */ }
+            ),
+        }
+    );
 }
 ```
 
-The floating layer is the only thing ticked, hit-tested and drawn above the page, which is how popups (the `Dropdown` list, the `DatePicker` calendar) stay on top.
+Floating children draw above their non-floating siblings and are hit-tested
+before them, so one shields what it covers. Because they are clipped by their
+container, put a window-level thing — a HUD, a file dialog — in the page's root
+container. `examples/containers.cpp` builds its draggable FPS HUD exactly that
+way, and a floating file dialog is just:
+
+```cpp
+Element* fileDialog() {
+    return filebrowser(
+        Modifier()
+            .setFloating(true)
+            .setDraggable(true)
+            .setFreePosition(60_px, 40_px)
+            .setWidth(320_px)
+            .setHeight(300_px),
+        FileBrowserOptions().setRootPath("."));
+}
+```
+
+Popups are the exception. A `Dropdown` list or a `DatePicker` calendar has to
+escape its container entirely, so those use UILO's overlay layer
+(`registerOverlay`), which is drawn above the whole page and dismissed by
+clicking away. Reach for `setFloating` for anything that belongs to a pane, and
+the overlay layer only when something must break out of one.
 
 ## Key APIs
 
@@ -450,9 +486,8 @@ void setActivePage(Page* page);      // without taking ownership
 void setPalette(const Palette&);
 void setScale(float scale);          // pair with OS::scale()
 
-Element* addFloating(FreeElement f);
-void     removeFloating(Element* e);
 void     registerOverlay(Element* e, std::function<void()> onDismiss = {});
+void     unregisterOverlay(Element* e);
 
 void setOnLiveResize(std::function<void()> cb);  // keep drawing during a drag
 
@@ -468,8 +503,12 @@ Mousebinds& getMousebinds();
 
 ```cpp
 .setWidth(Dimension)     .setHeight(Dimension)    .setAlign(Align)
-.setVisible(bool)        .ignoreScroll(bool)      .setFreePosition(Vec2f)
-.setCursor(CursorType)   .clearCursor()           .setMaterial(Material)
+.setVisible(bool)        .ignoreScroll(bool)      .setMaterial(Material)
+.setCursor(CursorType)   .clearCursor()
+
+// out of the flow -- see Floating elements
+.setFloating(bool)       .setDraggable(bool)
+.setFreePosition(Dimension x, Dimension y)        .setFreePosition(Vec2f)
 
 .setOnLeftClick(cb)      .setOnRightClick(cb)
 .setOnHoverEnter(cb)     .setOnHoverExit(cb)      .setOnHover(cb)
@@ -502,8 +541,6 @@ FileBrowser* filebrowser(Modifier, FileBrowserOptions, name);
 DatePicker*  datepicker(Modifier, DatePickerOptions, name);
 DateField*   datefield(Modifier, DateFieldOptions, name);
 
-FreeElement  freeColumn(Modifier, ColumnOptions, contains children, name);
-FreeElement  freeRow(Modifier, RowOptions, contains children, name);
 ```
 
 Every argument has a default, so `text({}, TextOptions().setContent("hi"))` is valid and the trailing name is optional. Elements are `new`-allocated and owned by UILO — it sweeps them between frames, so you never delete one yourself.

@@ -145,6 +145,9 @@ void Element::tick(Rectf& parentBounds, float dt) {
                 within, so padding never moves a sibling. The element is then
                 placed against that inset box according to its alignment flags,
                 defaulting to the top-left corner.
+    - A floating element skips all of that after sizing: it is placed at its free
+      position relative to the slot's corner, since it is outside the flow and
+      has neither siblings to be spaced from nor an alignment box to sit in.
 */
 /*
     contentArea():
@@ -178,6 +181,22 @@ void Element::resize(const Rectf& parent) {
     };
 
     const Vec2f oldSize = m_bounds.size;
+
+    /* A floating element is outside the flow: its size still resolves against
+       the container, but outer padding means nothing (it has no siblings to be
+       spaced from) and alignment means nothing (its position is given). */
+    if (m_modifier.isFloating()) {
+        m_bounds.size.x = resolveScaled(m_modifier.getWidth(),  parent.size.x);
+        m_bounds.size.y = resolveScaled(m_modifier.getHeight(), parent.size.y);
+        if (m_bounds.size != oldSize) m_dirty = true;
+
+        m_bounds.position = {
+            parent.position.x + resolveScaled(m_modifier.getFreeX(), parent.size.x),
+            parent.position.y + resolveScaled(m_modifier.getFreeY(), parent.size.y),
+        };
+        return;
+    }
+
     m_bounds.size.x = resolveScaled(m_modifier.getWidth(),  parent.size.x) - (2.f * op);
     m_bounds.size.y = resolveScaled(m_modifier.getHeight(), parent.size.y) - (2.f * op);
     if (m_bounds.size != oldSize) m_dirty = true;

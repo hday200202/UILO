@@ -6,15 +6,29 @@
 
 ## Types
 
+- [WebConfig](#webconfig)
+- [WebApp](#webapp)
 - [UILO](#uilo)
 
 ## Functions
 
 - [`setRenderer(Renderer& renderer)`](#setrenderer)
-- [`getFloatingElements()`](#getfloatingelements)
+- [`getPopupBackdrops()`](#getpopupbackdrops)
 - [`getPalette()`](#getpalette)
 - [`ownPalette()`](#ownpalette)
 - [`getElement(const std::string& name)`](#getelement)
+
+---
+
+### WebConfig
+
+Server-side settings for [UILO](#uilo)::runWeb -- the things that have no desktop equivalent because they describe the page and the HTTP server, not the UI. The UI itself (pages, palette, callbacks) is set on the [UILO](#uilo) instance exactly as on desktop.
+
+---
+
+### WebApp
+
+One browser session's [UILO](#uilo), plus whatever else has to stay alive for as long as that session does. Implement it on the type that owns your [UILO](#uilo) and hand a factory to the per-session runWeb: the server makes one per connection and destroys it when the connection ends, so every browser gets its own pages, palette and application state. The single-instance runWeb needs none of this -- there, every connection shares the one [UILO](#uilo) it was called on.
 
 ---
 
@@ -44,10 +58,10 @@ Attaches the renderer this [UILO](#uilo) draws through, and hands its SDL window
 
 ---
 
-### getFloatingElements
+### getPopupBackdrops
 
 ```cpp
-getFloatingElements()
+getPopupBackdrops()
 ```
 
 **Returns** — std::vector&lt;[Element](elements/Element.hpp.md#element)*&gt; -- in insertion order

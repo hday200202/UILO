@@ -16,9 +16,15 @@ UILO TODO & Roadmap
             instead of only going back to today
       - [ ] Time-of-day selection, to make it a full DateTime picker
 
-- [ ] File Browser
-      - Floating window mode (for dialogs)
-      - Docked mode (embedded in panels)
+- [~] File Browser
+      - [x] Floating window mode (for dialogs) -- needs no widget support of its
+            own since floating became a Modifier flag: a file dialog is
+            filebrowser(Modifier().setFloating(true).setDraggable(true)
+                                  .setFreePosition(x, y), ...)
+            placed anywhere in the tree. It is clipped by whatever container it
+            sits in, so put it in the page root for a window-level dialog.
+      - [x] Docked mode (embedded in panels) -- the default: an ordinary child.
+            examples/text-editor.cpp docks one in a resizable side panel.
       - File filtering by extension
       - Multi-select mode
       - Favorites / Recent files

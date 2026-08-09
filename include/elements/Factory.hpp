@@ -38,35 +38,6 @@ inline Canvas* canvas(
     const std::string& name = ""
 ) { return new Canvas(modifier, options, children, name); }
 
-// freeColumn and freeRow build an ordinary Column or Row but mark the result as
-// floating, so it lives outside the page's layout flow and is positioned in
-// window space by UILO::addFloating(). Size still comes from the Modifier with
-// the usual _px and _pct sugar; the position is set with .setPosition() on the
-// returned FreeElement.
-struct FreeElement {
-    Element*  element   = nullptr;
-    Dimension xPos      = 0_px;
-    Dimension yPos      = 0_px;
-    bool      draggable = false;
-
-    FreeElement& setPosition(Dimension x, Dimension y) { xPos = x; yPos = y; return *this; }
-    FreeElement& setDraggable(bool d) { draggable = d; return *this; }
-};
-
-inline FreeElement freeColumn(
-    Modifier modifier = {},
-    ColumnOptions options = {},
-    contains children = {},
-    const std::string& name = ""
-) { return { new Column(modifier, options, children, name) }; }
-
-inline FreeElement freeRow(
-    Modifier modifier = {},
-    RowOptions options = {},
-    contains children = {},
-    const std::string& name = ""
-) { return { new Row(modifier, options, children, name) }; }
-
 inline Spacer* spacer(
     Modifier modifier = {}, 
     SpacerOptions options = {}, 

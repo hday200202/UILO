@@ -14,8 +14,8 @@
 - [`setScale(float scale)`](#setscale)
 - [`registerOverlay(Element* e, std::function&lt;void()&gt; onDismiss)`](#registeroverlay)
 - [`unregisterOverlay(Element* e)`](#unregisteroverlay)
-- [`addFloating(FreeElement f)`](#addfloating)
-- [`removeFloating(Element* e)`](#removefloating)
+- [`addPopupBackdrop(Element* e)`](#addpopupbackdrop)
+- [`removePopupBackdrop(Element* e)`](#removepopupbackdrop)
 - [`requestCursor(CursorType type, int priority)`](#requestcursor)
 - [`getScrollLinkOffset(const std::string& linkId, bool horizontal)`](#getscrolllinkoffset)
 - [`setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal)`](#setscrolllinkoffset)
@@ -78,7 +78,7 @@ setPage(const std::string& pageName)
 
 **Returns** — void
 
-Makes the named page active, clearing overlays, resizers, floating elements, and the current interactible.
+Makes the named page active, clearing overlays, resizers, popup backdrops, and the current interactible.
 
 ---
 
@@ -94,7 +94,7 @@ setActivePage(Page* page)
 
 **Returns** — void
 
-Sets the active page without taking ownership. No-op when the page is already active so per-frame calls don't reset the overlay, floating, and interactible state.
+Sets the active page without taking ownership. No-op when the page is already active so per-frame calls don't reset the overlay, backdrop, and interactible state.
 
 ---
 
@@ -163,26 +163,26 @@ Removes an element from the overlay list.
 
 ---
 
-### addFloating
+### addPopupBackdrop
 
 ```cpp
-addFloating(FreeElement f)
+addPopupBackdrop(Element* e)
 ```
 
 **Parameters**
 
-- `FreeElement f`
+- `Element* e`
 
 **Returns** — [Element](elements/Element.hpp.md#element)*
 
-Adds a free-floating element at a fixed or percent position, optionally draggable, and returns it. Registers the element and any child elements with [UILO](UILO.hpp.md#uilo).
+Registers a full-window popup backdrop: laid out at window size every frame and drawn above the page, which is how a popup escapes the container its owner sits in. Not the way to float an ordinary element -- [Modifier](elements/Modifier.hpp.md#modifier)::setFloating keeps that one in the tree, where it belongs.
 
 ---
 
-### removeFloating
+### removePopupBackdrop
 
 ```cpp
-removeFloating(Element* e)
+removePopupBackdrop(Element* e)
 ```
 
 **Parameters**
@@ -191,7 +191,7 @@ removeFloating(Element* e)
 
 **Returns** — void
 
-Removes a floating element by pointer.
+Removes a popup backdrop by pointer, which is what dismissing a popup does.
 
 ---
 

@@ -55,8 +55,23 @@ bool Container::isDirty() const {
 bool Container::checkLeftClick(const Vec2f& mousePosition) {
     bool childClicked = false;
 
+    /* A press on a draggable floating child starts a drag rather than being
+       treated as an ordinary click on it. */
+    if (beginFloatingDrag(mousePosition)) return claimsPointerEvents();
+
+    /* Floating children are on top, so they get the pointer first, topmost
+       (last drawn) first. */
+    for (auto it = m_children.rbegin(); it != m_children.rend() && !childClicked; ++it) {
+        Element* child = *it;
+        if (!child->getModifier().isFloating()) continue;
+        if (child->getBounds().contains(mousePosition))
+            childClicked |= child->checkLeftClick(mousePosition);
+    }
+
     for (auto& child : m_children) {
+        if (childClicked) break;
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             childClicked |= child->checkLeftClick(mousePosition);
     }
@@ -79,9 +94,19 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
 bool Container::checkRightClick(const Vec2f& mousePosition) {
     bool childClicked = false;
 
-    for (auto& child : m_children)
+    for (auto it = m_children.rbegin(); it != m_children.rend() && !childClicked; ++it) {
+        Element* child = *it;
+        if (!child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             childClicked |= child->checkRightClick(mousePosition);
+    }
+
+    for (auto& child : m_children) {
+        if (childClicked) break;
+        if (child->getModifier().isFloating()) continue;
+        if (child->getBounds().contains(mousePosition))
+            childClicked |= child->checkRightClick(mousePosition);
+    }
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
@@ -106,9 +131,20 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
 bool Container::checkHover(const Vec2f& mousePosition) {
     bool childHovered = false;
 
+    /* Topmost first, so a floating panel shields what it covers. */
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+        Element* child = *it;
+        if (!child->getModifier().isFloating()) continue;
+        if (child->checkHover(mousePosition)) childHovered = true;
+    }
+
     for (auto& child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
-        if (child->checkHover(mousePosition)) childHovered = true;
+        if (child->getModifier().isFloating()) continue;
+        /* Anything under a floating child is told the pointer is elsewhere, so
+           its hover state clears instead of sticking. */
+        if (child->checkHover(childHovered ? Vec2f{-1e9f, -1e9f} : mousePosition))
+            childHovered = true;
     }
 
     const bool inside = !childHovered && m_bounds.contains(mousePosition);
@@ -196,6 +232,92 @@ bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
         if (child->getBounds().contains(mousePosition))
             if (child->checkZoom(mousePosition, magnification)) consumed = true;
     return consumed;
+}
+
+
+
+/*
+    tickFloating(float dt):
+    - Params:   float dt
+    - Returns:  void
+    - Desc:     Places and updates the container's floating children. Their slot
+                is the content area rather than a share of the flow, so a free
+                position of zero puts one in the container's top-left corner,
+                inside its inner padding. A drag in progress is applied first, so
+                the child lands at its new position in the same frame it moved
+                rather than one frame behind the pointer.
+*/
+void Container::tickFloating(float dt) {
+    const Rectf area = contentArea();
+
+    if (m_dragChild) {
+        float mx = 0.f, my = 0.f;
+        const uint32_t buttons = SDL_GetMouseState(&mx, &my);
+        if (!(buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) || !m_uiloRef) {
+            m_dragChild = nullptr;
+        } else {
+            /* Free position is stored unscaled, so undo the scale on the way in
+               or a drag would run away from the pointer on a HiDPI display. */
+            const Vec2f mouse = m_uiloRef->getMousePosition();
+            const float sc    = m_uiloRef->getScale() > 0.f ? m_uiloRef->getScale() : 1.f;
+            m_dragChild->getModifier().setFreePosition(
+                Dimension{(mouse.x - m_dragOffset.x - area.position.x) / sc, false},
+                Dimension{(mouse.y - m_dragOffset.y - area.position.y) / sc, false});
+            m_uiloRef->requestCursor(CursorType::Crosshair, 10);
+        }
+    }
+
+    for (auto* child : m_children) {
+        if (!child->getModifier().isFloating()) continue;
+        Rectf slot = area;
+        child->tick(slot, dt);
+    }
+}
+
+
+/*
+    renderFloating(float rounding):
+    - Params:   float rounding
+    - Returns:  void
+    - Desc:     Draws the floating children above everything else the container
+                holds, clipped to the container so a floating panel cannot spill
+                out of the pane it belongs to. `rounding` comes from the
+                container's own Options, which Container cannot see.
+*/
+void Container::renderFloating(float rounding) {
+    if (!m_uiloRef) return;
+
+    const float rr = rounding * m_uiloRef->getScale();
+    for (auto* child : m_children) {
+        if (!child->getModifier().isFloating()) continue;
+        m_uiloRef->getRenderer().pushRoundClip(m_bounds, rr);
+        child->render();
+        m_uiloRef->getRenderer().popRoundClip();
+    }
+}
+
+
+/*
+    beginFloatingDrag(const Vec2f& mousePosition):
+    - Params:   const Vec2f& mousePosition
+    - Returns:  bool -- true when a drag was started
+    - Desc:     Starts dragging the topmost draggable floating child under the
+                pointer. The grab offset is kept so the element does not jump to
+                centre itself on the cursor.
+*/
+bool Container::beginFloatingDrag(const Vec2f& mousePosition) {
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+        Element* child = *it;
+        const Modifier& mod = child->getModifier();
+        if (!mod.isFloating() || !mod.isDraggable() || !mod.getVisible()) continue;
+        if (!child->getBounds().contains(mousePosition)) continue;
+
+        m_dragChild  = child;
+        m_dragOffset = { mousePosition.x - child->getBounds().position.x,
+                         mousePosition.y - child->getBounds().position.y };
+        return true;
+    }
+    return false;
 }
 
 

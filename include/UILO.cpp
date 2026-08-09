@@ -39,15 +39,15 @@ void UILO::addPage(Page* page) {
     setPage(const std::string& pageName):
     - Params:   const std::string& pageName
     - Returns:  void
-    - Desc:     Makes the named page active, clearing overlays, resizers,
-                floating elements, and the current interactible.
+    - Desc:     Makes the named page active, clearing overlays, resizers, popup
+                backdrops, and the current interactible.
 */
 void UILO::setPage(const std::string& pageName) {
     auto it = m_pages.find(pageName);
     if (it != m_pages.end()) {
         m_overlays.clear();
         m_resizers.clear();
-        m_floating.clear();
+        m_backdrops.clear();
         setCurrInteractible(nullptr);
         /* The container a coast belongs to is not on screen any more. */
         cancelMacScrollMomentum();
@@ -63,14 +63,14 @@ void UILO::setPage(const std::string& pageName) {
     - Returns:  void
     - Desc:     Sets the active page without taking ownership. No-op when the
                 page is already active so per-frame calls don't reset the
-                overlay, floating, and interactible state.
+                overlay, backdrop, and interactible state.
 */
 void UILO::setActivePage(Page* page) {
     if (m_activePage == page) return;
     if (page) page->setUILO(*this);
     m_overlays.clear();
     m_resizers.clear();
-    m_floating.clear();
+    m_backdrops.clear();
     setCurrInteractible(nullptr);
     /* The container a coast belongs to is not on screen any more. */
     cancelMacScrollMomentum();
@@ -143,38 +143,33 @@ void UILO::unregisterOverlay(Element* e) {
 
 
 /*
-    addFloating(FreeElement f):
-    - Params:   FreeElement f
+    addPopupBackdrop(Element* e):
+    - Params:   Element* e
     - Returns:  Element*
-    - Desc:     Adds a free-floating element at a fixed or percent position,
-                optionally draggable, and returns it. Registers the element and
-                any child elements with UILO.
+    - Desc:     Registers a full-window popup backdrop: laid out at window size
+                every frame and drawn above the page, which is how a popup
+                escapes the container its owner sits in. Not the way to float an
+                ordinary element -- Modifier::setFloating keeps that one in the
+                tree, where it belongs.
 */
-Element* UILO::addFloating(FreeElement f) {
-    if (!f.element) return nullptr;
-    f.element->setUILO(*this);
-    FloatingEntry entry;
-    entry.element   = f.element;
-    entry.xPos      = f.xPos;
-    entry.yPos      = f.yPos;
-    entry.draggable = f.draggable;
-    m_floating.push_back(entry);
-    return f.element;
+Element* UILO::addPopupBackdrop(Element* e) {
+    if (!e) return nullptr;
+    e->setUILO(*this);
+    m_backdrops.push_back(e);
+    return e;
 }
 
 
 /*
-    removeFloating(Element* e):
+    removePopupBackdrop(Element* e):
     - Params:   Element* e
     - Returns:  void
-    - Desc:     Removes a floating element by pointer.
+    - Desc:     Removes a popup backdrop by pointer, which is what dismissing a
+                popup does.
 */
-void UILO::removeFloating(Element* e) {
-    m_floating.erase(
-        std::remove_if(m_floating.begin(), m_floating.end(),
-            [e](const FloatingEntry& f) { return f.element == e; }),
-        m_floating.end()
-    );
+void UILO::removePopupBackdrop(Element* e) {
+    m_backdrops.erase(std::remove(m_backdrops.begin(), m_backdrops.end(), e),
+                      m_backdrops.end());
 }
 
 
@@ -360,16 +355,13 @@ void UILO::update() {
 
     m_activePage->update(logicalBounds, m_deltaTime);
 
-    const float winW  = static_cast<float>(windowSize.x);
-    const float winH  = static_cast<float>(windowSize.y);
-    const float scale = m_scale;
-    for (auto& f : m_floating) {
-        const float x = f.xPos.percent ? (f.xPos.value / 100.f * winW)
-                                       : (f.xPos.value * scale);
-        const float y = f.yPos.percent ? (f.yPos.value / 100.f * winH)
-                                       : (f.yPos.value * scale);
-        Rectf slot = { {x, y}, {winW, winH} };
-        f.element->tick(slot, m_deltaTime);
+    /* A backdrop covers the window, which is what makes the popup it belongs to
+       modal. Its own children position themselves within it as usual. */
+    const float winW = static_cast<float>(windowSize.x);
+    const float winH = static_cast<float>(windowSize.y);
+    for (Element* backdrop : m_backdrops) {
+        Rectf slot = { {0.f, 0.f}, {winW, winH} };
+        backdrop->tick(slot, m_deltaTime);
     }
 
     m_resizers.clear();
@@ -398,44 +390,17 @@ void UILO::update() {
 
     auto* root = m_activePage->m_rootContainer;
 
-    FloatingEntry* hoveredFloating = nullptr;
-    for (auto it = m_floating.rbegin(); it != m_floating.rend(); ++it) {
-        if (!it->element->getModifier().getVisible()) continue;
-        if (it->element->getBounds().contains(mouse)) {
-            hoveredFloating = &(*it);
-            break;
-        }
+    /* Topmost backdrop under the pointer. A backdrop covers the window, so it
+       shields the page beneath it -- which is what makes a popup modal. Held as
+       an element rather than an index because a handler may dismiss the popup,
+       and with it the entry, while this dispatch is still running. */
+    Element* hoveredBackdrop = nullptr;
+    for (auto it = m_backdrops.rbegin(); it != m_backdrops.rend(); ++it) {
+        if (!(*it)->getModifier().getVisible()) continue;
+        if ((*it)->getBounds().contains(mouse)) { hoveredBackdrop = *it; break; }
     }
-    /* Dispatch through the element, not through the entry: a handler is
-       allowed to call removeFloating() (a popup dismissing itself on click. */
-    Element* hoveredFloatingElement = hoveredFloating ? hoveredFloating->element : nullptr;
 
-    bool floatingConsumedClick = false;
-    if (leftDown) {
-        if (!m_prevLeftMouse) {
-            if (hoveredFloating) {
-                floatingConsumedClick = true;
-                if (hoveredFloating->draggable) {
-                    const Rectf& vb = hoveredFloating->element->getBounds();
-                    hoveredFloating->dragging   = true;
-                    hoveredFloating->dragOffset = { mouse.x - vb.position.x,
-                                                    mouse.y - vb.position.y };
-                }
-            }
-        }
-        for (auto& f : m_floating) {
-            if (f.dragging) {
-                const float sc = m_scale > 0.f ? m_scale : 1.f;
-                f.xPos = { (mouse.x - f.dragOffset.x) / sc, false };
-                f.yPos = { (mouse.y - f.dragOffset.y) / sc, false };
-                requestCursor(CursorType::Crosshair, 10);
-            }
-        }
-    } else {
-        for (auto& f : m_floating) f.dragging = false;
-        if (hoveredFloating && hoveredFloating->draggable)
-            requestCursor(CursorType::Crosshair, 5);
-    }
+    const bool backdropConsumedClick = hoveredBackdrop != nullptr;
 
     /* A resizer drag owns the pointer. Everything else is told the cursor is
        nowhere, so an element under it neither lights up nor keeps a hover it
@@ -451,7 +416,7 @@ void UILO::update() {
             if (r != draggingResizer) r->checkHover(kNowhere);
         draggingResizer->checkHover(mouse);
         for (auto& ov : m_overlays) ov.element->checkHover(kNowhere);
-        if (hoveredFloatingElement) hoveredFloatingElement->checkHover(kNowhere);
+        if (hoveredBackdrop) hoveredBackdrop->checkHover(kNowhere);
         root->checkHover(kNowhere);
     } else {
         for (auto* r : m_resizers) r->checkHover(mouse);
@@ -459,7 +424,7 @@ void UILO::update() {
         for (auto& ov : m_overlays)
             if (ov.element->getBounds().contains(mouse)) { hoveredOverlay = ov.element; break; }
         if (hoveredOverlay)      hoveredOverlay->checkHover(mouse);
-        else if (hoveredFloatingElement) hoveredFloatingElement->checkHover(mouse);
+        else if (hoveredBackdrop) hoveredBackdrop->checkHover(mouse);
         else                     root->checkHover(mouse);
     }
 
@@ -468,7 +433,7 @@ void UILO::update() {
         m_activeCursor = m_pendingCursor;
     }
 
-    if (leftDown && !m_prevLeftMouse && !floatingConsumedClick) {
+    if (leftDown && !m_prevLeftMouse && !backdropConsumedClick) {
         m_interactibleActivatedThisFrame = false;
 
         bool resizerClicked = false;
@@ -494,9 +459,9 @@ void UILO::update() {
                 if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
             }
         }
-    } else if (leftDown && !m_prevLeftMouse && hoveredFloatingElement) {
+    } else if (leftDown && !m_prevLeftMouse && hoveredBackdrop) {
         m_interactibleActivatedThisFrame = false;
-        hoveredFloatingElement->checkLeftClick(mouse);
+        hoveredBackdrop->checkLeftClick(mouse);
     }
     if (rightDown && !m_prevRightMouse) {
         m_interactibleActivatedThisFrame = false;
@@ -505,7 +470,7 @@ void UILO::update() {
             m_overlays.clear();
             for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
         }
-        if (hoveredFloatingElement) hoveredFloatingElement->checkRightClick(mouse);
+        if (hoveredBackdrop) hoveredBackdrop->checkRightClick(mouse);
         else                        root->checkRightClick(mouse);
         if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
     }
@@ -528,7 +493,7 @@ void UILO::render() {
     if (!m_activePage) return;
 
     m_activePage->render();
-    for (auto& f : m_floating)  f.element->render();
+    for (Element* backdrop : m_backdrops) backdrop->render();
     for (auto& ov : m_overlays) ov.element->render();
     for (auto* r : m_resizers)  r->render();
 }

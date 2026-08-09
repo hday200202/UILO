@@ -449,7 +449,7 @@ void DatePicker::open(UILO& uiloRef) {
 
     m_isOpen = true;
     m_dirty  = true;
-    uiloRef.addFloating(FreeElement{m_backdrop});
+    uiloRef.addPopupBackdrop(m_backdrop);
 }
 
 
@@ -479,7 +479,7 @@ void DatePicker::close() {
     if (!m_isOpen) return;
 
     m_isOpen = false;
-    if (m_uiloRef && m_backdrop) m_uiloRef->removeFloating(m_backdrop);
+    if (m_uiloRef && m_backdrop) m_uiloRef->removePopupBackdrop(m_backdrop);
 
     m_modifier = m_embeddedModifier;
     m_dirty    = true;
