@@ -34,7 +34,6 @@
 - [`sliderSteps(const SliderOptions& o)`](#slidersteps)
 - [`gradientCss(const Color c[4])`](#gradientcss)
 - [`appendMaterial(std::string& css, const Material& mat, Color elementColor)`](#appendmaterial)
-- [`Translator(Wt::WApplication& app, UILO& uilo, const Config& config)`](#translator)
 - [`styleKey(const std::string& css, const PseudoRules& pseudo)`](#stylekey)
 - [`addVendorRule(const std::string& rule)`](#addvendorrule)
 - [`classFor(const std::string& css, const PseudoRules& pseudo)`](#classfor)
@@ -51,7 +50,8 @@
 - [`buildOverlay(Element* backdrop)`](#buildoverlay)
 - [`translate(Element* el, Wt::WContainerWidget* parent, Node node)`](#translate)
 - [`translateChildren(...)`](#translatechildren)
-- [`build(Page& page, Wt::WContainerWidget* into)`](#build)
+- [`reconcilePages()`](#reconcilepages)
+- [`translatePageInto(Page* page, Wt::WContainerWidget* host)`](#translatepageinto)
 
 ---
 
@@ -435,24 +435,6 @@ Materials are shader effects natively. The browser's nearest equivalent is a bac
 
 ---
 
-### Translator
-
-```cpp
-Translator(Wt::WApplication& app, UILO& uilo, const Config& config)
-```
-
-**Parameters**
-
-- `Wt::WApplication& app`
-- `UILO& uilo`
-- `const Config& config`
-
-**Returns** — T
-
------------------------------------------------------------- --------------- [Translator](Translator.hpp.md#translator) --------------------------------- ------------------------------------------
-
----
-
 ### styleKey
 
 ```cpp
@@ -700,15 +682,20 @@ translateChildren(...)
 
 ---
 
-### build
+### reconcilePages
 
 ```cpp
-build(Page& page, Wt::WContainerWidget* into)
+reconcilePages()
 ```
 
-**Parameters**
+> Follows [UILO](../UILO.hpp.md#uilo)'s active page. The first time a page is shown it is translated into a fresh hidden host; then the previous host is hidden and the active one shown. Navigation is therefore just setPage() in a handler -- the next sync() moves the view here.
 
-- `Page& page`
-- `Wt::WContainerWidget* into`
+---
 
-Walks a page once and creates a widget for every element in it. Called once per session; everything afterwards goes through sync().
+### translatePageInto
+
+```cpp
+translatePageInto(Page* page, Wt::WContainerWidget* host)
+```
+
+> Walks a page once and creates a widget for every element in it, as children of `host`. Called the first time a page is shown; everything afterwards goes through sync().

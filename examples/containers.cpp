@@ -9,7 +9,7 @@ using namespace uilo;
 
 float ROUNDING = 8.f;
 
-Container* buildRootContainer(UILO& ui);
+Container* buildRootContainer(UILO& ui, Element* fpsHud);
 
 static Palette makeDarkPalette() {
     Palette p;
@@ -76,69 +76,50 @@ struct FpsHud {
     Column* root  = nullptr;
 };
 
-static FpsHud installFpsHud(UILO& ui) {
-    ui.addFloating(freeColumn(
+static FpsHud buildFpsHud() {
+    /* A small helper, since the four rows differ only in their text and size. */
+    auto line = [](const char* content, const char* role, unsigned int size) {
+        return text(
+            Modifier()
+                .setAlign(Align::Left | Align::CenterY),
+            TextOptions()
+                .setFont("assets/fonts/Montserrat.ttf")
+                .setContent(content)
+                .setColorRole(role)
+                .setCharSize(size)
+                .setTextAlignY(Align::CenterY)
+        );
+    };
+
+    /* Held as locals rather than looked up by name afterwards: the HUD is built
+       before the page is registered, so UILO has nothing to look up in yet. */
+    Text* fps   = line(" FPS:",   "text",    18);
+    Text* draws = line(" draws:", "textDim", 14);
+    Text* cpu   = line(" cpu:",   "textDim", 14);
+    Text* gpu   = line(" gpu:",   "textDim", 14);
+
+    Column* root = column(
         Modifier()
+            /* Outside the flow: it sits over the page rather than taking a slot
+               in it, and the pointer can drag it around. Its position is
+               measured from its container's content corner. */
+            .setFloating(true)
+            .setDraggable(true)
+            .setFreePosition(12_px, 12_px)
             .setWidth(180_px)
+            .setHeight(96_px)
             .setMaterial(
                 Material::Blur()
                     .setRadius(2.f)
-            )
-            .setHeight(96_px),
+            ),
         ColumnOptions()
             .setColorRole("panelAlt")
             .setRounding(ROUNDING),
-        contains{
-            text(
-                Modifier().setAlign(Align::Left | Align::CenterY),
-                TextOptions()
-                    .setFont("assets/fonts/Montserrat.ttf")
-                    .setContent(" FPS:")
-                    .setColorRole("text")
-                    .setCharSize(18)
-                    .setTextAlignY(Align::CenterY),
-                "fps_text"
-            ),
-            text(
-                Modifier().setAlign(Align::Left | Align::CenterY),
-                TextOptions()
-                    .setFont("assets/fonts/Montserrat.ttf")
-                    .setContent(" draws:")
-                    .setColorRole("textDim")
-                    .setCharSize(14)
-                    .setTextAlignY(Align::CenterY),
-                "fps_draws"
-            ),
-            text(
-                Modifier().setAlign(Align::Left | Align::CenterY),
-                TextOptions()
-                    .setFont("assets/fonts/Montserrat.ttf")
-                    .setContent(" cpu:")
-                    .setColorRole("textDim")
-                    .setCharSize(14)
-                    .setTextAlignY(Align::CenterY),
-                "fps_cpu"
-            ),
-            text(
-                Modifier().setAlign(Align::Left | Align::CenterY),
-                TextOptions()
-                    .setFont("assets/fonts/Montserrat.ttf")
-                    .setContent(" gpu:")
-                    .setColorRole("textDim")
-                    .setCharSize(14)
-                    .setTextAlignY(Align::CenterY),
-                "fps_gpu"
-            )
-        },
+        contains{ fps, draws, cpu, gpu },
         "fps_hud"
-    ).setPosition(12_px, 12_px).setDraggable(true));
-    return FpsHud{
-        ui.getElement<Text>  ("fps_text"),
-        ui.getElement<Text>  ("fps_draws"),
-        ui.getElement<Text>  ("fps_cpu"),
-        ui.getElement<Text>  ("fps_gpu"),
-        ui.getElement<Column>("fps_hud"),
-    };
+    );
+
+    return FpsHud{ fps, draws, cpu, gpu, root };
 }
 
 static void updateFpsHud(const FpsHud& hud, const Renderer& renderer, float fpsValue) {
@@ -190,13 +171,13 @@ int main() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.addPage(page(buildRootContainer(ui), "main_page"));
+    FpsHud hud = buildFpsHud();
+    if (hud.root) hud.root->getModifier().setVisible(false);
+
+    ui.addPage(page(buildRootContainer(ui, hud.root), "main_page"));
     ui.setPage("main_page");
     ui.setScale(OS::scale());
     applyTheme(ui, true);
-
-    FpsHud hud = installFpsHud(ui);
-    if (hud.root) hud.root->getModifier().setVisible(false);
     installKeybinds(ui, renderer, hud.root);
 
     std::fprintf(
@@ -219,7 +200,7 @@ int main() {
     return 0;
 }
 
-Container* buildRootContainer(UILO& ui) {
+Container* buildRootContainer(UILO& ui, Element* fpsHud) {
     auto panelCol = ColumnOptions().setColorRole("panel").setRounding(ROUNDING);
     auto panelRow = RowOptions().setColorRole("panel").setRounding(ROUNDING);
 
@@ -227,6 +208,9 @@ Container* buildRootContainer(UILO& ui) {
         Modifier(),
         ColumnOptions().setColorRole("app.bg"),
         contains {
+            /* An ordinary child that happens to float: no registration, and it
+               is clipped by this container like anything else. */
+            fpsHud,
             row(
                 Modifier()
                     .setHeight(96_px),

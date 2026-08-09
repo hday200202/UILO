@@ -143,6 +143,22 @@ public:
 
     Modifier& setVisible(bool visible);
     Modifier& ignoreScroll(bool ignore);
+
+    // Takes the element out of its container's flow: it no longer consumes any
+    // space, no longer follows setAlign, and sits at its free position measured
+    // from its container's content corner. It is still a child in every other
+    // respect -- updated in tree order, and clipped by its container, so a
+    // floating panel cannot spill out of the pane it belongs to. Floating
+    // children draw above their non-floating siblings and are hit-tested before
+    // them. For something that must escape its container entirely (a dropdown
+    // list, a date picker) use UILO::registerOverlay instead.
+    Modifier& setFloating(bool floating);
+    // Lets the pointer move a floating element. Ignored unless setFloating.
+    Modifier& setDraggable(bool draggable);
+    // Where a floating element sits, relative to its container's content
+    // corner. A percent dimension is taken against the container. Ignored
+    // unless setFloating.
+    Modifier& setFreePosition(Dimension x, Dimension y);
     Modifier& setFreePosition(const Vec2f& freePos);
     Modifier& setMaterial(const Material& m);
     Modifier& setCursor(CursorType cursor);
@@ -160,7 +176,10 @@ public:
     const ScrollFuncPtr& getOnScroll()       const;
     bool                 getVisible()        const;
     bool                 getIgnoreScroll()   const;
-    Vec2f                getFreePosition()   const;
+    bool                 isFloating()        const;
+    bool                 isDraggable()       const;
+    Dimension            getFreeX()          const;
+    Dimension            getFreeY()          const;
     const Material&      getMaterial()       const;
     CursorType           getCursor()         const;
     bool                 hasCursor()         const;
@@ -180,7 +199,10 @@ private:
 
     bool                 m_visible      = true;
     bool                 m_ignoreScroll = false;
-    Vec2f                m_freePosition = {0.f, 0.f};
+    bool                 m_floating     = false;
+    bool                 m_draggable    = false;
+    Dimension            m_freeX        = 0_px;
+    Dimension            m_freeY        = 0_px;
     Material             m_material;
     std::optional<CursorType> m_cursor;
 };

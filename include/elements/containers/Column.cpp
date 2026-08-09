@@ -234,6 +234,9 @@ void Column::update(Rectf& parentBounds, float dt) {
 
     layoutResizers(dt, scale);
     tickHiddenChildren(dt);
+
+    /* Outside the flow, so placed after it and against the content area. */
+    tickFloating(dt);
 }
 
 
@@ -273,6 +276,7 @@ void Column::updateScrollable(float dt, float scale) {
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
         if (!child->getModifier().getIgnoreScroll()) continue;
 
         const float rh = resolvedPinnedH(child);
@@ -315,6 +319,7 @@ void Column::updateScrollable(float dt, float scale) {
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
         if (child->getModifier().getIgnoreScroll()) continue;
 
         Dimension dim = child->getModifier().getHeight();
@@ -366,6 +371,7 @@ void Column::updateFlow(float dt, float scale) {
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
 
         Align align = child->getModifier().getAlign();
         if      (hasAlign(align, Align::Bottom))    bot.push_back(child);
@@ -550,6 +556,7 @@ void Column::tickHiddenChildren(float dt) {
 
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
         if (child->getModifier().getVisible()) continue;
 
         Rectf slot = child->getBounds();
@@ -769,6 +776,9 @@ void Column::renderChildren() {
 
     renderChildPass(false, viewportInset);
     renderChildPass(true, viewportInset);
+
+    /* Above everything else the container holds. */
+    renderFloating(m_options.getRounding());
 }
 
 
@@ -785,6 +795,7 @@ void Column::renderChildren() {
 void Column::renderChildPass(bool ignoreScrollChildren, bool viewportInset) {
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer) continue;
+        if (child->getModifier().isFloating()) continue;
         if (child->getModifier().getIgnoreScroll() != ignoreScrollChildren) continue;
 
         bool clippedToViewport = false;

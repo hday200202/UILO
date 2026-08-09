@@ -44,6 +44,15 @@ public:
     ) override;
     bool checkZoom(const Vec2f& mousePosition, float magnification) override;
 
+    // Floating children live outside the flow: placed from their free position
+    // against the content area, drawn above their siblings, and hit-tested
+    // before them. Kept here so every container behaves the same way.
+    void tickFloating(float dt);
+    void renderFloating(float rounding);
+    // True while the pointer is dragging one of them.
+    bool isDraggingFloating() const { return m_dragChild != nullptr; }
+    bool beginFloatingDrag(const Vec2f& mousePosition);
+
     void addElement(Element* element);
     void setUILO(UILO& uiloRef) override;
     void collectResizers(std::vector<Element*>& out) override;
@@ -53,6 +62,11 @@ public:
 
 protected:
     std::vector<Element*> m_children;
+
+    /* At most one floating child is dragged at a time, so the state is a single
+       pointer plus the grab offset within it. */
+    Element* m_dragChild = nullptr;
+    Vec2f    m_dragOffset{};
     FrameBuffer           m_fb;
 
     void pruneChildren();

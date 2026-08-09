@@ -36,6 +36,8 @@ int main(int argc, char** argv) {
         afterwards. Drawing a frame from here keeps it being read.
     */
     uilo.setOnLiveResize(frame);
+    Keybinds& kb = uilo.getKeybinds();
+    kb.bindAction("zoom_in", {SDL_SCANCODE_LCTRL, SDL_SCANCODE_EQUALS}, [&](){ uilo.setScale(uilo.getScale() + 0.25f); }, true);
 
     while (uilo.isRunning()) {
         uilo.pollEvents();
@@ -47,7 +49,7 @@ int main(int argc, char** argv) {
 
 Page* buildMainPage() {
     return page(
-        column(Modifier(), ColumnOptions().setOuterPadding(0.f), contains {
+        column(Modifier(), ColumnOptions().setOuterPadding(0.f).setInnerPadding(0.f), contains {
             terminal(
                 Modifier(),
                 TerminalOptions()

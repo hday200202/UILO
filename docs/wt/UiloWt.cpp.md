@@ -10,29 +10,53 @@
 
 ## Functions
 
-- [`run(int argc, char** argv, Builder build, Config config)`](#run)
+- [`serverArgs()`](#serverargs)
+- [`argPointers()`](#argpointers)
+- [`UILO::runWeb(const WebConfig& config)`](#uilo-runweb)
+- [`UILO::runWeb(factory, const WebConfig& config)`](#uilo-runweb)
 
 ---
 
 ### UiloApplication
 
-One browser session. Owns that session's [UILO](../UILO.hpp.md#uilo) instance, the tree the builder produced, and the Wt widgets translated from it. Implements [Session](UiloWt.hpp.md#session), so the builder never sees the Wt side.
+One browser connection. Renders a [UILO](../UILO.hpp.md#uilo) into this connection's Wt widgets and keeps them in step through a [Translator](Translator.hpp.md#translator). Which [UILO](../UILO.hpp.md#uilo) depends on how the server was started. The shared form takes one by reference and every connection reflects it. The per-session form hands over a [WebApp](../UILO.hpp.md#webapp) this application then owns, so the [UILO](../UILO.hpp.md#uilo) -- and the application state behind it -- is this connection's alone and dies with it.
 
 ---
 
-### run
+### serverArgs
 
 ```cpp
-run(int argc, char** argv, Builder build, Config config)
+serverArgs()
 ```
 
-**Parameters**
+> Wt is configured from a command line; synthesize one from the config so the caller passes nothing. Returned as strings -- WRun wants char*, which the callers point at these.
 
-- `int argc`
-- `char** argv`
-- `Builder build`
-- `Config config`
+---
 
-**Returns** — int
+### argPointers
 
-Starts the Wt application server with the caller's builder. Each browser session gets its own [UILO](../UILO.hpp.md#uilo) and [Translator](Translator.hpp.md#translator), so sessions share the Theme but never each other's element trees or palettes.
+```cpp
+argPointers()
+```
+
+> The char* view of serverArgs()'s strings that WRun takes.
+
+---
+
+### UILO::runWeb
+
+```cpp
+UILO::runWeb(const WebConfig& config)
+```
+
+> Serves this [UILO](../UILO.hpp.md#uilo) over the web and blocks until the server stops. Set the [UILO](../UILO.hpp.md#uilo) up exactly as on desktop first (addPage/setPage/setPalette); this stands up Wt, points every browser connection at this instance, and returns the server's exit code. No render/update loop and no argv -- the server settings come from the config. Every connection shares this instance, and Wt drives connections from different threads: two browsers are two views of one UI, with no lock between them. Use the factory overload for anything multi-user.
+
+---
+
+### UILO::runWeb
+
+```cpp
+UILO::runWeb(factory, const WebConfig& config)
+```
+
+> The per-session counterpart: serves an app whose [UILO](../UILO.hpp.md#uilo) is built fresh for each browser connection, and blocks until the server stops. `factory` runs once per connection, on that connection's own thread, and builds that session's [UILO](../UILO.hpp.md#uilo) the same way a desktop app builds its one (addPage/setPage/setPalette). The [WebApp](../UILO.hpp.md#webapp) it returns is owned by the connection and destroyed with it, so sessions share no pages, no palette and no application state -- and cannot race each other's widget trees. Anything the factory itself touches is still shared, so whatever it reads (a global theme, a file on disk) has to be safe to read from several threads at once.

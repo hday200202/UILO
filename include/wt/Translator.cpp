@@ -1660,7 +1660,7 @@ void Translator::apply(Node& n) {
 */
 void Translator::sync() {
     reconcilePages();
-    syncFloating(m_uilo.getFloatingElements());
+    syncFloating(m_uilo.getPopupBackdrops());
 
     for (Node& n : m_nodes) apply(n);
     for (FloatingLayer& layer : m_floatingLayers)
