@@ -138,11 +138,36 @@ headers, not here.
             scale, hover/pressed tints.
 
 - [ ] Animation System
-      Lerp between two Modifiers, or two Options, over a duration, with easing
-      (linear, ease-in, ease-out) and start/end callbacks.
-      The open question, and the reason this has not started: how does an element
-      know when to animate? A manual .animate(from, to, duration), a callback, or
-      an event binding.
+      Shape to aim for:
+
+          element->animate(from, to, how, duration);
+
+      where `from` and `to` are Modifiers or Options and `how` is the KIND of
+      transition -- fade, slide, scale, and so on. The kind is a separate axis
+      from the easing curve: easing shapes the timing (linear, ease-in,
+      ease-out), while the kind decides what actually moves. Two things can
+      travel between the same pair of endpoints over the same duration and still
+      read completely differently.
+      Kinds worth having: fade, slide (from an edge, so it needs a direction),
+      scale/pop, and cross-fade for a swap. Plus start/end callbacks.
+      - [ ] Decide what `how` means when `from` and `to` are full Modifiers,
+            because the two overlap: if the endpoints differ in position that is
+            already a slide, and if they differ in alpha that is already a fade.
+            Either a kind is a PRESET that derives the endpoints itself
+            (animate(Fade::In, 200ms) with no from/to written out), or it is the
+            PATH taken between endpoints that were given -- an arc rather than a
+            straight line, or move-then-fade rather than both at once. Probably
+            both, with the preset form as the short spelling.
+      - [ ] Fade has nowhere to write to. There is no opacity on Modifier or on
+            Element; alpha only exists inside each Options' colours, so fading an
+            arbitrary element means walking every colour it has, or adding an
+            element-level opacity that render() multiplies through. The second is
+            the smaller change and the only one that works for a whole subtree.
+      - [ ] Decide how an element knows when to animate -- the reason this has
+            not started. A manual animate() call, a callback, or an event
+            binding. Note that hover already has enter/exit transitions to hang
+            one off, and examples/text-editor.cpp fades a resizer by hand from an
+            onUpdateEnd handler, which is what this system should replace.
 
 - [ ] Drag and Drop
       Draggable elements, drop targets, and visual feedback during the drag.
