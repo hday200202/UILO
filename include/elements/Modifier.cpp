@@ -8,9 +8,10 @@ namespace uilo {
     - Params:   Dimension dim
     - Returns:  Modifier&
     - Desc:     Sets the element's width. A percent value is clamped to 1..100,
-                since a container distributes percent children against the space
-                left over and a value outside that range has no meaning there.
-                Pixel values pass through and are scaled at layout time.
+                so a percentage can never ask for more of the parent than the
+                parent has; pixel values pass through and are scaled at layout
+                time, and a _flex share passes through untouched since its value
+                is a weight against its siblings rather than a size.
 */
 Modifier& Modifier::setWidth(Dimension dim) {
     if (dim.percent) dim.value = std::clamp(dim.value, 1.f, 100.f);
@@ -23,8 +24,8 @@ Modifier& Modifier::setWidth(Dimension dim) {
     setHeight(Dimension dim):
     - Params:   Dimension dim
     - Returns:  Modifier&
-    - Desc:     Sets the element's height, clamping a percent value the same way
-                setWidth does.
+    - Desc:     Sets the element's height, clamping a percent value and passing an
+                _flex share through the same way setWidth does.
 */
 Modifier& Modifier::setHeight(Dimension dim) {
     if (dim.percent) dim.value = std::clamp(dim.value, 1.f, 100.f);

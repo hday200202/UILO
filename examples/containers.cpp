@@ -219,6 +219,7 @@ Container* buildRootContainer(UILO& ui, Element* fpsHud) {
                     slider(
                         Modifier()
                             .setHeight(32_px)
+                            .setWidth(95_pct)
                             .setAlign(Align::CenterX | Align::CenterY), 
                         SliderOptions()
                             .setThumbShape(ThumbShape::Rect)

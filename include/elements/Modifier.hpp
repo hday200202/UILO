@@ -185,8 +185,10 @@ public:
     bool                 hasCursor()         const;
 
 private:
-    Dimension m_width  = 100_pct;
-    Dimension m_height = 100_pct;
+    /* A share rather than a percentage, so a row of unsized children divides
+       itself evenly instead of every one of them claiming the whole row. */
+    Dimension m_width  = 1_flex;
+    Dimension m_height = 1_flex;
     Align     m_align  = Align::Left | Align::Top;
 
     FuncPtr       m_onLeftClick;

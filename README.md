@@ -15,7 +15,7 @@ Elements are created with lowercase factory functions and configured with two ob
 ## Features
 
 - **Retained-mode UI** — elements persist between frames and only re-layout when something changes
-- **Automatic layout** — rows, columns, grids and canvases with percent or pixel sizing
+- **Automatic layout** — rows, columns, grids and canvases sized in pixels, percentages or shares of what is left
 - **Hardware accelerated** — bgfx over Metal, Vulkan, D3D11 or OpenGL
 - **Cross-platform** — macOS, Linux and Windows; see [IOS_BUILD.md](IOS_BUILD.md) for iOS
 - **Themed by role** — a `Palette` maps role names to colours and gradients; `Theme` sets library-wide defaults
@@ -129,7 +129,7 @@ Two details worth knowing up front:
 
 ```cpp
 Modifier()
-    .setWidth(50_pct)                      // 50% of the space left by fixed siblings
+    .setWidth(50_pct)                      // half the parent; 1_flex for a share of the rest
     .setHeight(100_px)
     .setAlign(Align::CenterX | Align::Top) // one flag per axis, OR'd
     .setCursor(CursorType::Hand)           // while the pointer is over it
@@ -204,10 +204,13 @@ following the theme.
 
 ```cpp
 Modifier().setWidth(100_px);   // pixels
-Modifier().setWidth(50_pct);   // percent of the space left by fixed siblings
+Modifier().setWidth(50_pct);   // half the parent's content area
+Modifier().setWidth(1_flex);     // a share of whatever the others leave
 ```
 
-Percent children split what remains once every fixed sibling has taken its size, so a `100_px` header and a `100_pct` body fill a column exactly.
+A percentage is of the parent, the way CSS resolves one: `50_pct` is half the parent whatever its siblings ask for, and three of them overflow it. A pixel size is itself. Whatever those two leave over is then divided among the `_flex` children in proportion to their values — so `1_flex` on its own takes all of it, `1_flex` and `3_flex` split it a quarter to three quarters, and a `48_px` header beside a `1_flex` body fills a column exactly.
+
+`_flex` is what an unsized `Modifier()` uses, which is why a row of default children divides itself evenly. Reach for it whenever you mean "the rest" and for a percentage only when you mean a fraction of the parent. On the cross axis there is nothing to divide, so `1_flex` there simply fills — `100_pct` and `1_flex` are the same thing for the height of a row's child.
 
 ### Built-in fonts and icons
 
@@ -280,7 +283,7 @@ column(
     ColumnOptions().setColorRole("bg"),
     contains{
         row(Modifier().setHeight(48_px), RowOptions().setColorRole("panel"), contains{}),
-        column(Modifier().setHeight(100_pct),                    // takes what's left
+        column(Modifier().setHeight(1_flex),                       // takes what's left
                ColumnOptions().setScrollable(true).setScrollSpeed(50.f),
                contains{ /* ... */ }),
     }
@@ -341,12 +344,12 @@ Container* buildEditor() {
             ),
 
             column(
-                Modifier().setWidth(100_pct).setHeight(100_pct),
+                Modifier().setWidth(1_flex).setHeight(100_pct),
                 ColumnOptions(),
                 contains{
                     /* A code editor: monospaced, top-aligned, line numbers. */
                     textbox(
-                        Modifier().setWidth(100_pct).setHeight(100_pct),
+                        Modifier().setWidth(100_pct).setHeight(1_flex),
                         TextboxOptions()
                             .setMultiline(true)
                             .setWrap(false)
@@ -422,7 +425,7 @@ Container* buildPane() {
         ColumnOptions().setColorRole("panel"),
         contains{
             /* Ordinary flow content. */
-            row(Modifier().setHeight(100_pct), RowOptions(), contains{}),
+            row(Modifier().setHeight(1_flex), RowOptions(), contains{}),
 
             /* Floats over it. Still a child: updated in tree order, and clipped
                by this column so it cannot spill into a neighbouring pane. */

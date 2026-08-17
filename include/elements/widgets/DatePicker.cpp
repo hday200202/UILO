@@ -544,9 +544,9 @@ void DatePicker::rebuild() {
     if (footer) {
         /* Two equal percent spacers split whatever room is left below the
            grid, which centres the button row between the last week and the. */
-        addElement(new Spacer(Modifier().setHeight(50_pct)));
+        addElement(new Spacer(Modifier().setHeight(1_flex)));
         addElement(footer);
-        addElement(new Spacer(Modifier().setHeight(50_pct)));
+        addElement(new Spacer(Modifier().setHeight(1_flex)));
     } else if (pad > 0.f) {
         addElement(new Spacer(Modifier().setHeight(Dimension{pad, false})));
     }
@@ -579,7 +579,7 @@ Element* DatePicker::buildHeader() {
 
     const Date first{m_displayYear, m_displayMonth, 1};
     m_titleText = new Text(
-        Modifier().setWidth(100_pct).setAlign(Align::CenterX | Align::CenterY),
+        Modifier().setWidth(1_flex).setAlign(Align::CenterX | Align::CenterY),
         TextOptions()
             .setFont(o.getFontPath())
             .setContent(DT::format(first, o.getTitleFormat()))
@@ -595,7 +595,7 @@ Element* DatePicker::buildHeader() {
            gives the title something clickable. */
         auto* titleWrap = new Row(
             Modifier()
-                .setWidth(100_pct)
+                .setWidth(1_flex)
                 .setOnLeftClick([this](Element*) { goToToday(); }),
             RowOptions(), contains{});
         titleWrap->addElement(m_titleText);
@@ -692,7 +692,7 @@ Element* DatePicker::buildWeekdayHeader() {
         const Weekday day = DT::weekdayInColumn(column, o.getFirstDayOfWeek());
         row->addElement(new Text(
             Modifier()
-                .setWidth(Dimension{100.f / 7.f, true})
+                .setWidth(1_flex)
                 .setAlign(Align::CenterX | Align::CenterY),
             TextOptions()
                 .setFont(o.getFontPath())
@@ -752,7 +752,7 @@ Element* DatePicker::buildGrid() {
             if (adjacent && !o.getShowAdjacentMonths()) {
                 /* Hold the column open so the rest of the week stays put. */
                 weekRow->addElement(new Spacer(
-                    Modifier().setWidth(Dimension{100.f / 7.f, true})));
+                    Modifier().setWidth(1_flex)));
             } else {
                 weekRow->addElement(buildDayCell(cursor, adjacent));
             }
@@ -793,7 +793,7 @@ Element* DatePicker::buildDayCell(const Date& date, bool adjacent) {
             .setTextAlignY(Align::CenterY));
 
     Modifier mod = Modifier()
-        .setWidth(Dimension{100.f / 7.f, true})
+        .setWidth(1_flex)
         .setOnLeftClick([this, date, adjacent](Element*) { handleDayClicked(date, adjacent); })
         .setOnHoverEnter([this, date](Element*) { setHoverDate(date); })
         .setOnHoverExit([this, date](Element*) {
@@ -854,7 +854,7 @@ Element* DatePicker::buildFooter() {
 
     /* Cancel sits midway between the left-hand buttons and the confirm button
        at the right end: two equal percent spacers divide the free width, so. */
-    footer->addElement(new Spacer(Modifier().setWidth(50_pct)));
+    footer->addElement(new Spacer(Modifier().setWidth(1_flex)));
 
     if (!o.getCancelButtonLabel().empty())
         footer->addElement(buildFooterButton(o.getCancelButtonLabel(), false, [this]() {
@@ -862,7 +862,7 @@ Element* DatePicker::buildFooter() {
             close();
         }));
 
-    footer->addElement(new Spacer(Modifier().setWidth(50_pct)));
+    footer->addElement(new Spacer(Modifier().setWidth(1_flex)));
 
     if (!o.getConfirmButtonLabel().empty())
         footer->addElement(buildFooterButton(o.getConfirmButtonLabel(), true, [this]() {

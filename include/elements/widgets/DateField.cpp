@@ -87,7 +87,7 @@ DateField::DateField(
     /* Contents ------------------------------------------------------ Every
        part is built once and kept. */
     m_padLeft    = new Spacer(Modifier().setWidth(Dimension{o.getPadding(), false}));
-    m_centerLeft = new Spacer(Modifier().setWidth(100_pct));
+    m_centerLeft = new Spacer(Modifier().setWidth(1_flex));
 
     IconOptions iconOpts = IconOptions()
         .setIcon(o.getIcon())
@@ -115,7 +115,7 @@ DateField::DateField(
             .setTextAlignX(Align::Left)
             .setTextAlignY(Align::CenterY));
 
-    m_flexRight = new Spacer(Modifier().setWidth(100_pct));
+    m_flexRight = new Spacer(Modifier().setWidth(1_flex));
 
     IconOptions chevronOpts = IconOptions()
         .setIcon(o.getChevronIcon())
@@ -245,7 +245,7 @@ float DateField::resolveAspect() const {
 
     const Dimension w = m_modifier.getWidth();
     const Dimension h = m_modifier.getHeight();
-    if (!w.percent && !h.percent && w.value > 0.f && h.value > 0.f)
+    if (w.isAbsolute() && h.isAbsolute() && w.value > 0.f && h.value > 0.f)
         return w.value / h.value;
 
     return 0.f;

@@ -234,6 +234,10 @@ void Row::update(Rectf& parentBounds, float dt) {
                 measured as the content width, and the offset finally clamped
                 into the range that content allows and published to any linked
                 row.
+    - A percent width here is a percentage OF the viewport rather than a share of
+      it, since a row whose content overflows on purpose has no leftover space to
+      divide: a lone 50% child is half the viewport wide, and three of them
+      overflow it by half.
 */
 void Row::updateScrollable(float dt, float scale) {
     /* Children live inside the inner padding; the container's own bounds do not move. */
@@ -245,7 +249,9 @@ void Row::updateScrollable(float dt, float scale) {
 
     auto resolvedPinnedW = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getWidth();
-        return dim.percent ? (area.size.x * dim.value / 100.f) : dim.value * scale;
+        if (dim.flex)    return area.size.x;
+        if (dim.percent) return area.size.x * dim.value / 100.f;
+        return dim.value * scale;
     };
 
     float pinnedLeftW = 0.f;
@@ -273,11 +279,30 @@ void Row::updateScrollable(float dt, float scale) {
         }
     }
 
+    /* A child resolves its own size against the slot it is handed, so a percent
+       child has to be given the box its percentage is OF -- handing it the width
+       that already came out of that percentage would apply the percentage twice.
+       `resolved` stays what advances the cursor, and the align nudge keeps a
+       centred or right-aligned child inside its own share of the wider slot,
+       exactly as updateFlow does. */
+    auto slotFor = [&](Element* child, float cursorX, float resolved, const Rectf& box) -> Rectf {
+        if (!child->getModifier().getWidth().percent)
+            return Rectf{{cursorX, box.position.y}, {resolved, box.size.y}};
+
+        const Align align = child->getModifier().getAlign();
+        float slotX;
+        if      (hasAlign(align, Align::Right))     slotX = cursorX + resolved - box.size.x;
+        else if (hasAlign(align, Align::CenterX))   slotX = cursorX - (box.size.x - resolved) * 0.5f;
+        else                                        slotX = cursorX;
+
+        return Rectf{{slotX, box.position.y}, {box.size.x, box.size.y}};
+    };
+
     auto layoutPinnedGroup = [&](std::vector<Element*>& group, float startX) {
         float cursorX = startX;
         for (auto* child : group) {
             const float rw = resolvedPinnedW(child);
-            Rectf slot{{cursorX, area.position.y}, {rw, area.size.y}};
+            Rectf slot = slotFor(child, cursorX, rw, area);
             child->tick(slot, dt);
             cursorX += rw;
         }
@@ -304,8 +329,13 @@ void Row::updateScrollable(float dt, float scale) {
 
         Dimension dim = child->getModifier().getWidth();
         const float zf = m_options.getZoomableX() ? m_zoomX : 1.f;
-        float rw = dim.percent ? (scrollViewport.size.x * dim.value / 100.f) : dim.value * scale * zf;
-        Rectf slot{ {cursorX, scrollViewport.position.y}, {rw, scrollViewport.size.y} };
+        /* A _flex child is one viewport wide however many _flex units it asked for:
+           content here overflows on purpose, so there is no leftover to divide
+           between them. */
+        const float rw = dim.flex    ? scrollViewport.size.x
+                       : dim.percent ? scrollViewport.size.x * dim.value / 100.f
+                                     : dim.value * scale * zf;
+        Rectf slot = slotFor(child, cursorX, rw, scrollViewport);
         child->tick(slot, dt);
         cursorX       += rw;
         m_contentWidth += rw;
@@ -327,26 +357,28 @@ void Row::updateScrollable(float dt, float scale) {
     - Params:   float dt, float scale
     - Returns:  void
     - Desc:     Lays out a non-scrolling row. Children are sorted into left,
-                centre and right buckets by their alignment, then the width left
-                over after the fixed-size ones is shared among the percent-sized
-                ones -- every percent child gets the same slot, so two 50%
-                siblings beside a 100px one split what remains rather than the
-                whole row. Each group is finally placed from its own anchor:
-                left from the left edge, centre about the middle, right against
-                the right edge.
+                centre and right buckets by their alignment, then sized: a pixel
+                width is itself, a percent width is that percentage of the
+                content area, and whatever those two leave over is divided among
+                the _flex children in proportion to their values. Each group is
+                finally placed from its own anchor: left from the left edge,
+                centre about the middle, right against the right edge.
+    - Percent and pixel widths are therefore independent of what the siblings
+      ask for, and can overflow the row between them. Only _flex adapts, which is
+      what makes it the sensible default.
 */
 void Row::updateFlow(float dt, float scale) {
     /* Children live inside the inner padding; the container's own bounds do not move. */
     const Rectf area = contentArea();
 
-    /* First pass: bucket the children by alignment, and total how much width is
-       fixed against how many percent units are asking for the rest. */
+    /* First pass: bucket the children by alignment, and total how much width the
+       sized ones take against how many _flex units are asking for the rest. */
     std::vector<Element*> left;
     std::vector<Element*> mid;
     std::vector<Element*> right;
 
-    float totalFixed = 0.f;
-    float totalPct = 0.f;
+    float totalSized = 0.f;
+    float totalFlex    = 0.f;
 
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
@@ -359,25 +391,32 @@ void Row::updateFlow(float dt, float scale) {
         else                                        left.push_back(child);
 
         Dimension dim = child->getModifier().getWidth();
-        if (!dim.percent) totalFixed += dim.value * scale;
-        else totalPct += dim.value;
+        if      (dim.flex)    totalFlex    += dim.value;
+        else if (dim.percent) totalSized += dim.value / 100.f * area.size.x;
+        else                  totalSized += dim.value * scale;
     }
 
-    /* What is left after the fixed-width children, and the width of a single
-       percent-unit slot. */
-    const float remaining   = area.size.x - totalFixed;
-    const float pctSlotW    = totalPct > 0.f ? (remaining * 100.f / totalPct) : remaining;
+    /* What the sized children left, and how much of it one _flex unit is worth.
+       Both go negative when the sized children overflow the row, which is left
+       to show rather than clamped away. */
+    const float remaining = area.size.x - totalSized;
+    const float flexUnit    = totalFlex > 0.f ? (remaining / totalFlex) : 0.f;
 
-    /* resolvedW is what a child draws at; slotSizeX is what advances the cursor,
-       and every percent child shares the same slot. */
+    /* resolvedW is what a child draws at and what advances the cursor; slotSizeX
+       is the box the child resolves its own width against, which for a percent
+       child is the whole content area. */
     auto resolvedW = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getWidth();
-        return dim.percent ? (dim.value / 100.f * pctSlotW) : dim.value * scale;
+        if (dim.flex)    return dim.value * flexUnit;
+        if (dim.percent) return dim.value / 100.f * area.size.x;
+        return dim.value * scale;
     };
 
     auto slotSizeX = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getWidth();
-        return dim.percent ? pctSlotW : dim.value * scale;
+        if (dim.flex)    return dim.value * flexUnit;
+        if (dim.percent) return area.size.x;
+        return dim.value * scale;
     };
 
     /* Group widths, so the centre and right groups know where to start. */
@@ -482,8 +521,11 @@ void Row::layoutResizers(float dt, float scale) {
             botY = area.position.y + area.size.y;
         }
 
+        /* A resizer takes no part in the flow, so there is no share for a _flex
+           width to be a share of and it can only mean the whole cross span. */
         Dimension hitDim = r->getModifier().getWidth();
-        float hitW = hitDim.percent ? (area.size.x * hitDim.value / 100.f)
+        float hitW = hitDim.flex    ? area.size.x
+                   : hitDim.percent ? (area.size.x * hitDim.value / 100.f)
                                     : hitDim.value * scale;
         Rectf rBounds = {
             { boundX - hitW * 0.5f, topY },
