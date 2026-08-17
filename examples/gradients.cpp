@@ -24,7 +24,7 @@ static Container* buildRoot() {
         contains{
             // Vertical fade, rounded. Position-named setters read top->bottom.
             row(
-                Modifier().setHeight(22_pct),
+                Modifier().setHeight(1_flex),
                 RowOptions()
                     .setOuterPadding(8.f)
                     .setGradient(Gradient()
@@ -35,7 +35,7 @@ static Container* buildRoot() {
 
             // Horizontal gradient built from palette roles: follows theme.
             row(
-                Modifier().setHeight(22_pct),
+                Modifier().setHeight(1_flex),
                 RowOptions()
                     .setOuterPadding(8.f)
                     .setGradient(Gradient()
@@ -46,7 +46,7 @@ static Container* buildRoot() {
 
             // Four explicit corners, each named by where it sits.
             row(
-                Modifier().setHeight(22_pct),
+                Modifier().setHeight(1_flex),
                 RowOptions()
                     .setOuterPadding(8.f)
                     .setGradient(Gradient()
@@ -60,7 +60,7 @@ static Container* buildRoot() {
             // Named palette gradient + a gradient button that swaps its
             // gradient from a hover callback.
             row(
-                Modifier().setHeight(22_pct),
+                Modifier().setHeight(1_flex),
                 RowOptions().setOuterPadding(8.f).setGradientRole("hero").setRounding(18.f),
                 {
                     button(

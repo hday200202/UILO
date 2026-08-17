@@ -132,12 +132,12 @@ int main() {
        non-floating spacers should split the row as if it were not there. */
     runCase("row flow: floating child",
         row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
-            sp(100_pct, 100_pct),
+            sp(1_flex, 100_pct),
             spacer(Modifier().setWidth(120_px).setHeight(60_px)
                              .setFloating(true)
                              .setFreePosition(30_px, 40_px)
                              .setAlign(Align::Right | Align::Bottom)),
-            sp(100_pct, 100_pct),
+            sp(1_flex, 100_pct),
         }), parent);
 
     /* Free position may be a percentage of the container. */
@@ -270,7 +270,7 @@ int main() {
                 }),
                 sp(100_pct, 80_px),
             }),
-            column(Modifier().setWidth(100_pct).setHeight(100_pct),
+            column(Modifier().setWidth(1_flex).setHeight(100_pct),
                    ColumnOptions().setScrollable(true), contains{
                 sp(100_pct, 250_px), sp(100_pct, 250_px), sp(100_pct, 250_px),
             }),
@@ -291,6 +291,67 @@ int main() {
     runCase("row flow: percent only, sums over 100",
         row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
             sp(60_pct, 100_pct), sp(60_pct, 100_pct), sp(60_pct, 100_pct),
+        }), parent);
+
+    /*
+        Percent main-axis children in the SCROLLABLE path, which every case above
+        gives 100_pct and so cannot tell apart from a percentage applied twice.
+        A 50% child must be half the viewport, not a quarter of it, and the
+        centre-aligned pinned child must still land inside its own strip.
+        Appended rather than filed beside the other scrollable cases so the
+        existing case numbers do not move.
+    */
+    {
+        auto* pinC = spacer(Modifier().setWidth(20_pct).setHeight(100_pct)
+                                      .setAlign(Align::CenterX).ignoreScroll(true));
+        runCase("row scrollable: percent children, not 100",
+            row(Modifier().setWidth(100_pct).setHeight(100_pct),
+                RowOptions().setScrollable(true), contains{
+                pinC, sp(50_pct, 100_pct), sp(25_pct, 100_pct), sp(200_px, 100_pct),
+            }), parent);
+    }
+
+    {
+        auto* pinC = spacer(Modifier().setWidth(100_pct).setHeight(20_pct)
+                                      .setAlign(Align::CenterY).ignoreScroll(true));
+        runCase("column scrollable: percent children, not 100",
+            column(Modifier().setWidth(100_pct).setHeight(100_pct),
+                   ColumnOptions().setScrollable(true), contains{
+                pinC, sp(100_pct, 50_pct), sp(100_pct, 25_pct), sp(100_pct, 200_px),
+            }), parent);
+    }
+
+    /*
+        The three units together. A percentage is of the content area whatever
+        the siblings do, a pixel size is itself, and the _flex children divide what
+        those two leave in proportion to their weights -- 1:3 of the 350 left
+        here, so 87.5 and 262.5.
+    */
+    runCase("row flow: px + pct + fr shares",
+        row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
+            sp(150_px, 100_pct), sp(50_pct, 100_pct), sp(1_flex, 100_pct), sp(3_flex, 100_pct),
+        }), parent);
+
+    runCase("column flow: px + pct + fr shares",
+        column(Modifier().setWidth(100_pct).setHeight(100_pct), ColumnOptions(), contains{
+            sp(100_pct, 90_px), sp(100_pct, 50_pct), sp(100_pct, 1_flex), sp(100_pct, 3_flex),
+        }), parent);
+
+    /* A lone share takes everything left, which is what an unsized Modifier
+       relies on, and _flex in the alignment buckets divides the same pool. */
+    runCase("row flow: lone fr, and fr across buckets",
+        row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
+            sp(200_px, 100_pct),
+            sp(1_flex, 100_pct, Align::Left),
+            sp(1_flex, 100_pct, Align::CenterX),
+            sp(2_flex, 100_pct, Align::Right),
+        }), parent);
+
+    /* Sized children that overflow leave a negative share, which is shown
+       rather than clamped -- the same as a fixed overflow. */
+    runCase("row flow: fr starved by oversized siblings",
+        row(Modifier().setWidth(100_pct).setHeight(100_pct), RowOptions(), contains{
+            sp(700_px, 100_pct), sp(50_pct, 100_pct), sp(1_flex, 100_pct),
         }), parent);
 
     std::printf("\ncases: %d\n", g_case);

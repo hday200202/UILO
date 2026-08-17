@@ -27,7 +27,7 @@ Dropdown::Dropdown(
         .setTextAlignY(m_options.getHeaderTextAlignY());
 
     m_headerLabel = new Text(
-        Modifier().setWidth({100.f, true}).setHeight({100.f, true}),
+        Modifier().setWidth(1_flex).setHeight({100.f, true}),
         headerTextOpts, "");
 
     /* Header button. */
@@ -111,7 +111,7 @@ Dropdown::Dropdown(
             .setTextAlignY(m_options.getPopupTextAlignY());
 
         Text* txt = new Text(
-            Modifier().setWidth({100.f, true}).setHeight({100.f, true}),
+            Modifier().setWidth(1_flex).setHeight({100.f, true}),
             itemTextOpts, "");
 
         const size_t idx = i;

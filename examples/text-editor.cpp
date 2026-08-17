@@ -17,8 +17,8 @@ Container*  buildMainContentContainerChildRow(const std::string& text);
 
 Container*  panel(
     bool isColumn       = true, 
-    Dimension width     = 100_pct, 
-    Dimension height    = 100_pct, 
+    Dimension width     = 1_flex, 
+    Dimension height    = 1_flex, 
     contains children   = {}, 
     bool scrollable     = false
 );

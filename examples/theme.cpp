@@ -228,7 +228,7 @@ Container* buildRoot() {
 
                     spacer(
                         Modifier()
-                            .setWidth(100_pct)
+                            .setWidth(1_flex)
                     )
                 }
             ),
@@ -379,7 +379,7 @@ Container* buildRoot() {
                 }
             ),
 
-            gap(100_pct)
+            gap(1_flex)
         },
         "root"
     );

@@ -254,6 +254,10 @@ void Column::update(Rectf& parentBounds, float dt) {
                 measured as the content height, and the offset finally clamped
                 into the range that content allows and published to any linked
                 column.
+    - A percent height here is a percentage OF the viewport rather than a share of
+      it, since a column whose content overflows on purpose has no leftover space
+      to divide: a lone 50% child is half the viewport tall, and three of them
+      overflow it by half.
 */
 void Column::updateScrollable(float dt, float scale) {
     /* Children live inside the inner padding; the container's own bounds do not move. */
@@ -265,7 +269,9 @@ void Column::updateScrollable(float dt, float scale) {
 
     auto resolvedPinnedH = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? (area.size.y * dim.value / 100.f) : dim.value * scale;
+        if (dim.flex)    return area.size.y;
+        if (dim.percent) return area.size.y * dim.value / 100.f;
+        return dim.value * scale;
     };
 
     float pinnedTopH = 0.f;
@@ -293,11 +299,30 @@ void Column::updateScrollable(float dt, float scale) {
         }
     }
 
+    /* A child resolves its own size against the slot it is handed, so a percent
+       child has to be given the box its percentage is OF -- handing it the height
+       that already came out of that percentage would apply the percentage twice.
+       `resolved` stays what advances the cursor, and the align nudge keeps a
+       centred or bottom-aligned child inside its own share of the taller slot,
+       exactly as updateFlow does. */
+    auto slotFor = [&](Element* child, float cursorY, float resolved, const Rectf& box) -> Rectf {
+        if (!child->getModifier().getHeight().percent)
+            return Rectf{{box.position.x, cursorY}, {box.size.x, resolved}};
+
+        const Align align = child->getModifier().getAlign();
+        float slotY;
+        if      (hasAlign(align, Align::Bottom))    slotY = cursorY + resolved - box.size.y;
+        else if (hasAlign(align, Align::CenterY))   slotY = cursorY - (box.size.y - resolved) * 0.5f;
+        else                                        slotY = cursorY;
+
+        return Rectf{{box.position.x, slotY}, {box.size.x, box.size.y}};
+    };
+
     auto layoutPinnedGroup = [&](std::vector<Element*>& group, float startY) {
         float cursorY = startY;
         for (auto* child : group) {
             const float rh = resolvedPinnedH(child);
-            Rectf slot{{area.position.x, cursorY}, {area.size.x, rh}};
+            Rectf slot = slotFor(child, cursorY, rh, area);
             child->tick(slot, dt);
             cursorY += rh;
         }
@@ -324,8 +349,13 @@ void Column::updateScrollable(float dt, float scale) {
 
         Dimension dim = child->getModifier().getHeight();
         const float zf = m_options.getZoomableY() ? m_zoomY : 1.f;
-        float rh = dim.percent ? (scrollViewport.size.y * dim.value / 100.f) : dim.value * scale * zf;
-        Rectf slot{ {scrollViewport.position.x, cursorY}, {scrollViewport.size.x, rh} };
+        /* A _flex child is one viewport tall however many _flex units it asked for:
+           content here overflows on purpose, so there is no leftover to divide
+           between them. */
+        const float rh = dim.flex    ? scrollViewport.size.y
+                       : dim.percent ? scrollViewport.size.y * dim.value / 100.f
+                                     : dim.value * scale * zf;
+        Rectf slot = slotFor(child, cursorY, rh, scrollViewport);
         child->tick(slot, dt);
         cursorY      += rh;
         m_contentHeight += rh;
@@ -347,26 +377,28 @@ void Column::updateScrollable(float dt, float scale) {
     - Params:   float dt, float scale
     - Returns:  void
     - Desc:     Lays out a non-scrolling column. Children are sorted into top,
-                centre and bottom buckets by their alignment, then the height
-                left over after the fixed-size ones is shared among the percent-
-                sized ones -- every percent child gets the same slot, so two 50%
-                siblings beside a 100px one split what remains rather than the
-                whole column. Each group is finally placed from its own anchor:
-                top from the top edge, centre about the middle, bottom against
-                the bottom edge.
+                centre and bottom buckets by their alignment, then sized: a pixel
+                height is itself, a percent height is that percentage of the
+                content area, and whatever those two leave over is divided among
+                the _flex children in proportion to their values. Each group is
+                finally placed from its own anchor: top from the top edge, centre
+                about the middle, bottom against the bottom edge.
+    - Percent and pixel heights are therefore independent of what the siblings
+      ask for, and can overflow the column between them. Only _flex adapts, which
+      is what makes it the sensible default.
 */
 void Column::updateFlow(float dt, float scale) {
     /* Children live inside the inner padding; the container's own bounds do not move. */
     const Rectf area = contentArea();
 
-    /* First pass: bucket the children by alignment, and total how much height is
-       fixed against how many percent units are asking for the rest. */
+    /* First pass: bucket the children by alignment, and total how much height the
+       sized ones take against how many _flex units are asking for the rest. */
     std::vector<Element*> top;
     std::vector<Element*> mid;
     std::vector<Element*> bot;
 
-    float totalFixed = 0.f;
-    float totalPct = 0.f;
+    float totalSized = 0.f;
+    float totalFlex    = 0.f;
 
     for (auto* child : m_children) {
         if (!child->getModifier().getVisible()) continue;
@@ -379,25 +411,32 @@ void Column::updateFlow(float dt, float scale) {
         else                                        top.push_back(child);
 
         Dimension dim = child->getModifier().getHeight();
-        if (!dim.percent) totalFixed += dim.value * scale;
-        else totalPct += dim.value;
+        if      (dim.flex)    totalFlex    += dim.value;
+        else if (dim.percent) totalSized += dim.value / 100.f * area.size.y;
+        else                  totalSized += dim.value * scale;
     }
 
-    /* What is left after the fixed-height children, and the height of a single
-       percent-unit slot. */
-    const float remaining   = area.size.y - totalFixed;
-    const float pctSlotH    = totalPct > 0.f ? (remaining * 100.f / totalPct) : remaining;
+    /* What the sized children left, and how much of it one _flex unit is worth.
+       Both go negative when the sized children overflow the column, which is
+       left to show rather than clamped away. */
+    const float remaining = area.size.y - totalSized;
+    const float flexUnit    = totalFlex > 0.f ? (remaining / totalFlex) : 0.f;
 
-    /* resolvedH is what a child draws at; slotSizeY is what advances the cursor,
-       and every percent child shares the same slot. */
+    /* resolvedH is what a child draws at and what advances the cursor; slotSizeY
+       is the box the child resolves its own height against, which for a percent
+       child is the whole content area. */
     auto resolvedH = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? (dim.value / 100.f * pctSlotH) : dim.value * scale;
+        if (dim.flex)    return dim.value * flexUnit;
+        if (dim.percent) return dim.value / 100.f * area.size.y;
+        return dim.value * scale;
     };
 
     auto slotSizeY = [&](Element* e) -> float {
         Dimension dim = e->getModifier().getHeight();
-        return dim.percent ? pctSlotH : dim.value * scale;
+        if (dim.flex)    return dim.value * flexUnit;
+        if (dim.percent) return area.size.y;
+        return dim.value * scale;
     };
 
     /* Group heights, so the centre and bottom groups know where to start. */
@@ -503,12 +542,16 @@ void Column::layoutResizers(float dt, float scale) {
             rgtX = area.position.x + area.size.x;
         }
 
+        /* A resizer takes no part in the flow, so there is no share for a _flex
+           size to be a share of and it can only mean the whole span. */
         Dimension hitDim = r->getModifier().getHeight();
-        float hitH = hitDim.percent ? (area.size.y * hitDim.value / 100.f)
+        float hitH = hitDim.flex    ? area.size.y
+                   : hitDim.percent ? (area.size.y * hitDim.value / 100.f)
                                     : hitDim.value * scale;
         const float spanW = std::max(0.f, rgtX - lftX);
         const Dimension widthDim = r->getModifier().getWidth();
-        const float requestedW = widthDim.percent ? (spanW * widthDim.value / 100.f)
+        const float requestedW = widthDim.flex    ? spanW
+                               : widthDim.percent ? (spanW * widthDim.value / 100.f)
                                                   : widthDim.value * scale;
         const float hitW = std::clamp(requestedW, 0.f, spanW);
         const Align hitAlign = r->getModifier().getAlign();

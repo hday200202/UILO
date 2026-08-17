@@ -982,14 +982,15 @@ std::string ownHeightExpr(Element* el, Axis parentAxis, bool parentScrolls,
     const Dimension h   = mod.getHeight();
     const float op      = el->getOuterPadding();
 
-    if (!h.percent) return px(h.value - 2.f * op);
+    if (h.isAbsolute()) return px(h.value - 2.f * op);
 
     /* A percentage only follows from the parent when the parent is not
        distributing this axis by flex: either height is the cross axis (the. */
     if (parentHeight.empty() || (parentAxis != Axis::Row && !parentScrolls))
         return {};
 
-    std::string expr = "calc(" + parentHeight + " * " + num(h.value / 100.f) + ")";
+    /* Past that guard the axis is not being divided, so a share is all of it. */
+    std::string expr = "calc(" + parentHeight + " * " + num(h.flex ? 1.f : h.value / 100.f) + ")";
     if (op > 0.f) expr = "calc(" + expr + " - " + px(2.f * op) + ")";
     return expr;
 }
@@ -1009,10 +1010,11 @@ std::string ownHeightExpr(Element* el, Axis parentAxis, bool parentScrolls,
 std::string floatingHeightExpr(Element* el, float parentInnerPadding,
                                const std::string& parentHeight) {
     const Dimension h = el->getModifier().getHeight();
-    if (!h.percent) return px(h.value);
+    if (h.isAbsolute()) return px(h.value);
     if (parentHeight.empty()) return {};
 
-    const float frac = h.value / 100.f;
+    /* Placed rather than distributed, so a share is the whole parent. */
+    const float frac = h.flex ? 1.f : h.value / 100.f;
     std::string expr = "calc(" + parentHeight + " * " + num(frac) + ")";
     if (parentInnerPadding > 0.f)
         expr = "calc(" + expr + " - " + px(2.f * parentInnerPadding * frac) + ")";
@@ -1079,10 +1081,13 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         */
         const float pip = n.parentInnerPadding;
         auto against = [&](Dimension d, float extra) -> std::string {
-            if (!d.percent) return px(d.value + extra);
+            if (d.isAbsolute()) return px(d.value + extra);
+            /* A share has no siblings to divide anything with out here, so it is
+               the whole span, the same as 100%. */
+            const float frac = d.flex ? 1.f : d.value / 100.f;
             std::string span = pip > 0.f ? "(100% - " + px(2.f * pip) + ")"
                                          : std::string("100%");
-            std::string expr = "calc(" + span + " * " + num(d.value / 100.f);
+            std::string expr = "calc(" + span + " * " + num(frac);
             if (extra != 0.f) expr += " + " + px(extra);
             return expr + ")";
         };
@@ -1100,23 +1105,40 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         const Dimension crossDim = n.axis == Axis::Row ? mod.getHeight() : mod.getWidth();
         const char* crossProp    = n.axis == Axis::Row ? "height" : "width";
 
+        /* A percentage of the parent, with outer padding taken off the way the
+           native side takes it off the resolved size. */
+        auto pctBasis = [&](float value) -> std::string {
+            return op > 0.f ? "calc(" + pct(value) + " - " + px(2.f * op) + ")"
+                            : pct(value);
+        };
+
         if (n.parentScrolls) {
-            /* A scrollable container sizes children against its viewport and
-               lets them overflow, so nothing is distributed and nothing. */
-            css += "flex:0 0 " + (mainDim.percent ? pct(mainDim.value)
-                                                  : px(mainDim.value - 2.f * op)) + ";";
-        } else if (mainDim.percent) {
-            /* UILO gives each percent child value/totalPct of the space left
-               over once fixed-size siblings are placed. */
+            /* A scrollable container sizes children against its viewport and lets
+               them overflow, so nothing is distributed: a share is one viewport
+               and a percentage is a percentage of that viewport. */
+            css += "flex:0 0 ";
+            if      (mainDim.flex)    css += pctBasis(100.f);
+            else if (mainDim.percent) css += pctBasis(mainDim.value);
+            else                      css += px(mainDim.value - 2.f * op);
+            css += ";";
+        } else if (mainDim.flex) {
+            /* flex-grow divides the free space in proportion to the weights,
+               which is what a _flex share is; a zero basis keeps the child's own
+               content from claiming any of it first. */
             css += "flex:" + num(mainDim.value) + " 1 0;";
+        } else if (mainDim.percent) {
+            /* A percentage is of the container and does not grow, so it comes out
+               of the free space before the shares are divided -- which is what a
+               flex-basis with no grow does. */
+            css += "flex:0 0 " + pctBasis(mainDim.value) + ";";
         } else {
             css += "flex:0 0 " + px(mainDim.value - 2.f * op) + ";";
         }
 
-        if (crossDim.percent) {
+        /* Nothing is distributed on the cross axis, so a share fills it. */
+        if (crossDim.flex || crossDim.percent) {
             css += std::string(crossProp) + ":";
-            css += op > 0.f ? "calc(" + pct(crossDim.value) + " - " + px(2.f * op) + ")"
-                            : pct(crossDim.value);
+            css += pctBasis(crossDim.flex ? 100.f : crossDim.value);
             css += ";";
         } else {
             css += std::string(crossProp) + ":" + px(crossDim.value - 2.f * op) + ";";
@@ -1456,8 +1478,8 @@ void Translator::applyImageAspect(Image* img) {
 
     /* Same guards as Image::init(): the driving axis has to be a concrete
        pixel size for a derived one to mean anything. */
-    const bool byWidth  = o.getLockAspectWidth()  && !w.percent;
-    const bool byHeight = o.getLockAspectHeight() && !h.percent;
+    const bool byWidth  = o.getLockAspectWidth()  && w.isAbsolute();
+    const bool byHeight = o.getLockAspectHeight() && h.isAbsolute();
     if (!byWidth && !byHeight) return;
 
     /* The path is a URL to the browser, so it is relative to the server's

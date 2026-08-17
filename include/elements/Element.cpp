@@ -176,8 +176,13 @@ void Element::resize(const Rectf& parent) {
     float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
     float op = getOuterPadding() * scale;
 
+    /* A _flex size fills whatever it is given: the container works out the share
+       and hands it over as the slot, so by the time it reaches here there is
+       nothing left to divide. */
     auto resolveScaled = [&](Dimension dim, float parentSize) -> float {
-        return dim.percent ? (dim.value / 100.f * parentSize) : (dim.value * scale);
+        if (dim.flex)    return parentSize;
+        if (dim.percent) return dim.value / 100.f * parentSize;
+        return dim.value * scale;
     };
 
     const Vec2f oldSize = m_bounds.size;

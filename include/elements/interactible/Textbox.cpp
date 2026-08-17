@@ -128,7 +128,7 @@ bool Textbox::autoGrows() const {
        chat-input shape. */
     return m_options.getMultiline()
         && m_options.getWrap()
-        && !m_modifier.getHeight().percent;
+        && m_modifier.getHeight().isAbsolute();
 }
 
 

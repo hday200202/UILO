@@ -62,9 +62,9 @@ void Image::init() {
         const float aspect = (float)m_textureWidth / (float)m_textureHeight;
         Dimension w = m_modifier.getWidth();
         Dimension h = m_modifier.getHeight();
-        if (m_options.getLockAspectWidth() && !w.percent)
+        if (m_options.getLockAspectWidth() && w.isAbsolute())
             m_modifier.setHeight(Dimension{ w.value / aspect, false });
-        else if (m_options.getLockAspectHeight() && !h.percent)
+        else if (m_options.getLockAspectHeight() && h.isAbsolute())
             m_modifier.setWidth(Dimension{ h.value * aspect, false });
     }
 }

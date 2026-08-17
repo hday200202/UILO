@@ -1,456 +1,237 @@
 UILO TODO & Roadmap
 ===================
+Only what is left to do. Finished work is documented in README.md and in the
+headers, not here.
 
-## High-Priority Widgets
 
-- [~] Calendar / Date Picker  (uilo::DatePicker, built on uilo::DateAndTime)
-      - [x] Month grid, embedded or as a centred popup over the whole window
-      - [x] Range selection mode, with the span previewed under the cursor
-      - [x] Month/year navigation
-      - [x] Min/max bounds and a per-date enabled predicate
-      - [x] uilo::DateField -- the whole thing as one element: a dropdown-shaped
-            field that opens the popup and shows what was picked. Sizes itself
-            down to just the calendar icon when the box gets square.
-      - [ ] Keyboard shortcuts (arrows to move, enter to pick, esc to dismiss)
-      - [ ] Month/year jump: clicking the title could open a year picker
-            instead of only going back to today
+## In progress
+
+- [~] File Browser  (include/elements/widgets/Filebrowser.hpp)
+      An expanding tree of directories, docked or floating. Done: both modes,
+      extension filtering (setExtensionFilter), sorting, theming.
+      - [ ] Multi-select -- there is one m_selectedPath today, so this is a set
+            plus shift/cmd-click range and toggle semantics
+      - [ ] Favourites / recent -- needs somewhere to persist a list, which UILO
+            has no notion of yet
+      - [ ] Search / filter bar
+
+- [~] Calendar / Date Picker  (DatePicker, DateField)
+      Done: month grid embedded or as a centred popup, range selection with the
+      span previewed under the cursor, month/year navigation, min/max bounds and
+      a per-date predicate, DateField collapsing to just its icon when square.
+      - [ ] Keyboard: arrows to move, enter to pick, esc to dismiss
+      - [ ] Clicking the title opens a year picker, instead of only jumping back
+            to today
       - [ ] Time-of-day selection, to make it a full DateTime picker
 
-- [~] File Browser
-      - [x] Floating window mode (for dialogs) -- needs no widget support of its
-            own since floating became a Modifier flag: a file dialog is
-            filebrowser(Modifier().setFloating(true).setDraggable(true)
-                                  .setFreePosition(x, y), ...)
-            placed anywhere in the tree. It is clipped by whatever container it
-            sits in, so put it in the page root for a window-level dialog.
-      - [x] Docked mode (embedded in panels) -- the default: an ordinary child.
-            examples/text-editor.cpp docks one in a resizable side panel.
-      - File filtering by extension
-      - Multi-select mode
-      - Favorites / Recent files
-      - Search/filter bar
+- [ ] Color Picker  (ColorPicker.{hpp,cpp} exist and are EMPTY)
+      - [ ] Saturation/value area plus a hue strip, with RGB/HSV fields and hex
+            entry
+      - [ ] Alpha slider over a checkerboard
+      - [ ] Palette presets -- rows of swatches, click to pick
 
-- [ ] Color Picker
-      - HSV/RGB selector
-      - Gradient picker
-      - Palette presets
-      - Alpha channel control
 
-- [ ] Tree View
-      - Hierarchical display with expand/collapse
-      - Lazy-load children on expand (virtualization for large trees)
-      - Multi-level nesting support
-      - Icons or custom content per node
-      - Selection modes (single, multi, range)
-      - Keyboard navigation (arrows, home/end, expand/collapse with left/right)
-      - Optional drag-and-drop between nodes
-      - Context menu integration
-      - Scrollable when exceeds bounds
+## Widgets not started
 
 - [ ] Tabs / Tab Bar
-      - Closeable tabs
-      - Active tab highlighting
-      - Overflow handling (scroll or menu)
-
-## Medium-Priority Widgets
+      Closeable tabs, active-tab highlight, and overflow -- either scroll the
+      strip or spill into a menu. Page switching already exists (setPage), so a
+      tab bar is a control for it rather than new machinery.
 
 - [ ] Context Menu (right-click)
-      - Submenu support
-      - Keyboard navigation
-      - Icon support per item
+      registerOverlay already solves the hard part: drawing a popup over
+      everything and dismissing it on an outside click, which is what Dropdown
+      and DateField use. What is missing is the item list -- separators, icons,
+      submenus, keyboard navigation.
 
-- [ ] Modal Dialog / Overlay
-      - Blocking modal with backdrop
-      - Button presets (OK, Cancel, Yes/No)
-      - Custom button layouts
+- [ ] Modal Dialog
+      addPopupBackdrop already gives the full-window scrim that swallows input.
+      What is missing is the dialog itself: a titled card, button presets
+      (OK/Cancel, Yes/No), and a custom button row.
 
 - [ ] Toast Notifications
-      - Auto-dismiss with timeout
-      - Position (top, bottom, corner)
-      - Multiple simultaneous notifications
+      Corner-anchored, auto-dismissed after a timeout, several stacked at once.
 
 - [ ] Progress Bar
-      - Horizontal and vertical orientations
-      - Indeterminate mode
-      - Text label support
+      Horizontal and vertical, determinate and indeterminate, optional label.
 
 - [ ] Checkbox
-      - Tri-state support (checked, unchecked, partial)
-      - Label support
+      Including the partial look for tri-state, with a label.
 
-- [ ] Radio Button Group
-      - Exclusive selection
-      - Vertical or horizontal layout
-
-- [ ] Menu Bar / Top Menu
-      - Dropdown menus
-      - Keyboard mnemonics
-      - Separators
+- [ ] Switch / Toggle
+      A checkbox that slides. Wants the animation system below, or a hand-rolled
+      lerp until it exists.
 
 - [ ] Tooltip
-      - Hover-triggered
-      - Delay before show
-      - Auto-position to avoid edges
+      Shown after a hover delay and auto-flipped so it does not run off the
+      window edge. Needs a per-element hover timer, which nothing keeps today.
 
 - [ ] Breadcrumb Navigation
-      - Clickable items
-      - Separator styling
-      - Overflow handling
+      The clickable path trail along the top of a view -- "Home / Projects /
+      UILO", where each segment jumps to that level and the middle collapses to
+      an ellipsis when the row is too narrow to fit. The concrete use here would
+      be a path bar above the FileBrowser. It is a Row of Buttons plus that
+      overflow rule, so decide first whether it earns being a widget at all.
 
-## Low-Priority Widgets
 
-- [ ] Autocomplete / Search Input
-      - Suggestions dropdown
-      - Fuzzy matching
+## Features
 
-- [ ] Pagination Widget
-      - Previous/next buttons
-      - Page indicators
-      - Jump to page input
+- [~] Palette
+      Done: central definitions, runtime switching, per-UILO override (which is
+      what gives Wt sessions their own look), and every widget following roles
+      with nothing named at the call site.
+      - [ ] Serialization / deserialization
+      - Literal-only on purpose, not a gap: transparent-by-default container
+        fills and outlines (a role would paint every container), Image tint (a
+        role would tint photographs), Waveform channel colours, and the
+        translucent overlays whose alpha carries the effect -- DatePicker's scrim
+        and range fill, Textbox's selection. Roles cannot express alpha over an
+        unknown background.
 
-- [ ] Resizable Panels
-      - Divider dragging
-      - Min/max size constraints
-      - Save/restore layout
-
-- [ ] Spinbox / Number Input
-      - Up/down buttons
-      - Keyboard arrow support
-      - Range validation
-
-- [ ] Tag Input
-      - Add/remove tags
-      - Auto-complete suggestions
-
-- [ ] Switch / Toggle Button
-      - Animated state transition
-      - Label support
-
-## Features & Infrastructure
-
-- [~] Palette System (for application-defined theming)
-      - [x] Centralized color palette definitions
-      - [x] Palette switching at runtime -- uilo::Theme holds the palette and is
-            read where colours resolve, so swapping it restyles live with no
-            rebuild. A UILO may still override it per instance, which is what
-            gives Wt sessions their own look.
-      - [x] NO built-in themes; apps define their own palettes
-      - [x] Every widget follows the palette with nothing named at the call
-            site. Widgets used to carry hardcoded literal colours and no role --
-            a Dropdown was entirely palette-blind, and Text/Icon defaulted to
-            white -- so a theme could not reach them. They now default to roles
-            from the vocabulary Palette::defaultDark() defines (bg, panel,
-            panelAlt, accent, accentHover, onAccent, text, textDim, outline).
-            An undefined role still resolves to the literal, so a palette that
-            stays silent changes nothing.
-      - [ ] Still literal-only, deliberately: transparent-by-default container
-            fills and outlines (a role would paint every container), Image tint
-            (a role would tint photographs), Waveform channel colours, and the
-            translucent overlays whose alpha carries the effect -- DatePicker's
-            scrim and range fill, Textbox's selection. Roles cannot express
-            alpha-over-unknown-background.
-      - [ ] Palette serialization/deserialization
-
-- [~] Style System  (uilo::Theme)
-      - [x] Application-wide defaults: palette, rounding, outer padding, char
-            size, font, icon stroke width. Deliberately NOT outline -- a border
-            on everything reads as noise, not as a style.
-      - [x] Cascading properties -- element setting, then theme, then the type's
-            own default, so a theme only fills in what was left alone and adding
-            one cannot change how existing code looks
-      - [x] Composite widgets keep following the theme after construction. They
-            used to resolve a themed value once and copy the number into the
-            Row/Column/Button they are built from, which froze it -- a theme
-            change never reached a Dropdown, DatePicker, DateField or
-            FileBrowser. inheritRounding() hands the child the unset-ness plus
-            the widget's own default as a fallback, so the child resolves the
-            theme itself. Works on the web too, where nothing ticks and a
-            per-frame re-sync would not have.
+- [~] Theme
+      Done: app-wide palette, rounding, outer padding, char size, font and icon
+      stroke width; cascading element -> theme -> type default, so a theme only
+      fills in what was left alone; composite widgets that keep following the
+      theme after construction (inheritRounding). Deliberately NOT outline -- a
+      border on everything reads as noise.
       - [ ] Font and char size still resolve once into widget label options, the
-            same way rounding did. Only matters for a theme changed at runtime;
-            the same inherit* treatment would fix it.
-      - [x] setOutline{Color,ColorRole,Thickness} on every surface Options
-            (Row, Column, Canvas, Button, Spacer, Textbox, Dropdown header and
-            popup, FileBrowser panel, DatePicker card, DateField). Per-element
-            only, never themed. Drawn inside the bounds, so a border never
-            changes an element's footprint, and emitted as a CSS border on the
-            web. Not on Slider/Knob/Waveform, whose visuals are several
-            sub-shapes with no single "the outline".
-      - [ ] More themed properties as they earn it (scroll speed, spacing
-            scale, hover/pressed tints)
-      - [ ] Reusable style objects: a named bundle of Options to apply to many
-            elements, which is the piece Theme deliberately does not cover
-      - [ ] CSS-like selectors or style sheets
+            way rounding used to. Only matters for a theme swapped at runtime;
+            the same inherit* treatment fixes it.
+      - [ ] Reusable style bundles: a named set of Options applied to many
+            elements, which is the piece Theme deliberately does not cover.
+      - [ ] More themed properties as they earn it -- scroll speed, spacing
+            scale, hover/pressed tints.
 
 - [ ] Animation System
-      - Lerp between two or more Modifiers over time
-      - Lerp between two or more Options over time
-      - Easing functions (linear, ease-in, ease-out, etc.)
-      - Duration and playback control
-      - Design question: How does element know when to animate?
-        * Manual trigger (.animate(startModifier, endModifier, duration))?
-        * Callback-driven?
-        * Event-based?
-      - Callbacks on animation start/end
+      Lerp between two Modifiers, or two Options, over a duration, with easing
+      (linear, ease-in, ease-out) and start/end callbacks.
+      The open question, and the reason this has not started: how does an element
+      know when to animate? A manual .animate(from, to, duration), a callback, or
+      an event binding.
 
 - [ ] Drag and Drop
-      - Draggable elements
-      - Drop targets
-      - Visual feedback during drag
-      - Mouse class with "bucket" for arbitrary payload data
-        * Store any type of data during drag (void* or template-based)
-        * Query payload at drop target
-        * Enables flexible, type-safe data passing
+      Draggable elements, drop targets, and visual feedback during the drag.
+      Wants a payload bucket on the mouse so a drag can carry arbitrary data and
+      the drop target can ask for it at the end.
 
 - [ ] Keyboard Navigation
-      - Tab order management
-      - Focus indicators
-      - Arrow key navigation in containers
+      Tab order, a focus indicator, arrow keys within a container.
 
 - [ ] Virtual Scrolling
-      - Lazy rendering for massive lists
-      - Performance for 10k+ items
-
-- [ ] Hot Reload / Live Edit
-      - UI state preservation on reload
-      - Fast iteration during development
-
-- [ ] Inspector / Debug Tools
-      - Visual element hierarchy
-      - Property viewer
-      - Performance profiler
-      - Event logger
+      Render only the visible rows, so a 10k-item list stays cheap.
 
 - [ ] Native File Dialog Abstraction
-      - Unified interface for file open/save dialogs
-      - Works across macOS, Linux, Windows
-      - Path filtering and file type restrictions
-      - Async or blocking modes
-      - Returns selected path(s) and metadata
+      One interface over the OS open/save dialogs on macOS, Linux and Windows,
+      with type filters, blocking or async, returning the chosen paths.
 
-- [ ] Platform-Specific Features
-      - OS-level drag & drop into UILO window
-      - Cut/copy/paste integration with system clipboard
+- [ ] OS-level drag and drop INTO the window -- dropping a file onto the app.
+      System clipboard integration is already done.
 
-## Documentation & Examples
 
-- [ ] API Documentation
-      - Doxygen or similar
-      - Generated HTML docs
+## Known gaps
 
-- [ ] Example Applications
-      - Todo app
-      - Settings panel
-      - Dashboard/metrics view
-      - Music player UI
-      - Text editor
+- Terminal
+      - [ ] Windows. Pty.cpp's Windows branch fails cleanly with "needs
+            ConPTY", so the widget reports it could not start a shell rather
+            than half-working.
+      - [ ] Mouse reporting (CSI ?1000h and friends), so a mouse-driven TUI
+            never sees clicks. Whoever adds it must gate drag-to-select on
+            reporting being OFF, or selection will keep stealing the drag.
+      - [ ] No reflow on resize. The grid is resized and the shell is
+            SIGWINCHed, but wrapped lines are not re-wrapped -- a cell grid has
+            already thrown away the text that would be needed.
+      - Not fixable: the browser cannot host this. A page cannot fork a process,
+        and proxying one would hand every visitor a shell on the host. Pty is
+        stubbed in wt/HeadlessBackend.cpp so the WT build links, and Translator
+        renders the screen text as a monospace block.
 
-- [ ] Video Tutorials
-      - Getting started
-      - Common patterns
-      - Performance tips
+- Input
+      - [ ] Touch / pointer support
+      - [ ] IME, for international text entry
 
-- [ ] Best Practices Guide
-      - Layout patterns
-      - Event handling
-      - Memory management
-      - Performance optimization
+- Rendering
+      - [ ] High DPI
+      - [ ] Sub-pixel positioning and text antialiasing quality
 
-## Testing & Performance
+- Layout
+      - [ ] Untested edge cases: very small containers, deeply nested trees,
+            rapid add/remove cycles
 
-- [ ] Unit Tests
-      - Layout calculation tests
-      - Event handling tests
-      - Widget behavior tests
+- Memory & performance
+      - [ ] Reduce allocations, cache layout calculations, cut draw calls
 
-- [ ] Integration Tests
-      - Multi-widget interactions
-      - Page switching
-      - State preservation
 
-- [ ] Performance Benchmarks
-      - Rendering speed (elements per frame)
-      - Memory usage patterns
-      - Event handling latency
+## Testing & docs
 
-- [ ] Profiling Tools
-      - Frame time breakdown
-      - Element count/memory tracking
-      - Render target statistics
+Two probes are the test suite. Both drive elements directly with no UILO bound,
+so they need no window and no GPU:
 
-## Bug Fixes & Polish
+      tools/probe.sh layout     22 cases, dumps every child's resolved bounds.
+                                --baseline saves the golden output, --check
+                                diffs against it.
+      tools/probe.sh pointer    23 assertions, self-checking, exits non-zero on
+                                failure. Covers occlusion: who ends up hovered,
+                                whose handlers fire, what a floating child
+                                shields.
+      tools/gen_docs.py --check doc-comment coverage
+      tools/check_readme.py     compiles every code block in README.md
+      examples/render_bench     rendering throughput
 
-- [x] Dropdown arrow -- a chevron in the header, swapping to chevron-up while
-      open. Native only by nature: on the web a Dropdown is a <select>, which
-      the browser draws its own arrow on.
-
-- [x] Dropdown label insets (setHeaderPadding / setItemPadding, 10px default)
-      so the header text and the popup items are not flush against the edge.
-
-- [x] setVisible(false) was only honoured by Row/Column/Canvas; every leaf
-      render() ignored it and kept drawing at its last bounds.
-
-- [x] BUG: momentum scroll leaked into whatever the cursor moved over
-      Scrolling a container and then flicking the cursor onto a slider/knob while
-      it was still coasting let the leftover momentum drive that widget instead.
-
-      Cause: momentum ticks were dispatched at the CURRENT cursor position, so a
-      coast followed the mouse rather than staying with the element the gesture
-      started on.
-
-      Fixed by latching the gesture origin: UILO now records the position of each
-      real (momentum == false) scroll event in m_scrollOrigin and replays momentum
-      ticks there, so a coast keeps scrolling whatever was flicked no matter where
-      the pointer goes -- which is what macOS itself does. A fresh gesture
-      overwrites the latch; a page switch cancels the coast outright.
-
-- [ ] Input Handling
-      - Touch/pointer support
-      - IME support for international text
-      - Text selection and clipboard
-
-- [ ] Rendering
-      - Sub-pixel rendering
-      - Text antialiasing quality
-      - High DPI support
-
-- [ ] Layout Edge Cases
-      - Very small containers
-      - Deeply nested hierarchies
-      - Rapid add/remove cycles
-
-- [ ] Memory & Performance
-      - Reduce allocations
-      - Cache layout calculations
-      - Optimize draw calls
+- [ ] Neither probe covers a widget yet, only containers and dispatch. Add cases
+      as widgets land.
+- [ ] gen_docs.py --check reports 24 gaps, all in include/wt: Translator's
+      reconcilePages and translatePageInto, and UiloWt's serverArgs, argPointers
+      and both UILO::runWeb overloads.
+- [ ] Example apps still missing: todo list, settings panel, dashboard.
 
 
 ================================================================================
 PHASE 2 -- fold Row and Column onto one axis-generic implementation
 ================================================================================
-Phase 1 is done: both update() and render() are now split into named phase
-functions, so the two classes line up function-for-function and the duplicated
-resizer block inside each file is gone. What remains is the duplication BETWEEN
+Phase 1 is done: update() and render() are split into named phase functions in
+both classes, so the two line up function-for-function and the duplicated
+resizer block inside each file is gone. What is left is the duplication BETWEEN
 Row.cpp and Column.cpp.
 
-Why it is worth doing
-  63 of 67 accessor names are already identical between RowOptions and
-  ColumnOptions -- the only genuine differences are the zoom axis
-  (getZoomableX vs getZoomableY). So a template over the Options type works by
-  duck typing: no common base class, no virtuals, no change to the public API
-  or to the Wt bridge.
+Worth doing because 63 of 67 accessor names are already identical between
+RowOptions and ColumnOptions -- the only genuine difference is the zoom axis
+(getZoomableX vs getZoomableY). A template over the Options type therefore works
+by duck typing: no common base class, no virtuals, no change to the public API
+or to the Wt bridge.
 
-Shape to aim for
-  A detail-namespace axis policy in a shared header, e.g.
-  containers/AxisLayout.hpp, holding main/cross accessors:
+Shape to aim for: a detail-namespace axis policy in containers/AxisLayout.hpp
+holding main/cross accessors (main, cross, mainDim, isEnd, isMid), then one
+templated implementation of each phase -- updateScrollable, updateFlow,
+layoutResizers, renderSubdivisions, renderChildPass -- taking <Axis, Options>.
+Row.cpp and Column.cpp shrink to their policy plus m_zoomX / m_zoomY.
 
-      struct RowAxis {
-          static float  main(Vec2f v)            { return v.x; }
-          static float  cross(Vec2f v)           { return v.y; }
-          static Dimension mainDim(Element* e)   { return e->getModifier().getWidth(); }
-          static bool   isEnd(Align a)           { return hasAlign(a, Align::Right); }
-          static bool   isMid(Align a)           { return hasAlign(a, Align::CenterX); }
-          ...
-      };
+Two real divergences, to decide BEFORE merging. These are behaviour, not
+cosmetics:
 
-  Then one templated implementation of each phase -- updateScrollable,
-  updateFlow, layoutResizers, renderSubdivisions, renderChildPass -- taking
-  <Axis, Options>. Row.cpp and Column.cpp shrink to the axis policy plus the
-  handful of genuinely per-class members (m_zoomX vs m_zoomY, and the two
-  divergences below).
+  1. Resizer cross-axis sizing. Column::layoutResizers computes a span, clamps
+     the Modifier width into it, and honours Align::Right / Align::CenterX to
+     place the handle within that span. Row::layoutResizers does none of it and
+     stretches the handle across the whole cross span -- Column was improved at
+     some point and Row never was.
+     Recommendation: unify upward so Row gains it, which CHANGES Row's resizer
+     bounds.
 
-TWO REAL DIVERGENCES -- decide these before merging, they are not cosmetic
-  1. Resizer cross-axis sizing.
-     Column::layoutResizers computes spanW, clamps the Modifier width into it,
-     and honours Align::Right / Align::CenterX to place the handle within that
-     span. Row::layoutResizers does none of this -- it stretches the handle
-     across the whole cross span. Column was improved at some point and Row
-     never was.
-     Recommendation: unify upward, so Row gains it. That CHANGES Row's resizer
-     bounds, which is a behaviour change, not a refactor.
+  2. Zero-delta scroll guard. Row::checkScroll(float) returns false on a zero
+     delta, so a purely vertical wheel bubbles to the parent. Column has no such
+     guard and consumes the event.
+     Recommendation: unify upward so Column gains the guard.
 
-  2. Zero-delta scroll guard.
-     Row::checkScroll(float) has `if (delta == 0.f) return false;` so a purely
-     vertical wheel bubbles to a parent. Column::checkScroll(float) has no such
-     guard, so it consumes a zero-delta event and stops it bubbling.
-     Recommendation: unify upward, so Column gains the guard.
-
-How to verify the merge
-  The 18-case layout probe from this session is the tool for this. It drives
-  Row/Column update() directly with no UILO bound -- no window, no GPU -- and
-  dumps every child's resolved bounds. It covers the scrollable path, pinned
-  left/mid/right and top/mid/bottom groups, resizers in BOTH paths, explicit
-  scroll bounds, hidden children, outer padding, nesting, and degenerate slots.
-  Diff its output before and after: it must be byte-identical EXCEPT for the
-  cases that exercise divergence 1, where Row's resizer bounds should change.
-  Case 12 ("column flow: resizers, cross-axis align") is the one to read
-  carefully when accepting the new golden output.
-  Probe source: tools/layout_probe.cpp, run with `tools/probe.sh layout`
-  (--baseline saves the golden output, --check diffs against it).
-  tools/pointer_probe.cpp is its counterpart for pointer events -- who ends up
-  hovered, whose handlers fire, what a floating child shields -- and checks
-  itself: `tools/probe.sh pointer`.
+Verify with `tools/probe.sh layout --check`: the output must be byte-identical
+EXCEPT for the cases that exercise divergence 1. Read case 12 ("column flow:
+resizers, cross-axis align") carefully when accepting new golden output. Then
+`tools/probe.sh pointer`, which must stay at 23/23.
 
 
-================================================================================
-TERMINAL WIDGET -- done
-================================================================================
-From Notes.txt: "a built in terminal that interfaces with the operating system
-shell. Think like VSCode's terminal."
+## Dropped 2026-08-11 -- ask before re-adding
 
-Built in the shape this file suggested:
-
-  include/platform/Pty.{hpp,cpp}              forkpty spawn/read/write/resize
-  include/elements/widgets/Terminal.{hpp,cpp} screen model, VT parser, keys
-  examples/terminal.cpp                       a working shell in a window
-
-The VT parser was written rather than vendored -- libvterm would have been a
-third-party dependency for something that came out at a few hundred lines, and
-the screen model has to be UILO's own either way for rendering.
-
-What it covers
-  Plain output, control characters, SGR (16 colours, 256-colour and truecolour,
-  bold/italic/inverse), cursor addressing, erase-in-line/display, scroll
-  regions, alternate screen, OSC title, and scrollback with a configurable cap.
-  Keys are encoded to CSI sequences with application-cursor mode honoured, and
-  the grid is measured from the font, so resizing the window SIGWINCHes the
-  shell. Drag to select, Cmd+C / Cmd+V to copy and paste (Ctrl+Shift+C / V
-  as well), and a paste is fenced with bracketed-paste markers when the running
-  program has asked for them.
-
-Verified against a real shell
-  Output, tab stops, carriage return, SGR, erase+home, scrolling, scrollback and
-  exit detection; then the input path -- typed characters, Return, Backspace,
-  Tab completion, Up history, Ctrl+C, Ctrl+D -- driven through handleTextInput
-  and handleKeyInput rather than send(), so the key encoding is what is actually
-  under test; then grid measurement and SIGWINCH against a real renderer.
-
-Not done
-  * Windows. Pty.cpp's Windows branch fails cleanly with "needs ConPTY", so the
-    widget reports it could not start a shell rather than half-working.
-  * Mouse reporting (CSI ?1000h and friends), so a mouse-driven TUI will not see
-    clicks. Note this also means a drag inside such a program selects text
-    rather than reaching the program, which is the wrong answer once mouse
-    reporting exists -- whoever adds it should gate selection on it being off.
-  * Reflow on resize. The grid is resized and the shell is told, but wrapped
-    lines are not re-wrapped: a cell grid has already discarded the unwrapped
-    text that would be needed to do it.
-
-Clipboard and the Ctrl/Command split
-  Everywhere else in UILO, Control and Command are interchangeable for copy,
-  cut, paste and select-all -- see isShortcutModifier() in Interactible.hpp,
-  which accepts either on macOS and Control alone elsewhere.
-
-  The terminal is the one deliberate exception. Ctrl+C there is an interrupt,
-  not a copy, so folding the two together would take away the ability to stop a
-  running program. Its clipboard lives on Command and on the Ctrl+Shift forms
-  that Linux terminals use, and Ctrl alone always reaches the shell.
-
-Web
-  As predicted, the browser cannot host this. A page cannot fork a process, and
-  proxying one to the server would hand every visitor a shell on the host, which
-  is a deployment decision and not something UILO should do implicitly. Pty is
-  stubbed in wt/HeadlessBackend.cpp so the WT build still links, and Translator
-  renders Terminal as a monospace block carrying screenText(), falling back to
-  lastError() -- so a web build shows "a shell cannot be attached in the web
-  build" rather than an unexplained empty box.
+Tree View (FileBrowser already does hierarchical expand/collapse), Radio Button
+Group, Menu Bar (per-application, does not need a widget), Autocomplete,
+Pagination, Spinbox, Tag Input, Hot Reload / live edit, Inspector / debug tools,
+video tutorials, a best-practices guide, and Doxygen (tools/gen_docs.py covers
+it). Resizable Panels was listed as a TODO but is done -- Resizer, plus
+examples/text-editor.cpp.

@@ -303,9 +303,13 @@ void Canvas::update(Rectf& parentBounds, float dt) {
            the whole canvas surface rather than only its edges. */
         const Rectf area = contentArea();
 
-        const float intrinsicW = dw.percent ? (dw.value * 0.01f * area.size.x)
+        /* A canvas child has no siblings to leave anything over, so _flex on it can
+           only mean the whole surface. */
+        const float intrinsicW = dw.flex    ? area.size.x
+                               : dw.percent ? (dw.value * 0.01f * area.size.x)
                                             : (dw.value * baseScale);
-        const float intrinsicH = dh.percent ? (dh.value * 0.01f * area.size.y)
+        const float intrinsicH = dh.flex    ? area.size.y
+                               : dh.percent ? (dh.value * 0.01f * area.size.y)
                                             : (dh.value * baseScale);
         const float finalW = intrinsicW * m_zoomX;
         const float finalH = intrinsicH * m_zoomY;
