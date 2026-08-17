@@ -1,5 +1,37 @@
 UILO TODO & Roadmap
 ===================
+
+## Active -- Next Up (DAW foundations)
+
+Immediate priorities, in order. UILO's end goal is a DAW, and the timeline needs
+a small, coherent primitive set to draw grids, clips, automation and waveforms.
+See "DAW FOUNDATIONS & THE ZEN DAW" at the bottom of this file for the design.
+
+- [ ] 1. Remove uilo::Canvas and uilo::Waveform          <-- the next thing
+      - Canvas was an immediate-mode experiment that fought the retained tree.
+      - Waveform is app-specific; it belongs in the application, not the library.
+      - Both are replaced by uilo::Shape below.
+
+- [ ] 2. uilo::Shape -- retained custom geometry (vertex array)
+      - Declarative geometry AS AN ELEMENT, not immediate-mode draw calls.
+      - Two layers: a friendly polyline/shape (points + stroke/fill + topology)
+        over a raw mesh/vertex buffer for the power case.
+      - Render-only (no hit-testing); interaction lives on the containers around it.
+      - A parametric "repeat" rule for instanced geometry (grid lines, ticks,
+        meter segments): describe spacing/step/extent/colour, UILO owns and
+        batches the geometry (GPU instancing stays an internal optimisation). A
+        thin `grid` convenience adds tiers (bar/beat/subdivision) and LOD culling
+        (drop a tier under ~6px on-screen spacing).
+      - Also needed: a content-space positioned container -- children placed by
+        explicit (x, y) in content coords, following scroll/zoom -- so clips,
+        piano roll and automation are composed elements, not one giant blob.
+
+- [ ] 3. Context Menu (detail under Medium-Priority Widgets below)
+      - Root-held: UILO keeps one empty context-menu element at the very root of
+        the UI; right-clicking an element defines what that menu contains.
+
+- [ ] 4. Animation (detail under Features & Infrastructure below)
+
 Only what is left to do. Finished work is documented in README.md and in the
 headers, not here.
 
@@ -38,11 +70,14 @@ headers, not here.
       strip or spill into a menu. Page switching already exists (setPage), so a
       tab bar is a control for it rather than new machinery.
 
-- [ ] Context Menu (right-click)
-      registerOverlay already solves the hard part: drawing a popup over
-      everything and dismissing it on an outside click, which is what Dropdown
-      and DateField use. What is missing is the item list -- separators, icons,
-      submenus, keyboard navigation.
+- [ ] Context Menu (right-click)   [see "Active -- Next Up", item 3]
+      - Root-held design: UILO holds a single empty context-menu element at the
+        very root of the UI (a surface above the page). Right-clicking an element
+        populates that shared menu with the items that element defines, then
+        shows it at the cursor.
+      - Submenu support
+      - Keyboard navigation
+      - Icon support per item
 
 - [ ] Modal Dialog
       addPopupBackdrop already gives the full-window scrim that swallows input.
