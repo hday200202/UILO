@@ -18,7 +18,17 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(UILO_AUTO_FETCH    "Auto-download missing SDL3 via FetchContent" ON)
-option(UILO_BUILD_EXAMPLES "Build example programs" ON)
+# Examples and tools are for working ON UILO, not for a project that vendors it,
+# so they default off when UILO is pulled in with add_subdirectory. Spelled with
+# the source-dir comparison rather than PROJECT_IS_TOP_LEVEL, which needs 3.21.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(_UILO_DEV_DEFAULT ON)
+else()
+    set(_UILO_DEV_DEFAULT OFF)
+endif()
+
+option(UILO_BUILD_EXAMPLES "Build example programs" ${_UILO_DEV_DEFAULT})
+option(UILO_BUILD_TOOLS    "Build the project generator and other tools" ${_UILO_DEV_DEFAULT})
 option(UILO_SHARED        "Build UILO as a shared library" OFF)
 
 # Web backend. UILO's element tree is renderer-free to construct -- bgfx and
@@ -31,6 +41,7 @@ option(UILO_WT "Build UILO for the web (Wt) instead of bgfx/SDL3" OFF)
 
 if(UILO_WT)
     set(UILO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(UILO_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
     message(STATUS "[UILO] UILO_WT: web build -- Wt instead of SDL3/bgfx/shaders")
 endif()
 
@@ -58,7 +69,7 @@ if(UILO_WT)
     if(NOT EXISTS "${UILO_WT_DIR}/CMakeLists.txt" OR NOT EXISTS "${UILO_BOOST_DIR}")
         message(FATAL_ERROR
             "[UILO] vendored Wt/Boost not found under ${CMAKE_CURRENT_SOURCE_DIR}/ext\n"
-            "Run ./build.sh wt (or build.ps1 wt on Windows) -- it clones Wt and "
+            "Run ./build.sh wt (from Git Bash on Windows) -- it clones Wt and "
             "clones + builds Boost the same way it does SDL3 and bgfx.")
     endif()
 
@@ -122,7 +133,7 @@ set(UILO_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/SDL3")
 if(NOT EXISTS "${UILO_SDL3_DIR}")
     message(FATAL_ERROR
         "[UILO] vendored SDL3 not found at ${UILO_SDL3_DIR}\n"
-        "Run ./build.sh (or build.ps1 on Windows) -- it clones SDL3 "
+        "Run ./build.sh (from Git Bash on Windows) -- it clones SDL3 "
         "into ext/SDL3 at a pinned release tag.")
 endif()
 
@@ -179,7 +190,7 @@ endif()
 # ---------------------------------------------------------------------------
 # bgfx (vendored: prebuilt static libs under ext/, built once by build.sh)
 # ---------------------------------------------------------------------------
-# build.sh / build.ps1 shallow-clone bx, bimg, and bgfx as SIBLING directories
+# build.sh shallow-clones bx, bimg, and bgfx as SIBLING directories
 # under ext/ (bgfx's build expects ../bx and ../bimg) and run bgfx's own
 # GENie+make build exactly once, gated on the output archive existing. CMake
 # never builds bgfx; it links the prebuilt Release archives even for Debug
@@ -202,7 +213,7 @@ set(UILO_BGFX_BIN_DIR "${UILO_EXT_DIR}/bgfx/.build/${UILO_BGFX_PLATFORM_DIR}/bin
 if(NOT EXISTS "${UILO_BGFX_BIN_DIR}")
     message(FATAL_ERROR
         "[UILO] prebuilt bgfx not found at ${UILO_BGFX_BIN_DIR}\n"
-        "Run ./build.sh (or build.ps1 on Windows) -- it clones bx/bimg/bgfx "
+        "Run ./build.sh (from Git Bash on Windows) -- it clones bx/bimg/bgfx "
         "into ext/ and builds them once.")
 endif()
 
@@ -234,6 +245,10 @@ file(MAKE_DIRECTORY "${_SHADER_OUT_DIR}")
 # requires Microsoft's DXC compiler at build time, and bgfx defaults to the
 # Direct3D11 backend on Windows anyway (see BGFX_PLATFORM_SUPPORTS_DXIL 0 in
 # Renderer.cpp).
+# GLSL 120 pairs with the pinned bgfx in build.sh and CANNOT be changed on its
+# own. bgfx's shaderc dropped 120..150 and now offers 330 and up, while the
+# pinned shaderc's GLSL optimiser rejects anything above 1.50 -- the two ranges
+# do not overlap, so the profile and the bgfx pin move together or not at all.
 set(_UILO_SHADER_PROFILES spirv 120 300_es)
 if(APPLE)
     list(APPEND _UILO_SHADER_PROFILES metal)
@@ -304,6 +319,7 @@ elseif(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND UILO_SRCS
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacScroll.mm"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacWindow.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/MacFileDialog.mm"
     )
 endif()
 
@@ -473,4 +489,8 @@ endif()
 
 if(UILO_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)
+endif()
+
+if(UILO_BUILD_TOOLS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/uilo-new/CMakeLists.txt")
+    add_subdirectory(tools/uilo-new)
 endif()
