@@ -276,7 +276,27 @@ bool Element::checkLeftClick(const Vec2f& mousePosition) {
 bool Element::checkRightClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
     if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
+    if (openContextMenu(mousePosition)) return true;
     return claimsPointerEvents();
+}
+
+
+/*
+    openContextMenu(const Vec2f& at):
+    - Params:   const Vec2f& at
+    - Returns:  bool -- true when a menu opened
+    - Desc:     Hands this element's items to the one menu UILO holds at the root
+                of the UI. The builder runs here, on the frame of the click, so a
+                menu whose contents depend on application state is current. An
+                element with no menu, or a builder that returned nothing, opens
+                nothing and does not consume the click.
+*/
+bool Element::openContextMenu(const Vec2f& at) {
+    if (!m_uiloRef || !m_modifier.hasContextMenu()) return false;
+    std::vector<ContextMenuItem> items = m_modifier.buildContextMenu();
+    if (items.empty()) return false;
+    m_uiloRef->showContextMenu(items, at);
+    return true;
 }
 
 

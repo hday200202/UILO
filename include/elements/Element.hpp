@@ -131,6 +131,11 @@ public:
 protected:
     virtual bool claimsPointerEvents() const;
 
+    // Opens this element's context menu, if it declared one and its builder
+    // produced items. True when a menu opened, which is what makes the element
+    // consume the right click and stops the walk going any further.
+    bool openContextMenu(const Vec2f& at);
+
     UILO*       m_uiloRef = nullptr;
     std::string m_name    = "";
 

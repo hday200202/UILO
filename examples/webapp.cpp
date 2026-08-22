@@ -294,7 +294,7 @@ private:
 
     void setCount(int to) {
         m_count = to;
-        m_countText->getOptions().setContent(
+        m_countText->setString(
             "Clicked " + std::to_string(m_count) +
             (m_count == 1 || m_count == -1 ? " time" : " times"));
     }
@@ -309,7 +309,7 @@ private:
 #endif
         char buf[16];
         std::strftime(buf, sizeof buf, "%H:%M:%S", &tm);
-        m_clockText->getOptions().setContent(buf);
+        m_clockText->setString(buf);
     }
 
     UILO  m_ui;

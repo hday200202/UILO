@@ -34,6 +34,7 @@
 #include "widgets/DatePicker.hpp"
 #include "widgets/DateField.hpp"
 #include "widgets/Terminal.hpp"
+#include "widgets/ContextMenu.hpp"
 
 // Lowercase factory functions
 #include "Factory.hpp"

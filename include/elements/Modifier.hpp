@@ -8,6 +8,7 @@
 #include "../utils/Material.hpp"
 #include "../utils/Theme.hpp"
 #include "../utils/Cursor.hpp"
+#include "../utils/ContextMenuItem.hpp"
 
 namespace uilo {
 
@@ -184,6 +185,26 @@ public:
     CursorType           getCursor()         const;
     bool                 hasCursor()         const;
 
+    // What right-clicking this element puts in the context menu. UILO holds one
+    // menu at the root of the UI and fills it from whichever element was
+    // clicked, so declaring items here is the whole of it -- there is no menu to
+    // build, own or position. The deepest element under the cursor that has
+    // items wins, and having them makes the element consume the right click.
+    //
+    // The list form is for a menu that does not change:
+    //     .setContextMenu({ menuItem("Cut", [] { cut(); }), menuSeparator(), ... })
+    //
+    // The builder form runs on every right-click, for a menu that depends on
+    // application state:
+    //     .setContextMenu([this] { return m_selection ? clipItems() : laneItems(); })
+    Modifier& setContextMenu(std::vector<ContextMenuItem> items);
+    Modifier& setContextMenu(ContextMenuBuilder builder);
+    Modifier& clearContextMenu();
+    bool      hasContextMenu() const;
+    // Runs the builder. Empty when there is none, or when the builder returned
+    // nothing -- which is how an element declines to open a menu this time.
+    std::vector<ContextMenuItem> buildContextMenu() const;
+
 private:
     /* A share rather than a percentage, so a row of unsized children divides
        itself evenly instead of every one of them claiming the whole row. */
@@ -207,6 +228,7 @@ private:
     Dimension            m_freeY        = 0_px;
     Material             m_material;
     std::optional<CursorType> m_cursor;
+    ContextMenuBuilder   m_contextMenu;
 };
 
 

@@ -129,6 +129,7 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
 
     if (!childClicked && m_bounds.contains(mousePosition)) {
         if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
+        if (openContextMenu(mousePosition)) return true;
         return claimsPointerEvents();
     }
 

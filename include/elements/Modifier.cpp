@@ -161,6 +161,73 @@ Modifier& Modifier::clearCursor() { m_cursor.reset(); return *this; }
 
 
 /*
+    setContextMenu(std::vector<ContextMenuItem> items):
+    - Params:   std::vector<ContextMenuItem> items
+    - Returns:  Modifier&
+    - Desc:     Declares a fixed context menu. Stored as a builder that hands
+                back a copy, so the two spellings share one path through the
+                dispatch and neither needs a special case.
+*/
+Modifier& Modifier::setContextMenu(std::vector<ContextMenuItem> items) {
+    if (items.empty()) return clearContextMenu();
+    m_contextMenu = [items = std::move(items)] { return items; };
+    return *this;
+}
+
+
+/*
+    setContextMenu(ContextMenuBuilder builder):
+    - Params:   ContextMenuBuilder builder
+    - Returns:  Modifier&
+    - Desc:     Declares a context menu built on demand. The builder runs on
+                every right-click, on the frame the click is dispatched, so it
+                sees current application state and may return nothing to decline
+                the menu entirely.
+*/
+Modifier& Modifier::setContextMenu(ContextMenuBuilder builder) {
+    m_contextMenu = std::move(builder);
+    return *this;
+}
+
+
+/*
+    clearContextMenu():
+    - Params:   none
+    - Returns:  Modifier&
+    - Desc:     Drops the menu, so a right-click passes through to whatever is
+                behind this element instead of being consumed.
+*/
+Modifier& Modifier::clearContextMenu() {
+    m_contextMenu = nullptr;
+    return *this;
+}
+
+
+/*
+    hasContextMenu():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether a menu was declared. Says nothing about whether the
+                builder will actually produce items -- only buildContextMenu()
+                can answer that, and it costs whatever the builder costs.
+*/
+bool Modifier::hasContextMenu() const { return static_cast<bool>(m_contextMenu); }
+
+
+/*
+    buildContextMenu():
+    - Params:   none
+    - Returns:  std::vector<ContextMenuItem>
+    - Desc:     The items to show, empty when there is no menu or the builder
+                declined.
+*/
+std::vector<ContextMenuItem> Modifier::buildContextMenu() const {
+    if (!m_contextMenu) return {};
+    return m_contextMenu();
+}
+
+
+/*
     getWidth():
     - Params:   none
     - Returns:  Dimension

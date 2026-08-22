@@ -143,6 +143,65 @@ void UILO::unregisterOverlay(Element* e) {
 
 
 /*
+    contextMenu():
+    - Params:   none
+    - Returns:  ContextMenu*
+    - Desc:     The shared menu, built on first use. It is held here rather than
+                in the page tree so it survives navigation and is never clipped
+                by whatever container the click landed in, and it is bound to
+                this UILO immediately so it can measure text before it is first
+                laid out.
+*/
+ContextMenu* UILO::contextMenu() {
+    if (!m_contextMenu) {
+        m_contextMenu = new ContextMenu(Modifier(), ContextMenuOptions(), "");
+        m_contextMenu->setUILO(*this);
+    }
+    return m_contextMenu;
+}
+
+
+/*
+    showContextMenu(const std::vector<ContextMenuItem>& items, const Vec2f& at):
+    - Params:   const std::vector<ContextMenuItem>& items, const Vec2f& at
+    - Returns:  void
+    - Desc:     Fills the shared menu and opens it at a point. An empty item list
+                closes whatever was open instead, so a builder that declines has
+                the same effect as no menu at all.
+*/
+void UILO::showContextMenu(const std::vector<ContextMenuItem>& items, const Vec2f& at) {
+    if (items.empty()) { closeContextMenu(); return; }
+    ContextMenu* menu = contextMenu();
+    menu->setItems(items);
+    menu->openAt(at);
+}
+
+
+/*
+    closeContextMenu():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Puts the menu away, submenus included. Safe before one has ever
+                been built.
+*/
+void UILO::closeContextMenu() {
+    if (m_contextMenu) m_contextMenu->close();
+}
+
+
+/*
+    isContextMenuOpen():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether a menu is showing. Worth testing before acting on a key
+                the menu also uses.
+*/
+bool UILO::isContextMenuOpen() const {
+    return m_contextMenu && m_contextMenu->isOpen();
+}
+
+
+/*
     addPopupBackdrop(Element* e):
     - Params:   Element* e
     - Returns:  Element*
@@ -364,6 +423,15 @@ void UILO::update() {
         backdrop->tick(slot, m_deltaTime);
     }
 
+    /* The menu is not in the page tree, so nothing else would lay it out. Its
+       own bounds are where openAt() put it, and its submenus follow from the row
+       bounds this pass resolves. */
+    for (ContextMenu* menu = m_contextMenu; menu && menu->isOpen();
+         menu = menu->openSubmenu()) {
+        Rectf slot = menu->getBounds();
+        menu->tick(slot, m_deltaTime);
+    }
+
     m_resizers.clear();
     m_activePage->m_rootContainer->collectResizers(m_resizers);
 
@@ -385,8 +453,19 @@ void UILO::update() {
 
     if (m_renderer) m_renderer->setMouseState(mouse);
 
-    bool leftDown  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
-    bool rightDown = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
+    const bool leftHeld  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
+    const bool rightHeld = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
+
+    /* A press counts when the polled state rises OR when one was latched out of
+       the event stream. The latch is what catches a tap that was already over by
+       the time this frame polled -- every trackpad two-finger tap, and any fast
+       click. Its position wins, since it is where the button actually went down. */
+    const bool leftPressed  = (leftHeld  && !m_prevLeftMouse)  || m_pendingLeftPress;
+    const bool rightPressed = (rightHeld && !m_prevRightMouse) || m_pendingRightPress;
+    const Vec2f pressPos = (m_pendingLeftPress || m_pendingRightPress)
+                         ? m_pendingPressPos : mouse;
+    m_pendingLeftPress  = false;
+    m_pendingRightPress = false;
 
     auto* root = m_activePage->m_rootContainer;
 
@@ -446,13 +525,13 @@ void UILO::update() {
         m_activeCursor = m_pendingCursor;
     }
 
-    if (leftDown && !m_prevLeftMouse && !backdropConsumedClick) {
+    if (leftPressed && !backdropConsumedClick) {
         m_interactibleActivatedThisFrame = false;
 
         bool resizerClicked = false;
         for (auto* r : m_resizers) {
-            if (r->getBounds().contains(mouse)) {
-                r->checkLeftClick(mouse);
+            if (r->getBounds().contains(pressPos)) {
+                r->checkLeftClick(pressPos);
                 resizerClicked = true;
                 break;
             }
@@ -461,35 +540,35 @@ void UILO::update() {
         if (!resizerClicked) {
             Element* clickedOverlay = nullptr;
             for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
-                if (it->element->getBounds().contains(mouse)) { clickedOverlay = it->element; break; }
+                if (it->element->getBounds().contains(pressPos)) { clickedOverlay = it->element; break; }
 
-            if (clickedOverlay) clickedOverlay->checkLeftClick(mouse);
+            if (clickedOverlay) clickedOverlay->checkLeftClick(pressPos);
             else {
                 auto copy = m_overlays;
                 m_overlays.clear();
                 for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
-                root->checkLeftClick(mouse);
+                root->checkLeftClick(pressPos);
                 if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
             }
         }
-    } else if (leftDown && !m_prevLeftMouse && hoveredBackdrop) {
+    } else if (leftPressed && hoveredBackdrop) {
         m_interactibleActivatedThisFrame = false;
-        hoveredBackdrop->checkLeftClick(mouse);
+        hoveredBackdrop->checkLeftClick(pressPos);
     }
-    if (rightDown && !m_prevRightMouse) {
+    if (rightPressed) {
         m_interactibleActivatedThisFrame = false;
         if (!m_overlays.empty()) {
             auto copy = m_overlays;
             m_overlays.clear();
             for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
         }
-        if (hoveredBackdrop) hoveredBackdrop->checkRightClick(mouse);
-        else                        root->checkRightClick(mouse);
+        if (hoveredBackdrop) hoveredBackdrop->checkRightClick(pressPos);
+        else                        root->checkRightClick(pressPos);
         if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
     }
 
-    m_prevLeftMouse  = leftDown;
-    m_prevRightMouse = rightDown;
+    m_prevLeftMouse  = leftHeld;
+    m_prevRightMouse = rightHeld;
 
     m_forceTreeUpdate = false;
 }
@@ -523,14 +602,27 @@ void UILO::render() {
 Vec2f UILO::queryMousePixelPosition() const {
     float mx = 0.f, my = 0.f;
     SDL_GetMouseState(&mx, &my);
+    return toPixels(mx, my);
+}
+
+
+/*
+    toPixels(float x, float y):
+    - Params:   float x, float y -- a position in window points
+    - Returns:  Vec2f -- the same position in render pixels
+    - Desc:     SDL reports both the cursor and mouse-button events in window
+                points; UILO lays out in render pixels, and on a retina display
+                those differ by the backing scale.
+*/
+Vec2f UILO::toPixels(float x, float y) const {
     if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
         int lw = 1, lh = 1, pw = 1, ph = 1;
         SDL_GetWindowSize(w, &lw, &lh);
         SDL_GetWindowSizeInPixels(w, &pw, &ph);
-        if (lw > 0) mx *= (float)pw / (float)lw;
-        if (lh > 0) my *= (float)ph / (float)lh;
+        if (lw > 0) x *= (float)pw / (float)lw;
+        if (lh > 0) y *= (float)ph / (float)lh;
     }
-    return { mx, my };
+    return { x, y };
 }
 
 
@@ -678,6 +770,17 @@ void UILO::handleEvent(const SDL_Event& event) {
         dispatchScroll(m_mousePos, Vec2f{dx, dy}, precise);
     }
 
+    /* A press is taken from the event rather than from the polled button state:
+       a tap can be pressed and released inside one frame, and by the time
+       update() polls, the button reads as up and the press is lost. Its position
+       comes from the event too, so it lands where the click was even if the
+       pointer has moved on since. */
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        if (event.button.button == SDL_BUTTON_LEFT)  m_pendingLeftPress  = true;
+        if (event.button.button == SDL_BUTTON_RIGHT) m_pendingRightPress = true;
+        m_pendingPressPos = toPixels(event.button.x, event.button.y);
+    }
+
     if (event.type == SDL_EVENT_KEY_UP) {
         m_lastKeyUpNs = event.common.timestamp;
     }
@@ -707,6 +810,21 @@ void UILO::handleEvent(const SDL_Event& event) {
                 s += n;
             }
         }
+
+    /* An open menu owns the keyboard: it is modal by nature, and letting a
+       shortcut through while it is up would act on the UI behind it. */
+    if (event.type == SDL_EVENT_KEY_DOWN && isContextMenuOpen()) {
+        switch (event.key.key) {
+            case SDLK_DOWN:   m_contextMenu->moveHighlight(+1);         return;
+            case SDLK_UP:     m_contextMenu->moveHighlight(-1);         return;
+            case SDLK_RIGHT:  m_contextMenu->deepestOpen()->openHighlightedSubmenu(); return;
+            case SDLK_LEFT:   if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
+            case SDLK_RETURN:
+            case SDLK_KP_ENTER: m_contextMenu->activateHighlighted();   return;
+            case SDLK_ESCAPE: if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
+            default: break;
+        }
+    }
 
     if (event.type == SDL_EVENT_KEY_DOWN) {
         const SDL_Keymod mods = SDL_GetModState();
