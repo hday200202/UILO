@@ -26,9 +26,27 @@ See "DAW FOUNDATIONS & THE ZEN DAW" at the bottom of this file for the design.
         explicit (x, y) in content coords, following scroll/zoom -- so clips,
         piano roll and automation are composed elements, not one giant blob.
 
-- [ ] 3. Context Menu (detail under Medium-Priority Widgets below)
-      - Root-held: UILO keeps one empty context-menu element at the very root of
-        the UI; right-clicking an element defines what that menu contains.
+- [~] 3. Context Menu -- NATIVE DONE, web pending
+      Root-held as specified: UILO holds one ContextMenu, built on first use, and
+      an element declares items with Modifier::setContextMenu -- a fixed list, or
+      a builder run on each right-click for a menu that follows state. The
+      deepest element under the cursor with items wins and consumes the click.
+      Done: submenus to any depth, per-item icons, separators, disabled items,
+      keyboard navigation (up/down skipping separators and disabled rows, right
+      and left to enter and leave a submenu, enter to pick, escape to back out),
+      edge flipping on both axes, and a pooled row set that is only ever
+      relabelled so the structure survives.
+      Verified by tools/probe.sh ctxmenu -- 26 assertions against a real window.
+      - [ ] Web: Translator has no case for it yet. The rows are ordinary
+            Buttons in a Column so the geometry translates as-is, but the
+            browser's own menu has to be suppressed, the contextmenu event wired
+            to the same dispatch, and a menu whose row pool GROWS mid-session
+            needs the overlay re-translated -- syncFloating only translates a
+            backdrop it has not seen, and re-uses it by pointer thereafter.
+      - [x] examples/contextmenu.cpp -- a DAW-shaped timeline: lanes with a
+            builder menu, clips with a list menu of their own (so the deepest
+            element wins), a transport bar, and the page background, for four
+            distinct menus. A status line shows which action ran.
 
 - [ ] 4. Animation (detail under Features & Infrastructure below)
 
@@ -70,14 +88,10 @@ headers, not here.
       strip or spill into a menu. Page switching already exists (setPage), so a
       tab bar is a control for it rather than new machinery.
 
-- [ ] Context Menu (right-click)   [see "Active -- Next Up", item 3]
-      - Root-held design: UILO holds a single empty context-menu element at the
-        very root of the UI (a surface above the page). Right-clicking an element
-        populates that shared menu with the items that element defines, then
-        shows it at the cursor.
-      - Submenu support
-      - Keyboard navigation
-      - Icon support per item
+- [~] Context Menu (right-click)   [see "Active -- Next Up", item 3 for state]
+      include/elements/widgets/ContextMenu.{hpp,cpp}, plus the item type in
+      include/utils/ContextMenuItem.hpp -- kept free of every element type
+      because Modifier stores it and Modifier is included by everything.
 
 - [ ] Modal Dialog
       addPopupBackdrop already gives the full-window scrim that swallows input.
@@ -233,6 +247,9 @@ so they need no window and no GPU:
                                 failure. Covers occlusion: who ends up hovered,
                                 whose handlers fire, what a floating child
                                 shields.
+      tools/probe.sh ctxmenu    26 assertions. Needs a window and a GPU, unlike
+                                the other two: a menu measures its own labels
+                                and flips against the window edges.
       tools/gen_docs.py --check doc-comment coverage
       tools/check_readme.py     compiles every code block in README.md
       examples/render_bench     rendering throughput

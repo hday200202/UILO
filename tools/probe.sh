@@ -6,6 +6,10 @@
 #   tools/probe.sh layout --baseline   save that output as the baseline
 #   tools/probe.sh layout --check      compare against the baseline
 #   tools/probe.sh pointer             run the pointer-event assertions
+#   tools/probe.sh ctxmenu             run the context-menu assertions
+#
+# layout and pointer need no window; ctxmenu opens one, because a menu sizes
+# itself from measured text and flips against the window edges.
 #
 # The layout probe's value is as a regression check: take a baseline before a
 # layout change, compare after, and the diff should be empty for any change that

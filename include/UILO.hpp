@@ -136,6 +136,18 @@ public:
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
     void unregisterOverlay(Element* e);
 
+    // The one context menu, held at the root of the UI and shared by every
+    // element. Created the first time it is needed, so a UI that is never
+    // right-clicked never builds one. Style it through its options:
+    //     ui.contextMenu()->getOptions().setItemHeight(24.f);
+    ContextMenu* contextMenu();
+    // Fills the shared menu from `items` and shows it at `at`. This is what
+    // Modifier::setContextMenu ends up calling; an application can call it
+    // directly to open a menu from something other than a right-click.
+    void showContextMenu(const std::vector<ContextMenuItem>& items, const Vec2f& at);
+    void closeContextMenu();
+    bool isContextMenuOpen() const;
+
     // Popup infrastructure, not the way to float an ordinary element -- use
     // Modifier::setFloating for that. A backdrop is laid out at window size and
     // drawn above the page, which is how a Dropdown list or a DatePicker
@@ -175,6 +187,9 @@ public:
     bool isMomentumScrolling()      const { return m_inMomentumScroll; }
     bool isForcingTreeUpdate()      const { return m_forceTreeUpdate; }
     Renderer& getRenderer()         { return *m_renderer; }
+    // Whether a renderer has been set. Anything that measures text has to ask,
+    // because a UILO can exist before one is bound.
+    bool      hasRenderer()   const { return m_renderer != nullptr; }
 
 
     // A palette set here belongs to this UILO and overrides the theme's, which
@@ -216,6 +231,10 @@ private:
        an element laid out against the window. */
     std::vector<Element*> m_backdrops;
 
+    /* The shared context menu. Owned by the element pool like everything else,
+       so this is a borrowed pointer; null until something asks for a menu. */
+    ContextMenu* m_contextMenu = nullptr;
+
     Page* m_activePage = nullptr;
 
     float m_scale = 1.f;
@@ -247,6 +266,17 @@ private:
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
+
+    /* Presses latched out of the event stream, because polling the button state
+       once a frame misses a tap whose press and release both arrive in the same
+       batch -- which is every two-finger tap on a trackpad. Cleared by the
+       dispatch that consumes them. */
+    bool  m_pendingLeftPress  = false;
+    bool  m_pendingRightPress = false;
+    Vec2f m_pendingPressPos   = {};
+
+    /* Window points to render pixels, which differ by the backing scale. */
+    Vec2f toPixels(float x, float y) const;
 
     std::optional<Palette> m_palette;
 
