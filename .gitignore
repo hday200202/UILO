@@ -24,3 +24,6 @@ build
 /ext/wt
 /ext/boost
 /lib
+
+# Generator binary, built alongside the examples.
+tools/uilo-new/bin/

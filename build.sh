@@ -13,7 +13,8 @@
 # Usage:
 #   ./build.sh                              # Release static (desktop, bgfx/SDL3)
 #   ./build.sh wt                           # Release static (web, Wt)
-#   ./build.sh wt deps                      # only fetch/build ext/, don't build UILO
+#   ./build.sh deps                         # only fetch/build ext/, don't build UILO
+#   ./build.sh wt deps                      # the same for the web backend
 #                                             (for host projects that add_subdirectory UILO)
 #   ./build.sh debug                        # Debug static
 #   ./build.sh release dynamic              # Release shared
@@ -56,6 +57,12 @@ else
     LINK_TAG="static"
 fi
 
+# Pinned versions. bgfx publishes no tags, so those three are commit SHAs; see
+# the note above the clone calls for why leaving them floating breaks the build.
+BX_REF="efdef94b9486509e85b906170020f4c883d3eed5"    # 2026-07-03
+BIMG_REF="3b3dc2b7081fc687bce3a73699b0b8db470f1afc"  # 2026-06-23
+BGFX_REF="aa176c7763e9dcf90c8ac2345f1b984a12fbefbe"  # 2026-07-04
+
 # Pinned versions for the web backend's dependencies.
 WT_TAG="4.14.0"                 # https://github.com/emweb/wt tags
 BOOST_TAG="boost-1.91.0"        # https://github.com/boostorg/boost tags
@@ -92,16 +99,28 @@ if [[ $UILO_CLEAN_EXT -eq 1 ]]; then
     mkdir -p "$EXT"
 fi
 
+# Clones a dependency at a pinned ref, which may be a tag, a branch or a bare
+# commit SHA. --branch takes the first two but not the third, so a SHA falls
+# back to fetching that one commit directly -- GitHub serves any commit this
+# way, and it is still a one-commit download.
 clone_if_missing() {
-    local name="$1" url="$2" tag="${3:-}"
-    if [[ ! -d "$EXT/$name" ]]; then
-        echo "[UILO] cloning $name into ext/"
-        if [[ -n "$tag" ]]; then
-            git clone --depth 1 --branch "$tag" "$url" "$EXT/$name"
-        else
-            git clone --depth 1 "$url" "$EXT/$name"
-        fi
+    local name="$1" url="$2" ref="${3:-}"
+    [[ -d "$EXT/$name" ]] && return 0
+
+    echo "[UILO] cloning $name into ext/"
+    if [[ -z "$ref" ]]; then
+        git clone --depth 1 "$url" "$EXT/$name"
+        return
     fi
+    if git clone --depth 1 --branch "$ref" "$url" "$EXT/$name" 2>/dev/null; then
+        return
+    fi
+
+    rm -rf "$EXT/$name"
+    git init -q "$EXT/$name"
+    git -C "$EXT/$name" remote add origin "$url"
+    git -C "$EXT/$name" fetch -q --depth 1 origin "$ref"
+    git -C "$EXT/$name" checkout -q FETCH_HEAD
 }
 
 # ---------------------------------------------------------------------------
@@ -240,9 +259,16 @@ fi
 clone_if_missing SDL3 "https://github.com/libsdl-org/SDL.git" "release-3.2.10"
 
 # bgfx: bx/bimg/bgfx MUST be sibling dirs (bgfx's build references ../bx and ../bimg)
-clone_if_missing bx   "https://github.com/bkaradzic/bx.git"
-clone_if_missing bimg "https://github.com/bkaradzic/bimg.git"
-clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git"
+#
+# Pinned, and they have to stay pinned. bgfx has no release tags and its shaderc
+# drops shader profiles over time -- the GLSL profile this project asks for
+# (120, see _UILO_SHADER_PROFILES in CMakeLists.txt) was removed upstream, so a
+# clone at HEAD fails every shader with "Unknown profile: 120" while an older
+# checkout builds. Bumping these three is a deliberate step that means checking
+# the profile list still matches.
+clone_if_missing bx   "https://github.com/bkaradzic/bx.git"   "$BX_REF"
+clone_if_missing bimg "https://github.com/bkaradzic/bimg.git" "$BIMG_REF"
+clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git" "$BGFX_REF"
 
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -337,6 +363,14 @@ fi
 if [[ ! -f "$BGFX_BIN_DIR/shadercRelease" ]]; then
     echo "[UILO] building bgfx tools -- one time only"
     make -C "$EXT/bgfx" "$BGFX_TARGET" TOOLS=1 2>/dev/null || true
+fi
+
+# A host project that add_subdirectory()s UILO needs ext/ provisioned -- SDL3
+# cloned, bgfx and shaderc built -- but not UILO itself built here, since it is
+# about to be built inside the host's own tree. Same contract as the web path.
+if [[ $DEPS_ONLY -eq 1 ]]; then
+    echo "[UILO] desktop dependencies ready (ext/SDL3, ext/bgfx)"
+    exit 0
 fi
 
 GENERATOR="Unix Makefiles"

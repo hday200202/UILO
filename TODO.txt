@@ -194,15 +194,39 @@ headers, not here.
 - [ ] Virtual Scrolling
       Render only the visible rows, so a 10k-item list stays cheap.
 
-- [ ] Native File Dialog Abstraction
-      One interface over the OS open/save dialogs on macOS, Linux and Windows,
-      with type filters, blocking or async, returning the chosen paths.
+- [x] Native File Dialog Abstraction  (include/utils/FileDialog.hpp)
+      openFileDialog / openFilesDialog / saveFileDialog / selectFolderDialog,
+      plus fileDialogsAvailable(). Type filters, a start path and a default name
+      go in through FileDialogOptions; each returns std::optional or a vector, so
+      cancelling is a value rather than an error. No third-party code: NSOpenPanel
+      on macOS (platform/MacFileDialog.mm), IFileDialog on Windows, and
+      zenity/kdialog/qarma on Linux, behind a header that names none of them.
+      - [ ] Blocking only. While a dialog is up the caller's loop is not running,
+            so the window behind it stops redrawing -- which is what the platform
+            dialogs do anyway, but an async form returning a pollable handle
+            would let an app keep animating.
+      - [ ] Linux is untested here; there is no Linux machine in this
+            environment. The zenity and kdialog command lines are written from
+            their documented flags, not from a run.
+      - macOS needs the call to come from a UILO app: the panels attach to the
+        NSApplication the Renderer's window creates. A console program that never
+        opened a window gets an immediate cancel.
 
 - [ ] OS-level drag and drop INTO the window -- dropping a file onto the app.
       System clipboard integration is already done.
 
 
 ## Known gaps
+
+- Vendored versions
+      - [x] bx / bimg / bgfx are pinned to commit SHAs in build.sh. They used to
+            be cloned at HEAD while SDL3 was pinned, so a clone made on a
+            different day got a different bgfx -- and today's shaderc has dropped
+            the GLSL "120" profile CMakeLists.txt asks for, failing every shader
+            with "Unknown profile: 120" on a fresh checkout.
+      - [ ] Bumping those three is a deliberate step: check
+            _UILO_SHADER_PROFILES in CMakeLists.txt still names profiles the new
+            shaderc has, since bgfx removes them without notice.
 
 - Terminal
       - [ ] Windows. Pty.cpp's Windows branch fails cleanly with "needs
@@ -233,6 +257,25 @@ headers, not here.
 
 - Memory & performance
       - [ ] Reduce allocations, cache layout calculations, cut draw calls
+
+
+## Tools
+
+- [x] uilo-new -- project generator (tools/uilo-new/)
+      One target, two front-ends over the same scaffolding code: `uilo-new <path>`
+      creates a project and exits, `uilo-new` with no path opens a UILO window
+      with the same form. Writes bin/, ext/ and src/ plus a CMakeLists.txt and a
+      build.sh; nothing is downloaded at generation time.
+      The generated build.sh checks for git, cmake, python3, a compiler and (on
+      Linux) SDL3's X11/Wayland packages and offers to install what is missing,
+      clones UILO into ext/UILO at a pinned ref, has it provision its own
+      dependencies, then builds into bin/.
+      - Windows is Git Bash only, deliberately, like UILO's own build. The
+        README and the CMake error messages that pointed at a build.ps1 which
+        never existed now say so.
+      - [ ] Only two templates (minimal, panels). A web/Wt starter would need
+            UILO_WT wiring in the generated CMakeLists.
+      - [ ] No `--list-templates`, and no way to add templates without a rebuild.
 
 
 ## Testing & docs

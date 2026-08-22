@@ -30,7 +30,9 @@ Elements are created with lowercase factory functions and configured with two ob
 
 - **macOS:** Xcode command-line tools (clang)
 - **Linux:** gcc or clang, plus the usual X11/Wayland dev packages SDL3 needs
-- **Windows:** Visual Studio 2022 build tools (use `build.ps1`)
+- **Windows:** Visual Studio 2022 build tools. Run `./build.sh` from Git Bash --
+  it drives MSVC through CMake's Visual Studio generator, so there is no `.bat`
+  or `.ps1` to run instead.
 - **All platforms:** CMake 3.20+, Python 3, and Git (dependencies are cloned)
 
 ### Quick Start
