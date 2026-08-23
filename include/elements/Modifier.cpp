@@ -15,7 +15,7 @@ namespace uilo {
 */
 Modifier& Modifier::setWidth(Dimension dim) {
     if (dim.percent) dim.value = std::clamp(dim.value, 1.f, 100.f);
-    m_width = dim;
+    m_width.set(dim);
     return *this;
 }
 
@@ -29,7 +29,7 @@ Modifier& Modifier::setWidth(Dimension dim) {
 */
 Modifier& Modifier::setHeight(Dimension dim) {
     if (dim.percent) dim.value = std::clamp(dim.value, 1.f, 100.f);
-    m_height = dim;
+    m_height.set(dim);
     return *this;
 }
 
@@ -41,7 +41,7 @@ Modifier& Modifier::setHeight(Dimension dim) {
     - Desc:     Sets where the element sits inside the slot its parent gives it.
                 Horizontal and vertical flags combine with `|`.
 */
-Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *this; }
+Modifier& Modifier::setAlign(Align alignment) { m_align.set(alignment); return *this; }
 
 
 /*
@@ -51,7 +51,7 @@ Modifier& Modifier::setAlign(Align alignment) { m_align = alignment; return *thi
     - Desc:     Shows or hides the element. A hidden element is skipped by
                 layout, takes no space, and is not drawn.
 */
-Modifier& Modifier::setVisible(bool visible) { m_visible = visible; return *this; }
+Modifier& Modifier::setVisible(bool visible) { m_visible.set(visible); return *this; }
 
 
 /*
@@ -233,7 +233,7 @@ std::vector<ContextMenuItem> Modifier::buildContextMenu() const {
     - Returns:  Dimension
     - Desc:     The element's declared width, in pixels or percent.
 */
-Dimension Modifier::getWidth() const { return m_width; }
+Dimension Modifier::getWidth() const { return m_width.get(); }
 
 
 /*
@@ -242,7 +242,7 @@ Dimension Modifier::getWidth() const { return m_width; }
     - Returns:  Dimension
     - Desc:     The element's declared height, in pixels or percent.
 */
-Dimension Modifier::getHeight() const { return m_height; }
+Dimension Modifier::getHeight() const { return m_height.get(); }
 
 
 /*
@@ -251,7 +251,7 @@ Dimension Modifier::getHeight() const { return m_height; }
     - Returns:  Align
     - Desc:     The combined alignment flags.
 */
-Align Modifier::getAlign() const { return m_align; }
+Align Modifier::getAlign() const { return m_align.get(); }
 
 
 /*
@@ -324,7 +324,7 @@ const ScrollFuncPtr& Modifier::getOnScroll() const { return m_onScroll; }
     - Returns:  bool
     - Desc:     Whether the element is laid out and drawn.
 */
-bool Modifier::getVisible() const { return m_visible; }
+bool Modifier::getVisible() const { return m_visible.get(); }
 
 
 /*

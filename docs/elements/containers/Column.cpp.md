@@ -223,6 +223,8 @@ updateScrollable(float dt, float scale)
 
 Lays out a scrolling column. Pinned children -- those with [Modifier](../Modifier.hpp.md#modifier)::ignoreScroll -- are placed first, grouped top, centre and bottom, and the height they take is reserved: whatever is left between the top and bottom strips becomes the scrolling viewport, so a pinned header stays put while the rest of the column travels. The scrolling children are then placed from the viewport's top edge displaced by the scroll offset, their total measured as the content height, and the offset finally clamped into the range that content allows and published to any linked column.
 
+> A percent height here is a percentage OF the viewport rather than a share of it, since a column whose content overflows on purpose has no leftover space to divide: a lone 50% child is half the viewport tall, and three of them overflow it by half.
+
 ---
 
 ### updateFlow
@@ -238,7 +240,9 @@ updateFlow(float dt, float scale)
 
 **Returns** — void
 
-Lays out a non-scrolling column. Children are sorted into top, centre and bottom buckets by their alignment, then the height left over after the fixed-size ones is shared among the percent- sized ones -- every percent child gets the same slot, so two 50% siblings beside a 100px one split what remains rather than the whole column. Each group is finally placed from its own anchor: top from the top edge, centre about the middle, bottom against the bottom edge.
+Lays out a non-scrolling column. Children are sorted into top, centre and bottom buckets by their alignment, then sized: a pixel height is itself, a percent height is that percentage of the content area, and whatever those two leave over is divided among the _flex children in proportion to their values. Each group is finally placed from its own anchor: top from the top edge, centre about the middle, bottom against the bottom edge.
+
+> Percent and pixel heights are therefore independent of what the siblings ask for, and can overflow the column between them. Only _flex adapts, which is what makes it the sensible default.
 
 ---
 
@@ -397,6 +401,8 @@ checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum
 **Returns** — bool -- true when the column consumed the event
 
 Single-axis scroll, offered to the children first. `precise` marks a trackpad's pixel delta, which is scaled against scrollSpeed differently from a wheel's discrete step because the OS already supplies the momentum tail.
+
+> A floating child under the pointer takes the event and the column does not scroll, so the view does not slide out from under a panel laid over it.
 
 ---
 

@@ -14,6 +14,8 @@
 #include "../../utils/DateAndTime.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 class UILO;
@@ -49,14 +51,56 @@ enum class WeekdayLabelStyle { Initial, Short, Full };
 */
 class DatePickerOptions {
 public:
-    DatePickerOptions() = default;
+    UILO_THEMED(DatePickerOptions)
+
+    /*
+        inheritFrom(const DatePickerOptions& prototype):
+        - Params:   const DatePickerOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const DatePickerOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_navRounding.inherit(prototype.m_navRounding);
+        m_cellRounding.inherit(prototype.m_cellRounding);
+        m_buttonRounding.inherit(prototype.m_buttonRounding);
+        m_scrimColorRole.inherit(prototype.m_scrimColorRole);
+        m_bgColorRole.inherit(prototype.m_bgColorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_headerTextColorRole.inherit(prototype.m_headerTextColorRole);
+        m_navColorRole.inherit(prototype.m_navColorRole);
+        m_navHoverColorRole.inherit(prototype.m_navHoverColorRole);
+        m_navIconColorRole.inherit(prototype.m_navIconColorRole);
+        m_weekdayColorRole.inherit(prototype.m_weekdayColorRole);
+        m_cellColorRole.inherit(prototype.m_cellColorRole);
+        m_cellHoverColorRole.inherit(prototype.m_cellHoverColorRole);
+        m_dayTextColorRole.inherit(prototype.m_dayTextColorRole);
+        m_adjacentTextColorRole.inherit(prototype.m_adjacentTextColorRole);
+        m_weekendTextColorRole.inherit(prototype.m_weekendTextColorRole);
+        m_disabledTextColorRole.inherit(prototype.m_disabledTextColorRole);
+        m_selectedColorRole.inherit(prototype.m_selectedColorRole);
+        m_selectedTextColorRole.inherit(prototype.m_selectedTextColorRole);
+        m_rangeFillColorRole.inherit(prototype.m_rangeFillColorRole);
+        m_rangeTextColorRole.inherit(prototype.m_rangeTextColorRole);
+        m_todayColorRole.inherit(prototype.m_todayColorRole);
+        m_todayTextColorRole.inherit(prototype.m_todayTextColorRole);
+        m_buttonColorRole.inherit(prototype.m_buttonColorRole);
+        m_buttonTextColorRole.inherit(prototype.m_buttonTextColorRole);
+        m_confirmColorRole.inherit(prototype.m_confirmColorRole);
+        m_confirmTextColorRole.inherit(prototype.m_confirmTextColorRole);
+        m_fontPath.inherit(prototype.m_fontPath);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    DatePickerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    DatePickerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    DatePickerOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    DatePickerOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     // Behaviour ---------------------------------------------------------
     DatePickerOptions& setMode(DatePickerMode m)          { m_mode = m; return *this; }
@@ -93,13 +137,13 @@ public:
     // The dimmed sheet behind a centred popup. Alpha 0 leaves the page
     // visible and unblocked-looking, though it still swallows clicks.
     DatePickerOptions& setScrimColor(const Color& c)          { m_scrimColor = c; return *this; }
-    DatePickerOptions& setScrimColorRole(const std::string& r){ m_scrimColorRole = r; return *this; }
+    DatePickerOptions& setScrimColorRole(const std::string& r){ m_scrimColorRole.set(r); return *this; }
     DatePickerOptions& setDismissOnScrimClick(bool v)     { m_dismissOnScrim = v; return *this; }
 
     // Card --------------------------------------------------------------
     DatePickerOptions& setBackgroundColor(const Color& c)          { m_bgColor = c; return *this; }
-    DatePickerOptions& setBackgroundColorRole(const std::string& r){ m_bgColorRole = r; return *this; }
-    DatePickerOptions& setRounding(float r)               { m_rounding = r; return *this; }
+    DatePickerOptions& setBackgroundColorRole(const std::string& r){ m_bgColorRole.set(r); return *this; }
+    DatePickerOptions& setRounding(float r)               { m_rounding.set(r); return *this; }
     // setInnerPadding is the spelling every other Options uses; setPadding is
     // kept as its alias.
     DatePickerOptions& setInnerPadding(float px)          { m_padding = px; return *this; }
@@ -107,12 +151,12 @@ public:
     float              getInnerPadding()            const { return m_padding; }
 
     // Outline -------------------------------------------------------------
-    // A border around the card, drawn inside its bounds. Follows
-    // Theme::setOutlineThickness()/setOutlineColorRole() when left unset.
+    // A border around the card, drawn inside its bounds. Thickness and role
+    // default to whatever Defaults.hpp gives a DatePickerOptions.
     DatePickerOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    DatePickerOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    DatePickerOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
-    DatePickerOptions& setFont(std::string_view path)   { m_fontPath = std::string(path); return *this; }
+    DatePickerOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    DatePickerOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
+    DatePickerOptions& setFont(std::string_view path)   { m_fontPath.set(std::string(path)); return *this; }
 
     // Header (month title + navigation) ---------------------------------
     DatePickerOptions& setShowHeader(bool v)              { m_showHeader = v; return *this; }
@@ -124,7 +168,7 @@ public:
     DatePickerOptions& setHeaderCharSize(unsigned int n)  { m_headerCharSize = n; return *this; }
     DatePickerOptions& setHeaderBold(bool v)              { m_headerBold = v; return *this; }
     DatePickerOptions& setHeaderTextColor(const Color& c)          { m_headerTextColor = c; return *this; }
-    DatePickerOptions& setHeaderTextColorRole(const std::string& r){ m_headerTextColorRole = r; return *this; }
+    DatePickerOptions& setHeaderTextColorRole(const std::string& r){ m_headerTextColorRole.set(r); return *this; }
     // Clicking the title jumps back to the month holding today.
     DatePickerOptions& setTitleClickGoesToToday(bool v)   { m_titleGoesToToday = v; return *this; }
 
@@ -132,18 +176,18 @@ public:
     DatePickerOptions& setShowYearNavigation(bool v)      { m_showYearNav = v; return *this; }
     DatePickerOptions& setNavButtonSize(float px)         { m_navButtonSize = px; return *this; }
     DatePickerOptions& setNavIconSize(float px)           { m_navIconSize = px; return *this; }
-    DatePickerOptions& setNavRounding(float r)            { m_navRounding = r; return *this; }
+    DatePickerOptions& setNavRounding(float r)            { m_navRounding.set(r); return *this; }
     DatePickerOptions& setPrevMonthIcon(std::string_view n) { m_prevIcon = std::string(n); return *this; }
     DatePickerOptions& setNextMonthIcon(std::string_view n) { m_nextIcon = std::string(n); return *this; }
     DatePickerOptions& setPrevYearIcon(std::string_view n)  { m_prevYearIcon = std::string(n); return *this; }
     DatePickerOptions& setNextYearIcon(std::string_view n)  { m_nextYearIcon = std::string(n); return *this; }
     DatePickerOptions& setNavIconStrokeWidth(float w)     { m_navStroke = w; m_hasNavStroke = true; return *this; }
     DatePickerOptions& setNavColor(const Color& c)              { m_navColor = c; return *this; }
-    DatePickerOptions& setNavColorRole(const std::string& r)    { m_navColorRole = r; return *this; }
+    DatePickerOptions& setNavColorRole(const std::string& r)    { m_navColorRole.set(r); return *this; }
     DatePickerOptions& setNavHoverColor(const Color& c)         { m_navHoverColor = c; return *this; }
-    DatePickerOptions& setNavHoverColorRole(const std::string& r){ m_navHoverColorRole = r; return *this; }
+    DatePickerOptions& setNavHoverColorRole(const std::string& r){ m_navHoverColorRole.set(r); return *this; }
     DatePickerOptions& setNavIconColor(const Color& c)          { m_navIconColor = c; return *this; }
-    DatePickerOptions& setNavIconColorRole(const std::string& r){ m_navIconColorRole = r; return *this; }
+    DatePickerOptions& setNavIconColorRole(const std::string& r){ m_navIconColorRole.set(r); return *this; }
 
     // Weekday headings --------------------------------------------------
     DatePickerOptions& setShowWeekdayHeader(bool v)       { m_showWeekdayHeader = v; return *this; }
@@ -152,44 +196,44 @@ public:
     DatePickerOptions& setWeekdayCharSize(unsigned int n) { m_weekdayCharSize = n; return *this; }
     DatePickerOptions& setWeekdayBold(bool v)             { m_weekdayBold = v; return *this; }
     DatePickerOptions& setWeekdayColor(const Color& c)          { m_weekdayColor = c; return *this; }
-    DatePickerOptions& setWeekdayColorRole(const std::string& r){ m_weekdayColorRole = r; return *this; }
+    DatePickerOptions& setWeekdayColorRole(const std::string& r){ m_weekdayColorRole.set(r); return *this; }
 
     // Day cells ---------------------------------------------------------
     DatePickerOptions& setCellHeight(float px)            { m_cellHeight = px; return *this; }
     // Inset applied inside each cell's slot, which is what puts air between
     // neighbouring days without disturbing the seven-column split.
     DatePickerOptions& setCellSpacing(float px)           { m_cellSpacing = px; return *this; }
-    DatePickerOptions& setCellRounding(float r)           { m_cellRounding = r; return *this; }
+    DatePickerOptions& setCellRounding(float r)           { m_cellRounding.set(r); return *this; }
     DatePickerOptions& setCharSize(unsigned int n)        { m_charSize = n; return *this; }
     DatePickerOptions& setCellColor(const Color& c)             { m_cellColor = c; return *this; }
-    DatePickerOptions& setCellColorRole(const std::string& r)   { m_cellColorRole = r; return *this; }
+    DatePickerOptions& setCellColorRole(const std::string& r)   { m_cellColorRole.set(r); return *this; }
     DatePickerOptions& setCellHoverColor(const Color& c)        { m_cellHoverColor = c; return *this; }
-    DatePickerOptions& setCellHoverColorRole(const std::string& r) { m_cellHoverColorRole = r; return *this; }
+    DatePickerOptions& setCellHoverColorRole(const std::string& r) { m_cellHoverColorRole.set(r); return *this; }
     DatePickerOptions& setDayTextColor(const Color& c)          { m_dayTextColor = c; return *this; }
-    DatePickerOptions& setDayTextColorRole(const std::string& r){ m_dayTextColorRole = r; return *this; }
+    DatePickerOptions& setDayTextColorRole(const std::string& r){ m_dayTextColorRole.set(r); return *this; }
     // Neighbour-month days, when shown.
     DatePickerOptions& setAdjacentTextColor(const Color& c)          { m_adjacentTextColor = c; return *this; }
-    DatePickerOptions& setAdjacentTextColorRole(const std::string& r){ m_adjacentTextColorRole = r; return *this; }
+    DatePickerOptions& setAdjacentTextColorRole(const std::string& r){ m_adjacentTextColorRole.set(r); return *this; }
     // Left unset, weekends read the same as any other day.
     DatePickerOptions& setWeekendTextColor(const Color& c)           { m_weekendTextColor = c; m_hasWeekendColor = true; return *this; }
-    DatePickerOptions& setWeekendTextColorRole(const std::string& r) { m_weekendTextColorRole = r; m_hasWeekendColor = true; return *this; }
+    DatePickerOptions& setWeekendTextColorRole(const std::string& r) { m_weekendTextColorRole.set(r); m_hasWeekendColor = true; return *this; }
     DatePickerOptions& setDisabledTextColor(const Color& c)          { m_disabledTextColor = c; return *this; }
-    DatePickerOptions& setDisabledTextColorRole(const std::string& r){ m_disabledTextColorRole = r; return *this; }
+    DatePickerOptions& setDisabledTextColorRole(const std::string& r){ m_disabledTextColorRole.set(r); return *this; }
     DatePickerOptions& setSelectedColor(const Color& c)              { m_selectedColor = c; return *this; }
-    DatePickerOptions& setSelectedColorRole(const std::string& r)    { m_selectedColorRole = r; return *this; }
+    DatePickerOptions& setSelectedColorRole(const std::string& r)    { m_selectedColorRole.set(r); return *this; }
     DatePickerOptions& setSelectedTextColor(const Color& c)          { m_selectedTextColor = c; return *this; }
-    DatePickerOptions& setSelectedTextColorRole(const std::string& r){ m_selectedTextColorRole = r; return *this; }
+    DatePickerOptions& setSelectedTextColorRole(const std::string& r){ m_selectedTextColorRole.set(r); return *this; }
     // The days between the two ends of a range.
     DatePickerOptions& setRangeFillColor(const Color& c)             { m_rangeFillColor = c; return *this; }
-    DatePickerOptions& setRangeFillColorRole(const std::string& r)   { m_rangeFillColorRole = r; return *this; }
+    DatePickerOptions& setRangeFillColorRole(const std::string& r)   { m_rangeFillColorRole.set(r); return *this; }
     DatePickerOptions& setRangeTextColor(const Color& c)             { m_rangeTextColor = c; return *this; }
-    DatePickerOptions& setRangeTextColorRole(const std::string& r)   { m_rangeTextColorRole = r; return *this; }
+    DatePickerOptions& setRangeTextColorRole(const std::string& r)   { m_rangeTextColorRole.set(r); return *this; }
     // Today gets its own fill so it stays findable while unselected. Alpha 0
     // turns the marker off.
     DatePickerOptions& setTodayColor(const Color& c)                { m_todayColor = c; return *this; }
-    DatePickerOptions& setTodayColorRole(const std::string& r)      { m_todayColorRole = r; return *this; }
+    DatePickerOptions& setTodayColorRole(const std::string& r)      { m_todayColorRole.set(r); return *this; }
     DatePickerOptions& setTodayTextColor(const Color& c)            { m_todayTextColor = c; m_hasTodayTextColor = true; return *this; }
-    DatePickerOptions& setTodayTextColorRole(const std::string& r)  { m_todayTextColorRole = r; m_hasTodayTextColor = true; return *this; }
+    DatePickerOptions& setTodayTextColorRole(const std::string& r)  { m_todayTextColorRole.set(r); m_hasTodayTextColor = true; return *this; }
     DatePickerOptions& setBoldToday(bool v)               { m_boldToday = v; return *this; }
     DatePickerOptions& setBoldSelected(bool v)            { m_boldSelected = v; return *this; }
 
@@ -210,16 +254,16 @@ public:
     DatePickerOptions& setConfirmButtonLabel(const std::string& s) { m_confirmLabel = s; return *this; }
     DatePickerOptions& setFooterCharSize(unsigned int n)  { m_footerCharSize = n; return *this; }
     DatePickerOptions& setButtonWidth(float px)           { m_buttonWidth = px; return *this; }
-    DatePickerOptions& setButtonRounding(float r)         { m_buttonRounding = r; return *this; }
+    DatePickerOptions& setButtonRounding(float r)         { m_buttonRounding.set(r); return *this; }
     DatePickerOptions& setButtonColor(const Color& c)           { m_buttonColor = c; return *this; }
-    DatePickerOptions& setButtonColorRole(const std::string& r) { m_buttonColorRole = r; return *this; }
+    DatePickerOptions& setButtonColorRole(const std::string& r) { m_buttonColorRole.set(r); return *this; }
     DatePickerOptions& setButtonTextColor(const Color& c)           { m_buttonTextColor = c; return *this; }
-    DatePickerOptions& setButtonTextColorRole(const std::string& r) { m_buttonTextColorRole = r; return *this; }
+    DatePickerOptions& setButtonTextColorRole(const std::string& r) { m_buttonTextColorRole.set(r); return *this; }
     // The confirm button, styled apart from the rest as the primary action.
     DatePickerOptions& setConfirmButtonColor(const Color& c)           { m_confirmColor = c; return *this; }
-    DatePickerOptions& setConfirmButtonColorRole(const std::string& r) { m_confirmColorRole = r; return *this; }
+    DatePickerOptions& setConfirmButtonColorRole(const std::string& r) { m_confirmColorRole.set(r); return *this; }
     DatePickerOptions& setConfirmButtonTextColor(const Color& c)           { m_confirmTextColor = c; return *this; }
-    DatePickerOptions& setConfirmButtonTextColorRole(const std::string& r) { m_confirmTextColorRole = r; return *this; }
+    DatePickerOptions& setConfirmButtonTextColorRole(const std::string& r) { m_confirmTextColorRole.set(r); return *this; }
 
     // Callbacks ---------------------------------------------------------
     using DateCallback  = std::function<void(const Date&)>;
@@ -254,16 +298,16 @@ public:
     float getPopupWidth()               const { return m_popupWidth; }
     float getPopupHeight()              const { return m_popupHeight; }
     Color getScrimColor()               const { return m_scrimColor; }
-    const std::string& getScrimColorRole() const { return m_scrimColorRole; }
+    const std::string& getScrimColorRole() const { return m_scrimColorRole.get(); }
     bool getDismissOnScrimClick()       const { return m_dismissOnScrim; }
 
     Color getBackgroundColor()          const { return m_bgColor; }
-    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole.get(); }
     float getRounding()                 const;
     float getPadding()                  const { return m_padding; }
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
     const std::string& getFontPath()    const;
 
     bool getShowHeader()                const { return m_showHeader; }
@@ -273,7 +317,7 @@ public:
     unsigned int getHeaderCharSize()    const { return m_headerCharSize; }
     bool getHeaderBold()                const { return m_headerBold; }
     Color getHeaderTextColor()          const { return m_headerTextColor; }
-    const std::string& getHeaderTextColorRole() const { return m_headerTextColorRole; }
+    const std::string& getHeaderTextColorRole() const { return m_headerTextColorRole.get(); }
     bool getTitleClickGoesToToday()     const { return m_titleGoesToToday; }
 
     bool getShowYearNavigation()        const { return m_showYearNav; }
@@ -287,11 +331,11 @@ public:
     float getNavIconStrokeWidth()       const { return m_navStroke; }
     bool hasNavIconStrokeWidth()        const { return m_hasNavStroke; }
     Color getNavColor()                 const { return m_navColor; }
-    const std::string& getNavColorRole() const { return m_navColorRole; }
+    const std::string& getNavColorRole() const { return m_navColorRole.get(); }
     Color getNavHoverColor()            const { return m_navHoverColor; }
-    const std::string& getNavHoverColorRole() const { return m_navHoverColorRole; }
+    const std::string& getNavHoverColorRole() const { return m_navHoverColorRole.get(); }
     Color getNavIconColor()             const { return m_navIconColor; }
-    const std::string& getNavIconColorRole() const { return m_navIconColorRole; }
+    const std::string& getNavIconColorRole() const { return m_navIconColorRole.get(); }
 
     bool getShowWeekdayHeader()         const { return m_showWeekdayHeader; }
     float getWeekdayHeight()            const { return m_weekdayHeight; }
@@ -299,37 +343,37 @@ public:
     unsigned int getWeekdayCharSize()   const { return m_weekdayCharSize; }
     bool getWeekdayBold()               const { return m_weekdayBold; }
     Color getWeekdayColor()             const { return m_weekdayColor; }
-    const std::string& getWeekdayColorRole() const { return m_weekdayColorRole; }
+    const std::string& getWeekdayColorRole() const { return m_weekdayColorRole.get(); }
 
     float getCellHeight()               const { return m_cellHeight; }
     float getCellSpacing()              const { return m_cellSpacing; }
     float getCellRounding()             const;
     unsigned int getCharSize()          const { return m_charSize; }
     Color getCellColor()                const { return m_cellColor; }
-    const std::string& getCellColorRole() const { return m_cellColorRole; }
+    const std::string& getCellColorRole() const { return m_cellColorRole.get(); }
     Color getCellHoverColor()           const { return m_cellHoverColor; }
-    const std::string& getCellHoverColorRole() const { return m_cellHoverColorRole; }
+    const std::string& getCellHoverColorRole() const { return m_cellHoverColorRole.get(); }
     Color getDayTextColor()             const { return m_dayTextColor; }
-    const std::string& getDayTextColorRole() const { return m_dayTextColorRole; }
+    const std::string& getDayTextColorRole() const { return m_dayTextColorRole.get(); }
     Color getAdjacentTextColor()        const { return m_adjacentTextColor; }
-    const std::string& getAdjacentTextColorRole() const { return m_adjacentTextColorRole; }
+    const std::string& getAdjacentTextColorRole() const { return m_adjacentTextColorRole.get(); }
     Color getWeekendTextColor()         const { return m_weekendTextColor; }
-    const std::string& getWeekendTextColorRole() const { return m_weekendTextColorRole; }
+    const std::string& getWeekendTextColorRole() const { return m_weekendTextColorRole.get(); }
     bool hasWeekendTextColor()          const { return m_hasWeekendColor; }
     Color getDisabledTextColor()        const { return m_disabledTextColor; }
-    const std::string& getDisabledTextColorRole() const { return m_disabledTextColorRole; }
+    const std::string& getDisabledTextColorRole() const { return m_disabledTextColorRole.get(); }
     Color getSelectedColor()            const { return m_selectedColor; }
-    const std::string& getSelectedColorRole() const { return m_selectedColorRole; }
+    const std::string& getSelectedColorRole() const { return m_selectedColorRole.get(); }
     Color getSelectedTextColor()        const { return m_selectedTextColor; }
-    const std::string& getSelectedTextColorRole() const { return m_selectedTextColorRole; }
+    const std::string& getSelectedTextColorRole() const { return m_selectedTextColorRole.get(); }
     Color getRangeFillColor()           const { return m_rangeFillColor; }
-    const std::string& getRangeFillColorRole() const { return m_rangeFillColorRole; }
+    const std::string& getRangeFillColorRole() const { return m_rangeFillColorRole.get(); }
     Color getRangeTextColor()           const { return m_rangeTextColor; }
-    const std::string& getRangeTextColorRole() const { return m_rangeTextColorRole; }
+    const std::string& getRangeTextColorRole() const { return m_rangeTextColorRole.get(); }
     Color getTodayColor()               const { return m_todayColor; }
-    const std::string& getTodayColorRole() const { return m_todayColorRole; }
+    const std::string& getTodayColorRole() const { return m_todayColorRole.get(); }
     Color getTodayTextColor()           const { return m_todayTextColor; }
-    const std::string& getTodayTextColorRole() const { return m_todayTextColorRole; }
+    const std::string& getTodayTextColorRole() const { return m_todayTextColorRole.get(); }
     bool hasTodayTextColor()            const { return m_hasTodayTextColor; }
     bool getBoldToday()                 const { return m_boldToday; }
     bool getBoldSelected()              const { return m_boldSelected; }
@@ -345,13 +389,13 @@ public:
     float getButtonWidth()              const { return m_buttonWidth; }
     float getButtonRounding()           const;
     Color getButtonColor()              const { return m_buttonColor; }
-    const std::string& getButtonColorRole() const { return m_buttonColorRole; }
+    const std::string& getButtonColorRole() const { return m_buttonColorRole.get(); }
     Color getButtonTextColor()          const { return m_buttonTextColor; }
-    const std::string& getButtonTextColorRole() const { return m_buttonTextColorRole; }
+    const std::string& getButtonTextColorRole() const { return m_buttonTextColorRole.get(); }
     Color getConfirmButtonColor()       const { return m_confirmColor; }
-    const std::string& getConfirmButtonColorRole() const { return m_confirmColorRole; }
+    const std::string& getConfirmButtonColorRole() const { return m_confirmColorRole.get(); }
     Color getConfirmButtonTextColor()   const { return m_confirmTextColor; }
-    const std::string& getConfirmButtonTextColorRole() const { return m_confirmTextColorRole; }
+    const std::string& getConfirmButtonTextColorRole() const { return m_confirmTextColorRole.get(); }
 
     const DateCallback&  getOnDateSelected()  const { return m_onDateSelected; }
     const RangeCallback& getOnRangeSelected() const { return m_onRangeSelected; }
@@ -364,23 +408,23 @@ public:
 
     // Raw, for handing to a child element that should keep following
     // the theme rather than being pinned to a resolved number.
-    const std::optional<float>& getRoundingOpt() const { return m_rounding; }
+    const std::optional<float>& getRoundingOpt() const { return m_rounding.get(); }
     static constexpr float getRoundingOptFallback() { return 10.f; }
     // Raw, for handing to a child element that should keep following
     // the theme rather than being pinned to a resolved number.
-    const std::optional<float>& getNavRoundingOpt() const { return m_navRounding; }
+    const std::optional<float>& getNavRoundingOpt() const { return m_navRounding.get(); }
     static constexpr float getNavRoundingOptFallback() { return 6.f; }
     // Raw, for handing to a child element that should keep following
     // the theme rather than being pinned to a resolved number.
-    const std::optional<float>& getCellRoundingOpt() const { return m_cellRounding; }
+    const std::optional<float>& getCellRoundingOpt() const { return m_cellRounding.get(); }
     static constexpr float getCellRoundingOptFallback() { return 6.f; }
     // Raw, for handing to a child element that should keep following
     // the theme rather than being pinned to a resolved number.
-    const std::optional<float>& getButtonRoundingOpt() const { return m_buttonRounding; }
+    const std::optional<float>& getButtonRoundingOpt() const { return m_buttonRounding.get(); }
     static constexpr float getButtonRoundingOptFallback() { return 6.f; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     DatePickerMode m_mode          = DatePickerMode::Single;
     Weekday m_firstDayOfWeek       = Weekday::Sunday;
     bool m_showAdjacent            = true;
@@ -394,17 +438,17 @@ private:
     float m_popupWidth             = 320.f;
     float m_popupHeight            = 0.f;   /* 0 = derive from the metrics */
     Color m_scrimColor             = Color{0, 0, 0, 140};
-    std::string m_scrimColorRole;
+    Themed<std::string> m_scrimColorRole;
     bool m_dismissOnScrim          = true;
 
     Color m_bgColor                = Color{0, 0, 0, 0};
-    std::string m_bgColorRole      = "panel";
-    std::optional<float> m_rounding;
+    Themed<std::string> m_bgColorRole {"panel"};
+    Themed<std::optional<float>> m_rounding;
     float m_padding                = 12.f;
     Color                m_outlineColor = Color::Transparent;
-    std::string          m_outlineColorRole;
-    float m_outlineThickness = 0.f;
-    std::string m_fontPath;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
+    Themed<std::string> m_fontPath;
 
     bool m_showHeader              = true;
     float m_headerHeight           = 32.f;
@@ -413,13 +457,13 @@ private:
     unsigned int m_headerCharSize  = 17;
     bool m_headerBold              = true;
     Color m_headerTextColor        = Color::White;
-    std::string m_headerTextColorRole = "text";
+    Themed<std::string> m_headerTextColorRole {"text"};
     bool m_titleGoesToToday        = true;
 
     bool m_showYearNav             = false;
     float m_navButtonSize          = 28.f;
     float m_navIconSize            = 16.f;
-    std::optional<float> m_navRounding;
+    Themed<std::optional<float>> m_navRounding;
     std::string m_prevIcon         = "chevron-left";
     std::string m_nextIcon         = "chevron-right";
     std::string m_prevYearIcon     = "chevrons-left";
@@ -427,11 +471,11 @@ private:
     float m_navStroke              = 0.f;
     bool m_hasNavStroke            = false;
     Color m_navColor               = Color{0, 0, 0, 0};
-    std::string m_navColorRole;
+    Themed<std::string> m_navColorRole;
     Color m_navHoverColor          = Color{255, 255, 255, 24};
-    std::string m_navHoverColorRole = "panelAlt";
+    Themed<std::string> m_navHoverColorRole {"panelAlt"};
     Color m_navIconColor           = Color::White;
-    std::string m_navIconColorRole = "text";
+    Themed<std::string> m_navIconColorRole {"text"};
 
     bool m_showWeekdayHeader       = true;
     float m_weekdayHeight          = 22.f;
@@ -439,37 +483,37 @@ private:
     unsigned int m_weekdayCharSize = 13;
     bool m_weekdayBold             = false;
     Color m_weekdayColor           = Color{255, 255, 255, 130};
-    std::string m_weekdayColorRole = "textDim";
+    Themed<std::string> m_weekdayColorRole {"textDim"};
 
     float m_cellHeight             = 32.f;
     float m_cellSpacing            = 2.f;
-    std::optional<float> m_cellRounding;
+    Themed<std::optional<float>> m_cellRounding;
     unsigned int m_charSize        = 15;
     Color m_cellColor              = Color{0, 0, 0, 0};
-    std::string m_cellColorRole;
+    Themed<std::string> m_cellColorRole;
     Color m_cellHoverColor         = Color{255, 255, 255, 24};
-    std::string m_cellHoverColorRole = "outline";
+    Themed<std::string> m_cellHoverColorRole {"outline"};
     Color m_dayTextColor           = Color::White;
-    std::string m_dayTextColorRole = "text";
+    Themed<std::string> m_dayTextColorRole {"text"};
     Color m_adjacentTextColor      = Color{255, 255, 255, 70};
-    std::string m_adjacentTextColorRole = "textDim";
+    Themed<std::string> m_adjacentTextColorRole {"textDim"};
     Color m_weekendTextColor       = Color::White;
-    std::string m_weekendTextColorRole;
+    Themed<std::string> m_weekendTextColorRole;
     bool m_hasWeekendColor         = false;
     Color m_disabledTextColor      = Color{255, 255, 255, 45};
-    std::string m_disabledTextColorRole = "textDim";
+    Themed<std::string> m_disabledTextColorRole {"textDim"};
     Color m_selectedColor          = Color{120, 110, 220, 255};
-    std::string m_selectedColorRole = "accent";
+    Themed<std::string> m_selectedColorRole {"accent"};
     Color m_selectedTextColor      = Color::White;
-    std::string m_selectedTextColorRole = "onAccent";
+    Themed<std::string> m_selectedTextColorRole {"onAccent"};
     Color m_rangeFillColor         = Color{120, 110, 220, 70};
-    std::string m_rangeFillColorRole;
+    Themed<std::string> m_rangeFillColorRole;
     Color m_rangeTextColor         = Color::White;
-    std::string m_rangeTextColorRole = "text";
+    Themed<std::string> m_rangeTextColorRole {"text"};
     Color m_todayColor             = Color{255, 255, 255, 28};
-    std::string m_todayColorRole = "panelAlt";
+    Themed<std::string> m_todayColorRole {"panelAlt"};
     Color m_todayTextColor         = Color::White;
-    std::string m_todayTextColorRole;
+    Themed<std::string> m_todayTextColorRole;
     bool m_hasTodayTextColor       = false;
     bool m_boldToday               = true;
     bool m_boldSelected            = true;
@@ -483,15 +527,15 @@ private:
     std::string m_confirmLabel     = "OK";
     unsigned int m_footerCharSize  = 14;
     float m_buttonWidth            = 68.f;
-    std::optional<float> m_buttonRounding;
+    Themed<std::optional<float>> m_buttonRounding;
     Color m_buttonColor            = Color{255, 255, 255, 20};
-    std::string m_buttonColorRole  = "panelAlt";
+    Themed<std::string> m_buttonColorRole {"panelAlt"};
     Color m_buttonTextColor        = Color::White;
-    std::string m_buttonTextColorRole = "text";
+    Themed<std::string> m_buttonTextColorRole {"text"};
     Color m_confirmColor           = Color{120, 110, 220, 255};
-    std::string m_confirmColorRole = "accent";
+    Themed<std::string> m_confirmColorRole {"accent"};
     Color m_confirmTextColor       = Color::White;
-    std::string m_confirmTextColorRole = "onAccent";
+    Themed<std::string> m_confirmTextColorRole {"onAccent"};
 
     DateCallback  m_onDateSelected;
     RangeCallback m_onRangeSelected;
@@ -500,6 +544,8 @@ private:
     DateCallback  m_onConfirmed;
     VoidCallback  m_onCancelled;
     VoidCallback  m_onClosed;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -511,7 +557,7 @@ private:
                 value this picker was given, then the active Theme's, then 10.
 */
 inline float DatePickerOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 10.f);
+    return m_rounding.get().value_or(10.f);
 }
 
 
@@ -523,7 +569,7 @@ inline float DatePickerOptions::getRounding() const {
                 Theme's.
 */
 inline const std::string& DatePickerOptions::getFontPath() const {
-    return Theme::resolveFont(m_fontPath);
+    return m_fontPath.get();
 }
 
 
@@ -535,7 +581,7 @@ inline const std::string& DatePickerOptions::getFontPath() const {
                 the same three ways with a fallback of 6.
 */
 inline float DatePickerOptions::getNavRounding() const {
-    return Theme::resolveRounding(m_navRounding, 6.f);
+    return m_navRounding.get().value_or(6.f);
 }
 
 
@@ -547,7 +593,7 @@ inline float DatePickerOptions::getNavRounding() const {
                 fallback of 6.
 */
 inline float DatePickerOptions::getCellRounding() const {
-    return Theme::resolveRounding(m_cellRounding, 6.f);
+    return m_cellRounding.get().value_or(6.f);
 }
 
 
@@ -559,7 +605,7 @@ inline float DatePickerOptions::getCellRounding() const {
                 ways with a fallback of 6.
 */
 inline float DatePickerOptions::getButtonRounding() const {
-    return Theme::resolveRounding(m_buttonRounding, 6.f);
+    return m_buttonRounding.get().value_or(6.f);
 }
 
 
@@ -596,6 +642,11 @@ inline float DatePickerOptions::getButtonRounding() const {
 */
 class DatePicker : public Column {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_dpOptions.inheritFrom(theme.cascade<DatePickerOptions>(m_dpOptions.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_dpOptions.getOuterPadding(); }
 
     explicit DatePicker(Modifier modifier, DatePickerOptions options = {}, const std::string& name = "");

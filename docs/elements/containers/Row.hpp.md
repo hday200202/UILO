@@ -44,6 +44,8 @@ inheritRounding(const std::optional<float>& own, float fallback)
 
 Takes a rounding straight from a composite widget. `own` is whatever the widget was told, empty when nothing, and `fallback` is that widget's own default for when the theme is silent too. Passing it through unresolved, rather than as a number the widget already worked out, is what lets the theme keep reaching this element after it has been built.
 
+> An empty `own` leaves the field following the theme rather than pinning it empty, so a themed radius still reaches the part.
+
 ---
 
 ### getRounding
@@ -54,7 +56,7 @@ getRounding()
 
 **Returns** — float
 
-Corner radius, resolved in three steps: the value this element was given, then the active Theme's, then the fallback carried by inheritRounding (0 for a plain [Row](#row)). Resolved on every read rather than cached, so changing the Theme restyles an element already on screen.
+Corner radius, resolved in three steps: the value this element was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then the fallback carried by inheritRounding (0 for a plain [Row](#row)). Resolved on every read rather than cached, so changing the [Theme](../../utils/Theme.hpp.md#theme) restyles an element already on screen.
 
 ---
 

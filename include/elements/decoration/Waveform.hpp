@@ -7,6 +7,8 @@
 #include <cstddef>
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -48,31 +50,49 @@ enum class WaveformStyle {
 */
 class WaveformOptions {
 public:
-    WaveformOptions() = default;
+    UILO_THEMED(WaveformOptions)
+
+    /*
+        inheritFrom(const WaveformOptions& prototype):
+        - Params:   const WaveformOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const WaveformOptions& prototype) {
+        m_lineThickness.inherit(prototype.m_lineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_leftColorRole.inherit(prototype.m_leftColorRole);
+        m_rightColorRole.inherit(prototype.m_rightColorRole);
+        m_bgColorRole.inherit(prototype.m_bgColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    WaveformOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    WaveformOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    WaveformOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    WaveformOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
 
     WaveformOptions& setColor(Color c)                  { m_color = c; return *this; }
-    WaveformOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
+    WaveformOptions& setColorRole(const std::string& r) { m_colorRole.set(r); return *this; }
 
     // Per-channel overrides. These take effect only under the Stacked and Overlay
     // layouts, since SumMono collapses the channels and always uses the base
     // colour. An unset channel colour -- alpha 0 -- falls back to setColor().
     WaveformOptions& setLeftChannelColor(Color c)                    { m_leftColor = c; return *this; }
-    WaveformOptions& setLeftChannelColorRole(const std::string& r)   { m_leftColorRole = r; return *this; }
+    WaveformOptions& setLeftChannelColorRole(const std::string& r)   { m_leftColorRole.set(r); return *this; }
     WaveformOptions& setRightChannelColor(Color c)                   { m_rightColor = c; return *this; }
-    WaveformOptions& setRightChannelColorRole(const std::string& r)  { m_rightColorRole = r; return *this; }
+    WaveformOptions& setRightChannelColorRole(const std::string& r)  { m_rightColorRole.set(r); return *this; }
 
     WaveformOptions& setBackgroundColor(Color c)                    { m_bgColor = c; return *this; }
-    WaveformOptions& setBackgroundColorRole(const std::string& r)   { m_bgColorRole = r; return *this; }
-    WaveformOptions& setRounding(float r)                           { m_rounding = r; return *this; }
-    WaveformOptions& setLineThickness(float t)                      { m_lineThickness = t; return *this; }
+    WaveformOptions& setBackgroundColorRole(const std::string& r)   { m_bgColorRole.set(r); return *this; }
+    WaveformOptions& setRounding(float r)                           { m_rounding.set(r); return *this; }
+    WaveformOptions& setLineThickness(float t)                      { m_lineThickness.set(t); return *this; }
     WaveformOptions& setLayout(WaveformLayout l)                    { m_layout = l; return *this; }
     WaveformOptions& setStyle(WaveformStyle s)                      { m_style = s; return *this; }
 
@@ -88,15 +108,15 @@ public:
     WaveformOptions& setGain(float g)         { m_gain = g; return *this; }
 
     Color              getColor()                   const { return m_color; }
-    const std::string& getColorRole()               const { return m_colorRole; }
+    const std::string& getColorRole()               const { return m_colorRole.get(); }
     Color              getLeftChannelColor()        const { return m_leftColor; }
-    const std::string& getLeftChannelColorRole()    const { return m_leftColorRole; }
+    const std::string& getLeftChannelColorRole()    const { return m_leftColorRole.get(); }
     Color              getRightChannelColor()       const { return m_rightColor; }
-    const std::string& getRightChannelColorRole()   const { return m_rightColorRole; }
+    const std::string& getRightChannelColorRole()   const { return m_rightColorRole.get(); }
     Color              getBackgroundColor()         const { return m_bgColor; }
-    const std::string& getBackgroundColorRole()     const { return m_bgColorRole; }
+    const std::string& getBackgroundColorRole()     const { return m_bgColorRole.get(); }
     float              getRounding()                const;
-    float              getLineThickness()           const { return m_lineThickness; }
+    float              getLineThickness()           const { return m_lineThickness.get(); }
     WaveformLayout     getLayout()                  const { return m_layout; }
     WaveformStyle      getStyle()                   const { return m_style; }
     int                getColumns()                 const { return m_columns; }
@@ -104,23 +124,25 @@ public:
     float              getGain()                    const { return m_gain; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     Color       m_color = Color{255, 255, 255, 255};
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
     Color       m_leftColor = Color{0, 0, 0, 0};   /* a == 0 -> use m_color */
-    std::string m_leftColorRole;
+    Themed<std::string> m_leftColorRole;
     Color       m_rightColor = Color{0, 0, 0, 0};   /* a == 0 -> use m_color */
-    std::string m_rightColorRole;
+    Themed<std::string> m_rightColorRole;
     Color       m_bgColor = Color{0, 0, 0, 0};
-    std::string m_bgColorRole;
+    Themed<std::string> m_bgColorRole;
 
-    std::optional<float> m_rounding;
-    float                m_lineThickness = 1.f;
+    Themed<std::optional<float>> m_rounding;
+    Themed<float> m_lineThickness {1.f};
     WaveformLayout       m_layout        = WaveformLayout::Stacked;
     WaveformStyle        m_style         = WaveformStyle::Bars;
     int                  m_columns       = 0;
     float                m_resolution    = 1.f;
     float                m_gain          = 1.f;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -134,7 +156,7 @@ private:
                 waveform already on screen.
 */
 inline float WaveformOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 0.f);
+    return m_rounding.get().value_or(0.f);
 }
 
 
@@ -151,6 +173,11 @@ inline float WaveformOptions::getRounding() const {
 */
 class Waveform : public Element {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<WaveformOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     explicit Waveform(

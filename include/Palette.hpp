@@ -19,6 +19,9 @@ namespace uilo {
                 palette's fallback color. Aliases let one role point at another
                 so a small base of colors drives many widget-specific roles,
                 with cycles broken after a depth cap.
+    - A Palette is a container, not a look. The colours themselves live in
+      Defaults.hpp and reach elements through the Theme that owns them, so
+      there is no way to install one without going through a Theme.
 */
 class Palette {
 public:
@@ -38,9 +41,6 @@ public:
     bool hasGradient(std::string_view role) const;
 
     void clear();
-
-    static Palette defaultDark();
-    static Palette defaultLight();
 
 private:
     struct Entry {

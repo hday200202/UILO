@@ -8,6 +8,8 @@
 #include "Interactible.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -51,26 +53,44 @@ enum class SliderOrientation { Horizontal, Vertical };
 */
 class SliderOptions {
 public:
-    SliderOptions() = default;
+    UILO_THEMED(SliderOptions)
+
+    /*
+        inheritFrom(const SliderOptions& prototype):
+        - Params:   const SliderOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const SliderOptions& prototype) {
+        m_trackThickness.inherit(prototype.m_trackThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_trackRounding.inherit(prototype.m_trackRounding);
+        m_thumbRounding.inherit(prototype.m_thumbRounding);
+        m_trackColorRole.inherit(prototype.m_trackColorRole);
+        m_fillColorRole.inherit(prototype.m_fillColorRole);
+        m_thumbColorRole.inherit(prototype.m_thumbColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    SliderOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    SliderOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    SliderOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    SliderOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
     
     SliderOptions& setTrackColor(Color c)               { m_trackColor = c;         return *this; }
-    SliderOptions& setTrackColorRole(const std::string& r) { m_trackColorRole = r;  return *this; }
+    SliderOptions& setTrackColorRole(const std::string& r) { m_trackColorRole.set(r);  return *this; }
     SliderOptions& setFillColor(Color c)                { m_fillColor = c;          return *this; }
-    SliderOptions& setFillColorRole(const std::string& r) { m_fillColorRole = r;    return *this; }
+    SliderOptions& setFillColorRole(const std::string& r) { m_fillColorRole.set(r);    return *this; }
     SliderOptions& setThumbColor(Color c)               { m_thumbColor = c;         return *this; }
-    SliderOptions& setThumbColorRole(const std::string& r) { m_thumbColorRole = r;  return *this; }
+    SliderOptions& setThumbColorRole(const std::string& r) { m_thumbColorRole.set(r);  return *this; }
     SliderOptions& setThumbShape(ThumbShape s)              { m_thumbShape = s;         return *this; }
-    SliderOptions& setTrackThickness(float t)               { m_trackThickness = t;     return *this; }
-    SliderOptions& setTrackRounding(float r)                { m_trackRounding = r;      return *this; }
+    SliderOptions& setTrackThickness(float t)               { m_trackThickness.set(t); return *this; }
+    SliderOptions& setTrackRounding(float r)                { m_trackRounding.set(r);      return *this; }
     SliderOptions& setThumbSize(float w, float h = 0.f)     { m_thumbSize = {w, h};     return *this; }
-    SliderOptions& setThumbRounding(float r)                { m_thumbRounding = r;      return *this; }
+    SliderOptions& setThumbRounding(float r)                { m_thumbRounding.set(r);      return *this; }
     SliderOptions& setRange(float mn, float mx)             { m_min = mn; m_max = mx;   return *this; }
     SliderOptions& setStep(float s)                         { m_step = s;               return *this; }
     SliderOptions& setInvertScroll(bool invert)             { m_invertScroll = invert;  return *this; }
@@ -79,13 +99,13 @@ public:
     SliderOptions& setOrientation(SliderOrientation o)      { m_orientation = o;        return *this; }
 
     Color            getTrackColor()      const { return m_trackColor; }
-    const std::string& getTrackColorRole() const { return m_trackColorRole; }
+    const std::string& getTrackColorRole() const { return m_trackColorRole.get(); }
     Color            getFillColor()       const { return m_fillColor; }
-    const std::string& getFillColorRole()  const { return m_fillColorRole; }
+    const std::string& getFillColorRole()  const { return m_fillColorRole.get(); }
     Color            getThumbColor()      const { return m_thumbColor; }
-    const std::string& getThumbColorRole() const { return m_thumbColorRole; }
+    const std::string& getThumbColorRole() const { return m_thumbColorRole.get(); }
     ThumbShape           getThumbShape()      const { return m_thumbShape; }
-    float                getTrackThickness()  const { return m_trackThickness; }
+    float                getTrackThickness()  const { return m_trackThickness.get(); }
     float                getTrackRounding()   const;
     Vec2f         getThumbSize()       const { return m_thumbSize; }
     float                getThumbRounding()   const;
@@ -99,18 +119,18 @@ public:
     const ValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     Color            m_trackColor      = Color{60, 60, 60, 255};
-    std::string          m_trackColorRole = "panelAlt";
+    Themed<std::string> m_trackColorRole {"panelAlt"};
     Color            m_fillColor       = Color::White;
-    std::string          m_fillColorRole  = "accent";
+    Themed<std::string> m_fillColorRole {"accent"};
     Color            m_thumbColor      = Color::White;
-    std::string          m_thumbColorRole = "text";
+    Themed<std::string> m_thumbColorRole {"text"};
     ThumbShape           m_thumbShape      = ThumbShape::Circle;
-    float                m_trackThickness  = 0.25f;   /* <=1: fraction of cross-axis size, >1: pixels */
-    std::optional<float>                m_trackRounding;   /* corner radius of the track bar (px) */
+    Themed<float> m_trackThickness {0.25f};   /* <=1: fraction of cross-axis size, >1: pixels */
+    Themed<std::optional<float>> m_trackRounding;   /* corner radius of the track bar (px) */
     Vec2f            m_thumbSize       = {8.f, 0.f};
-    std::optional<float>                m_thumbRounding;   /* corner radius of thumb rect */
+    Themed<std::optional<float>> m_thumbRounding;   /* corner radius of thumb rect */
     float                m_min             = 0.f;
     float                m_max             = 1.f;
     float                m_step            = 0.f;   /* 0 = continuous; >0 = discrete snap increment */
@@ -119,6 +139,8 @@ private:
     bool                 m_hasDefault      = false;
     SliderOrientation    m_orientation     = SliderOrientation::Horizontal;
     ValueChangedFuncPtr  m_onValueChanged;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 /*
@@ -129,7 +151,7 @@ private:
                 value this slider was given, then the active Theme's, then 0.
 */
 inline float SliderOptions::getTrackRounding() const {
-    return Theme::resolveRounding(m_trackRounding, 0.f);
+    return m_trackRounding.get().value_or(0.f);
 }
 
 
@@ -141,7 +163,7 @@ inline float SliderOptions::getTrackRounding() const {
                 Ignored by a Circle thumb.
 */
 inline float SliderOptions::getThumbRounding() const {
-    return Theme::resolveRounding(m_thumbRounding, 0.f);
+    return m_thumbRounding.get().value_or(0.f);
 }
 
 
@@ -159,6 +181,11 @@ inline float SliderOptions::getThumbRounding() const {
 */
 class Slider : public Interactible {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<SliderOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     Slider(

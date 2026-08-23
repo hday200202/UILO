@@ -379,6 +379,22 @@ void Element::setUILO(UILO& uiloRef) {
     m_uiloRef = &uiloRef;
     uiloRef.m_elementPool.emplace_back(this);
     if (!m_name.empty()) uiloRef.m_elements[m_name] = this;
+    /* The first moment this element knows which theme it answers to. Everything
+       the call site left alone is filled in here. */
+    applyTheme(uiloRef.getTheme());
+}
+
+
+/*
+    applyTheme(const Theme& theme):
+    - Params:   const Theme& theme
+    - Returns:  void
+    - Desc:     Fills in the Modifier's unset fields from the theme. Subclasses
+                override to do the same for their own Options and then call
+                this, which is the one place an element's look is decided.
+*/
+void Element::applyTheme(const Theme& theme) {
+    m_modifier.inheritFrom(theme.cascade<Modifier>(m_modifier.getThemeRole()));
 }
 
 }

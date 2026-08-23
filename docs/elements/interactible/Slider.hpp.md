@@ -63,7 +63,7 @@ getTrackRounding()
 
 **Returns** — float
 
-Corner radius of the track bar, resolved in three steps: the value this slider was given, then the active Theme's, then 0.
+Corner radius of the track bar, resolved in three steps: the value this slider was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 0.
 
 ---
 

@@ -5,6 +5,8 @@
 #include "Container.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -20,34 +22,53 @@ namespace uilo {
 */
 class ColumnOptions {
 public:
-    ColumnOptions() = default;
+    UILO_THEMED(ColumnOptions)
+
+    /*
+        inheritFrom(const ColumnOptions& prototype):
+        - Params:   const ColumnOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const ColumnOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_innerPadding.inherit(prototype.m_innerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_gradientRole.inherit(prototype.m_gradientRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_subDivColorRole.inherit(prototype.m_subDivColorRole);
+        m_subDivStripeColorRole.inherit(prototype.m_subDivStripeColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    ColumnOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    ColumnOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    ColumnOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    ColumnOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
-    // Space kept between this element's edge and the area its children are laid out in. Unset follows
-    // Theme::setInnerPadding().
-    ColumnOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
-    ColumnOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
-    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+    // Space kept between this element's edge and the area its children are laid out in. Unset follows the theme's default for this type.
+    ColumnOptions& setInnerPadding(float px)   { m_innerPadding.set(px); return *this; }
+    ColumnOptions& clearInnerPadding()         { m_innerPadding.clear(); return *this; }
+    float  getInnerPadding()     const { return m_innerPadding.get().value_or(0.f); }
 
     // Background
     ColumnOptions& setColor(const Color& c)              { m_color = c; return *this; }
-    ColumnOptions& setColorRole(const std::string& r)    { m_colorRole = r; return *this; }
+    ColumnOptions& setColorRole(const std::string& r)    { m_colorRole.set(r); return *this; }
     ColumnOptions& setGradient(const Gradient& g)        { m_gradient = g; return *this; }
-    ColumnOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
-    ColumnOptions& setRounding(float r)                  { m_rounding = r; return *this; }
+    ColumnOptions& setGradientRole(const std::string& r) { m_gradientRole.set(r); return *this; }
+    ColumnOptions& setRounding(float r)                  { m_rounding.set(r); return *this; }
     ColumnOptions& inheritRounding(const std::optional<float>& own, float fallback);
 
     // Outline: a border drawn inside the bounds, so enabling one never changes
     // the space the element takes.
     ColumnOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    ColumnOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    ColumnOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
+    ColumnOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    ColumnOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
 
     // Scrolling
     ColumnOptions& setScrollable(bool v)                { m_scrollable = v; return *this; }
@@ -65,14 +86,14 @@ public:
     ColumnOptions& setSubDivisionMajor(unsigned int count)       { m_subDivMajor = count; return *this; }
     ColumnOptions& setSubDivisionMinor(unsigned int count)       { m_subDivMinor = count; return *this; }
     ColumnOptions& setSubDivisionColor(Color c)                  { m_subDivColor = c; return *this; }
-    ColumnOptions& setSubDivisionColorRole(const std::string& r) { m_subDivColorRole = r; return *this; }
+    ColumnOptions& setSubDivisionColorRole(const std::string& r) { m_subDivColorRole.set(r); return *this; }
     ColumnOptions& setSubDivisionMinScreenPx(float px)           { m_subDivMinPx = px; return *this; }
     ColumnOptions& setSubDivisionResubdivideMinScreenPx(float px) { m_subDivResubdivideMinPx = px; return *this; }
     ColumnOptions& setSubDivisionsMinDistance(float px)          { m_subDivMinDistance = px; return *this; }
     ColumnOptions& setSubDivisionsMaxDistance(float px)          { m_subDivMaxDistance = px; return *this; }
     ColumnOptions& setSubDivisionStripeEvery(unsigned int count) { m_subDivStripeEvery = count; return *this; }
     ColumnOptions& setSubDivisionStripeColor(Color c)            { m_subDivStripeColor = c; return *this; }
-    ColumnOptions& setSubDivisionStripeColorRole(const std::string& r) { m_subDivStripeColorRole = r; return *this; }
+    ColumnOptions& setSubDivisionStripeColorRole(const std::string& r) { m_subDivStripeColorRole.set(r); return *this; }
 
     // Zoom: scales content heights and the grid under pinch or scroll-zoom.
     ColumnOptions& setZoomableY(bool v)               { m_zoomableY = v; return *this; }
@@ -81,16 +102,16 @@ public:
     ColumnOptions& setZoomLink(const std::string& id) { m_zoomLink = id; return *this; }
 
     Color              getColor()        const { return m_color; }
-    const std::string& getColorRole()    const { return m_colorRole; }
+    const std::string& getColorRole()    const { return m_colorRole.get(); }
     const Gradient&    getGradient()     const { return m_gradient; }
-    const std::string& getGradientRole() const { return m_gradientRole; }
+    const std::string& getGradientRole() const { return m_gradientRole.get(); }
     float              getRounding()     const;
-    const std::optional<float>& getRoundingOpt()      const { return m_rounding; }
+    const std::optional<float>& getRoundingOpt()      const { return m_rounding.get(); }
     float                       getRoundingFallback() const { return m_roundingFallback; }
 
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
 
     bool               getScrollable()  const { return m_scrollable; }
     bool               getShowScrollbar() const { return m_showScrollbar; }
@@ -105,14 +126,14 @@ public:
     unsigned int       getSubDivisionMajor()       const { return m_subDivMajor; }
     unsigned int       getSubDivisionMinor()       const { return m_subDivMinor; }
     Color              getSubDivisionColor()       const { return m_subDivColor; }
-    const std::string& getSubDivisionColorRole()   const { return m_subDivColorRole; }
+    const std::string& getSubDivisionColorRole()   const { return m_subDivColorRole.get(); }
     float              getSubDivisionMinScreenPx() const { return m_subDivMinPx; }
     float              getSubDivisionResubdivideMinScreenPx() const { return m_subDivResubdivideMinPx; }
     float              getSubDivisionsMinDistance() const { return m_subDivMinDistance; }
     float              getSubDivisionsMaxDistance() const { return m_subDivMaxDistance; }
     unsigned int       getSubDivisionStripeEvery() const { return m_subDivStripeEvery; }
     Color              getSubDivisionStripeColor() const { return m_subDivStripeColor; }
-    const std::string& getSubDivisionStripeColorRole() const { return m_subDivStripeColorRole; }
+    const std::string& getSubDivisionStripeColorRole() const { return m_subDivStripeColorRole.get(); }
 
     bool               getZoomableY() const { return m_zoomableY; }
     float              getZoomMin()   const { return m_zoomMin; }
@@ -120,19 +141,19 @@ public:
     const std::string& getZoomLink()  const { return m_zoomLink; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::optional<float> m_innerPadding;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::optional<float>> m_innerPadding;
     Color       m_color = Color{0, 0, 0, 0};
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
     Gradient    m_gradient;
-    std::string m_gradientRole;
+    Themed<std::string> m_gradientRole;
 
-    std::optional<float> m_rounding;
+    Themed<std::optional<float>> m_rounding;
     float                m_roundingFallback = 0.f;
 
     Color       m_outlineColor = Color::Transparent;
-    std::string m_outlineColorRole;
-    float       m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
 
     bool        m_scrollable   = false;
     bool        m_showScrollbar = false;
@@ -147,19 +168,21 @@ private:
     unsigned int m_subDivMajor            = 1;
     unsigned int m_subDivMinor            = 3;
     Color        m_subDivColor            = Color{255, 255, 255, 30};
-    std::string  m_subDivColorRole;
+    Themed<std::string> m_subDivColorRole;
     float        m_subDivMinPx            = 4.f;
     float        m_subDivResubdivideMinPx = 24.f;
     float        m_subDivMinDistance      = 0.f;
     float        m_subDivMaxDistance      = 0.f;
     unsigned int m_subDivStripeEvery      = 0;
     Color        m_subDivStripeColor      = Color{0, 0, 0, 0};
-    std::string  m_subDivStripeColorRole;
+    Themed<std::string> m_subDivStripeColorRole;
 
     bool        m_zoomableY = false;
     float       m_zoomMin   = 0.1f;
     float       m_zoomMax   = 50.f;
     std::string m_zoomLink;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -173,12 +196,18 @@ private:
                 Passing it through unresolved, rather than as a number the
                 widget already worked out, is what lets the theme keep reaching
                 this element after it has been built.
+    - An empty `own` leaves the field following the theme rather than pinning it
+      empty, so a themed radius still reaches the part.
 */
 inline ColumnOptions& ColumnOptions::inheritRounding(
     const std::optional<float>& own,
     float fallback
 ) {
-    m_rounding         = own;
+    /* Only an actual value counts as a setting. Marking the field explicit
+       when `own` is empty would say "the widget chose no rounding", which the
+       theme must then leave alone -- and every inner part of every composite
+       widget would silently stop following it. */
+    if (own) m_rounding.set(own);
     m_roundingFallback = fallback;
     return *this;
 }
@@ -195,7 +224,7 @@ inline ColumnOptions& ColumnOptions::inheritRounding(
                 already on screen.
 */
 inline float ColumnOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, m_roundingFallback);
+    return m_rounding.get().value_or(m_roundingFallback);
 }
 
 
@@ -209,6 +238,11 @@ inline float ColumnOptions::getRounding() const {
 */
 class Column : public Container {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<ColumnOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
     float getInnerPadding() const override { return m_options.getInnerPadding(); }
 

@@ -149,7 +149,7 @@ std::vector<char*> argPointers(std::vector<std::string>& args) {
 /*
     UILO::runWeb(const WebConfig& config):
     - Serves this UILO over the web and blocks until the server stops. Set the
-      UILO up exactly as on desktop first (addPage/setPage/setPalette); this
+      UILO up exactly as on desktop first (addPage/setPage/setTheme); this
       stands up Wt, points every browser connection at this instance, and
       returns the server's exit code. No render/update loop and no argv -- the
       server settings come from the config.
@@ -181,7 +181,7 @@ int UILO::runWeb(const wt::WebConfig& config) {
 
       `factory` runs once per connection, on that connection's own thread, and
       builds that session's UILO the same way a desktop app builds its one
-      (addPage/setPage/setPalette). The WebApp it returns is owned by the
+      (addPage/setPage/setTheme). The WebApp it returns is owned by the
       connection and destroyed with it, so sessions share no pages, no palette
       and no application state -- and cannot race each other's widget trees.
 

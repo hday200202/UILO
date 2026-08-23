@@ -18,6 +18,11 @@
 - [`setMaterial(const Material& m)`](#setmaterial)
 - [`setCursor(CursorType cursor)`](#setcursor)
 - [`clearCursor()`](#clearcursor)
+- [`setContextMenu(std::vector&lt;ContextMenuItem&gt; items)`](#setcontextmenu)
+- [`setContextMenu(ContextMenuBuilder builder)`](#setcontextmenu)
+- [`clearContextMenu()`](#clearcontextmenu)
+- [`hasContextMenu()`](#hascontextmenu)
+- [`buildContextMenu()`](#buildcontextmenu)
 - [`getWidth()`](#getwidth)
 - [`getHeight()`](#getheight)
 - [`getAlign()`](#getalign)
@@ -51,7 +56,7 @@ setWidth(Dimension dim)
 
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
-Sets the element's width. A percent value is clamped to 1..100, since a container distributes percent children against the space left over and a value outside that range has no meaning there. Pixel values pass through and are scaled at layout time.
+Sets the element's width. A percent value is clamped to 1..100, so a percentage can never ask for more of the parent than the parent has; pixel values pass through and are scaled at layout time, and a _flex share passes through untouched since its value is a weight against its siblings rather than a size.
 
 ---
 
@@ -67,7 +72,7 @@ setHeight(Dimension dim)
 
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
-Sets the element's height, clamping a percent value the same way setWidth does.
+Sets the element's height, clamping a percent value and passing an _flex share through the same way setWidth does.
 
 ---
 
@@ -227,6 +232,74 @@ clearCursor()
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
 Drops an explicit cursor, so the element goes back to the default behaviour -- the hand when it is clickable, and whatever is underneath otherwise.
+
+---
+
+### setContextMenu
+
+```cpp
+setContextMenu(std::vector<ContextMenuItem> items)
+```
+
+**Parameters**
+
+- `std::vector<ContextMenuItem> items`
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Declares a fixed context menu. Stored as a builder that hands back a copy, so the two spellings share one path through the dispatch and neither needs a special case.
+
+---
+
+### setContextMenu
+
+```cpp
+setContextMenu(ContextMenuBuilder builder)
+```
+
+**Parameters**
+
+- `ContextMenuBuilder builder`
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Declares a context menu built on demand. The builder runs on every right-click, on the frame the click is dispatched, so it sees current application state and may return nothing to decline the menu entirely.
+
+---
+
+### clearContextMenu
+
+```cpp
+clearContextMenu()
+```
+
+**Returns** — [Modifier](Modifier.hpp.md#modifier)&
+
+Drops the menu, so a right-click passes through to whatever is behind this element instead of being consumed.
+
+---
+
+### hasContextMenu
+
+```cpp
+hasContextMenu()
+```
+
+**Returns** — bool
+
+Whether a menu was declared. Says nothing about whether the builder will actually produce items -- only buildContextMenu() can answer that, and it costs whatever the builder costs.
+
+---
+
+### buildContextMenu
+
+```cpp
+buildContextMenu()
+```
+
+**Returns** — std::vector&lt;[ContextMenuItem](../utils/ContextMenuItem.hpp.md#contextmenuitem)&gt;
+
+The items to show, empty when there is no menu or the builder declined.
 
 ---
 

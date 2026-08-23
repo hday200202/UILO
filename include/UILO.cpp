@@ -23,6 +23,48 @@ UILO::UILO(Renderer& renderer, Page* page) {
 
 
 /*
+    UILO():
+    - Params:   none
+    - Returns:  n/a
+    - Desc:     Starts on the defaults in Defaults.hpp. A UILO owns its theme
+                outright, so two of them can look different in the same process
+                -- which is what a Wt session needs.
+*/
+UILO::UILO() {
+    installDefaultTheme(m_theme);
+}
+
+
+/*
+    setTheme(const Theme& theme):
+    - Params:   const Theme& theme
+    - Returns:  void
+    - Desc:     Replaces the look of everything this UILO owns and re-applies it
+                to every element already built, so a restyle needs no rebuild.
+*/
+void UILO::setTheme(const Theme& theme) {
+    m_theme = theme;
+    refreshTheme();
+}
+
+
+/*
+    refreshTheme():
+    - Params:   none
+    - Returns:  void
+    - Desc:     Pushes the current theme through every element in the pool.
+                Each one takes only what its call site left alone, so this is
+                safe to run repeatedly and never undoes an explicit setting.
+*/
+void UILO::refreshTheme() {
+    for (auto& element : m_elementPool) {
+        if (element) element->applyTheme(m_theme);
+    }
+    m_forceTreeUpdate = true;
+}
+
+
+/*
     addPage(Page* page):
     - Params:   Page* page
     - Returns:  void

@@ -87,7 +87,7 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for the cell grid, falling back to the active Theme's. It should be monospaced; a proportional face still renders but the columns will not line up, since the grid is measured from one glyph's advance.
+[Font](../../renderer/Renderer.hpp.md#font) for the cell grid, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s. It should be monospaced; a proportional face still renders but the columns will not line up, since the grid is measured from one glyph's advance.
 
 ---
 
@@ -99,7 +99,7 @@ getCharSize()
 
 **Returns** — unsigned int
 
-Character size in unscaled pixels, resolved from this widget, then the Theme, then 14.
+Character size in unscaled pixels, resolved from this widget, then the [Theme](../../utils/Theme.hpp.md#theme), then 14.
 
 ---
 
@@ -111,4 +111,4 @@ getRounding()
 
 **Returns** — float
 
-Corner radius of the terminal's surface, resolved from this widget, then the Theme, then 0.
+Corner radius of the terminal's surface, resolved from this widget, then the [Theme](../../utils/Theme.hpp.md#theme), then 0.

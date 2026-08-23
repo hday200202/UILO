@@ -18,7 +18,7 @@ Elements are created with lowercase factory functions and configured with two ob
 - **Automatic layout** — rows, columns, grids and canvases sized in pixels, percentages or shares of what is left
 - **Hardware accelerated** — bgfx over Metal, Vulkan, D3D11 or OpenGL
 - **Cross-platform** — macOS, Linux and Windows; see [IOS_BUILD.md](IOS_BUILD.md) for iOS
-- **Themed by role** — a `Palette` maps role names to colours and gradients; `Theme` sets library-wide defaults
+- **Themed by role** — each UILO owns a `Theme`: the palette plus a prototype for every widget, all of it in `include/Defaults.hpp`
 - **Nothing to ship beside the binary** — two fonts and ~280 icons are compiled in
 - **Real widgets** — text, buttons, sliders, knobs, dropdowns, textboxes, images, SVG icons, waveforms, file browser, date picker, resizers, and a working **terminal**
 - **Optional web backend** — the same element tree served through Wt (`-DUILO_WT=ON`)
@@ -95,9 +95,7 @@ int main() {
         "main"
     ));
 
-    Palette palette;
-    palette.set("bg", Color::fromHex("#1b1b1f"));
-    uilo.setPalette(palette);
+    uilo.getTheme().palette().set("bg", Color::fromHex("#1b1b1f"));
     uilo.setScale(OS::scale());
 
     while (uilo.isRunning()) {
@@ -198,9 +196,8 @@ They compose: an inner padding of 10 on a column plus an outer padding of 5 on a
 child puts that child 15 from the column's edge. Neither moves the container
 itself — its background, outline and hit area still use its full bounds.
 
-Both fall back to `Theme::setOuterPadding()` / `Theme::setInnerPadding()` when
-unset, and `clearOuterPadding()` / `clearInnerPadding()` return an element to
-following the theme.
+Both default to whatever the theme gives that widget, and
+`clearOuterPadding()` / `clearInnerPadding()` put an element back on it.
 
 ### Dimension literals
 
@@ -235,24 +232,89 @@ text({}, TextOptions().setFont("ui"));
 
 See [THIRD_PARTY.md](THIRD_PARTY.md) for the licences of what ships inside the binary.
 
-### Palette and Theme
+### Theme
 
-A `Palette` maps role names to colours. Because roles resolve when an element draws, changing the palette restyles everything that referenced a role — no element has to be rebuilt.
+A `Theme` is the whole look of an application: the palette, and a prototype for
+every `Modifier` and `*Options` type. **Each UILO owns one** — `ui.getTheme()`
+and `ui.setTheme()` — so two of them can look different in the same process,
+which is what a Wt session needs.
+
+Every default ships in **[include/Defaults.hpp](include/Defaults.hpp)** — the
+palette's roles and one block per widget. Editing that file restyles the
+library; nothing else carries a look.
 
 ```cpp
-void applyTheme(UILO& app) {
-    Palette palette;
-    palette.set("bg",     Color::fromHex("#1b1b1f"));
-    palette.set("panel",  Color::fromHex("#242429"));
-    palette.set("accent", Color::fromHex("#7ad0a0"));
-    palette.setAlias("panelHover", "accent");
-    palette.setGradient("hero", Gradient().setTop(Color{97, 62, 180})
-                                          .setBottom(Color{34, 27, 58}));
-    app.setPalette(palette);
+UILO ui;
 
-    Theme::current().setRounding(8.f);   // library-wide default for anything unset
-}
+Theme theme = defaultTheme();          // start from Defaults.hpp, not a bare Theme{}
+theme.palette().set("accent", Color::fromHex("#7ad0a0"));
+theme.edit<ColumnOptions>().setRounding(8.f);
+ui.setTheme(theme);
+
+// or change the one it already has, then push it through
+ui.getTheme().edit<ButtonOptions>().setColorRole("accent");
+ui.refreshTheme();
 ```
+
+A theme is applied **when an element binds to its UILO**, not when it is
+constructed — so a tree can be built before the UILO exists, which is the
+idiomatic `UILO ui(renderer, buildMainPage())`. It fills in only what the call
+site left alone and never overrides a setting, and `setTheme()` re-applies it to
+everything already built, so restyling a running app rebuilds nothing.
+
+There is no way to install a palette without going through a `Theme`.
+
+### The simple layer
+
+Most of the time you want a heading, not a theme. The named roles below have
+built-in spellings, so nothing about how they look appears at the call site:
+
+```cpp
+h1("Getting started");
+h3("Installation");
+body("UILO vendors and builds its own dependencies.");
+caption("optional");
+
+card(contains{
+    h3("Panel title"),
+    primaryButton("Save",   [] { /* save */ }),
+    ghostButton  ("Cancel", [] { /* close */ }),
+});
+```
+
+Each is one line over the factory it wraps — `h1(s)` is
+`text(Modifier("h1"), TextOptions("h1").setContent(s))` — so reach for the long
+form when an element needs something the role does not say. What any of them
+look like is in `Defaults.hpp`: change the `"h1"` prototype there and every
+`h1()` in the application follows.
+
+### Named roles
+
+The same idea as a colour role, for shape instead of colour, and what the
+helpers above are built on. A theme registers any number of variants per type
+under a name, and a call site asks for one:
+
+```cpp
+// in Defaults.hpp. edit() seeds a new role from the type's default, so a
+// variant only says what it changes.
+Theme theme = defaultTheme();
+
+TextOptions& h1 = theme.edit<TextOptions>("h1");
+h1.setCharSize(42);
+h1.setBold(true);
+
+theme.edit<Modifier>("h1").setHeight(56_px);
+
+// anywhere
+text(Modifier("h1"), TextOptions("h1").setContent("Title"));
+column(Modifier(), ColumnOptions("card"), contains{ spacer(Modifier()) });
+```
+
+`Modifier` roles and `*Options` roles are looked up separately, so `"h1"` can
+carry a line box on one and the glyphs on the other. An unknown role is not an
+error — it falls back to the type's default, the way an unknown CSS class leaves
+an element unstyled. Ask `ui.getTheme().hasRole<TextOptions>("h1")` when a typo
+would matter.
 
 ### Gradients
 
@@ -490,7 +552,10 @@ void addPage(Page* page);            // takes ownership; Page carries its own na
 void setPage(const std::string& pageName);
 void setActivePage(Page* page);      // without taking ownership
 
-void setPalette(const Palette&);
+void setTheme(const Theme&);         // replaces the look, re-applies to the tree
+Theme&         getTheme();           // this UILO's own, to edit in place
+const Palette& getPalette() const;   // shorthand for getTheme().palette()
+void refreshTheme();                 // push an in-place edit through the tree
 void setScale(float scale);          // pair with OS::scale()
 
 void     registerOverlay(Element* e, std::function<void()> onDismiss = {});
@@ -563,7 +628,7 @@ Full generated reference for every type and function: **[docs/](docs/)** (regene
 | `terminal.cpp` | a shell in a window, with live-resize wired up |
 | `datepicker.cpp` | date picker and date field |
 | `gradients.cpp` | per-corner and role-driven gradients |
-| `theme.cpp` | palette roles and `Theme` defaults |
+| `theme.cpp` | the theme, named roles, and live palette switching |
 | `glass_trail_test.cpp` | `Material` blur / glass |
 | `render_bench.cpp` | throughput benchmark |
 

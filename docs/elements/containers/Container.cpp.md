@@ -8,6 +8,7 @@
 
 - [`Container(Modifier modifier, contains children, const std::string& name)`](#container)
 - [`isDirty()`](#isdirty)
+- [`floatingAt(const Vec2f& mousePosition)`](#floatingat)
 - [`checkLeftClick(const Vec2f& mousePosition)`](#checkleftclick)
 - [`checkRightClick(const Vec2f& mousePosition)`](#checkrightclick)
 - [`checkHover(const Vec2f& mousePosition)`](#checkhover)
@@ -54,6 +55,22 @@ True when this container or anything below it needs redrawing, so a change deep 
 
 ---
 
+### floatingAt
+
+```cpp
+floatingAt(const Vec2f& mousePosition)
+```
+
+**Parameters**
+
+- `const Vec2f& mousePosition`
+
+**Returns** — [Element](../Element.hpp.md#element)* -- the floating child that owns the pointer, or nullptr
+
+The topmost visible floating child containing the position. Whoever finds one stops there: a floating child is a surface laid over its siblings, so it takes the event whether or not anything in it claims pointer events. Were it offered the event and then allowed to decline, a panel of plain labels would let the button underneath light up through it. Searched in reverse because the last child is drawn last, and an invisible one is not there at all.
+
+---
+
 ### checkLeftClick
 
 ```cpp
@@ -67,6 +84,8 @@ checkLeftClick(const Vec2f& mousePosition)
 **Returns** — bool -- true when the click was claimed here or below
 
 Offers the click to every child under the cursor first, and only fires the container's own handler when none of them took it. That ordering is what lets a decorative child -- a [Text](../decoration/Text.hpp.md#text) label, an indent [Spacer](../decoration/Spacer.hpp.md#spacer) -- sit inside a clickable row without swallowing the press. Resizers are skipped; they are hit-tested separately because they sit outside the layout flow.
+
+> A floating child under the pointer short-circuits all of that: it is the only thing offered the click, and the event is reported consumed however it answers.
 
 ---
 
@@ -100,6 +119,8 @@ checkHover(const Vec2f& mousePosition)
 
 Recurses into every child unconditionally, not just the ones under the cursor, so a child that has just been left still fires its own onHoverExit instead of staying stuck hovered. The container claims the hover itself only when no child did and the cursor is inside it, and requests the hand cursor when it has a click handler of its own.
 
+> When a floating child owns the pointer, every other child is told the cursor is nowhere and the container does not claim the hover either: it is behind the panel, so its own handlers have no business firing.
+
 ---
 
 ### checkScroll
@@ -118,6 +139,8 @@ checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum
 **Returns** — bool -- true when the event was consumed
 
 Offers the scroll to the children under the cursor, stopping at the first that takes it, and otherwise falls back to the [Modifier](../Modifier.hpp.md#modifier)'s onScroll handler. A plain [Container](Container.hpp.md#container) does not scroll itself -- [Row](Row.hpp.md#row) and [Column](Column.hpp.md#column) override this.
+
+> A floating child under the pointer swallows the event even when it scrolls nothing, or the view behind it would slide out from under the cursor.
 
 ---
 
@@ -153,7 +176,7 @@ checkZoom(const Vec2f& mousePosition, float magnification)
 
 **Returns** — bool -- true when the gesture was consumed
 
-Offers the zoom to every child under the cursor without stopping at the first taker, so the deepest or last-drawn one wins. A [Canvas](Canvas.hpp.md#canvas) drawn over its siblings needs that to claim the gesture.
+Offers the zoom to every child under the cursor without stopping at the first taker, so the deepest or last-drawn one wins. A [Canvas](Canvas.hpp.md#canvas) drawn over its siblings needs that to claim the gesture. A floating child under the pointer takes the gesture alone, which is also what stops [Row](Row.hpp.md#row) and [Column](Column.hpp.md#column) from zooming themselves under one.
 
 ---
 

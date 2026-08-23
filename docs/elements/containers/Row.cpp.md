@@ -206,6 +206,8 @@ updateScrollable(float dt, float scale)
 
 Lays out a scrolling row. Pinned children -- those with [Modifier](../Modifier.hpp.md#modifier)::ignoreScroll -- are placed first, grouped left, centre and right, and the width they take is reserved: whatever is left between the left and right strips becomes the scrolling viewport, so a pinned header stays put while the rest of the row travels. The scrolling children are then placed from the viewport's left edge displaced by the scroll offset, their total measured as the content width, and the offset finally clamped into the range that content allows and published to any linked row.
 
+> A percent width here is a percentage OF the viewport rather than a share of it, since a row whose content overflows on purpose has no leftover space to divide: a lone 50% child is half the viewport wide, and three of them overflow it by half.
+
 ---
 
 ### updateFlow
@@ -221,7 +223,9 @@ updateFlow(float dt, float scale)
 
 **Returns** — void
 
-Lays out a non-scrolling row. Children are sorted into left, centre and right buckets by their alignment, then the width left over after the fixed-size ones is shared among the percent-sized ones -- every percent child gets the same slot, so two 50% siblings beside a 100px one split what remains rather than the whole row. Each group is finally placed from its own anchor: left from the left edge, centre about the middle, right against the right edge.
+Lays out a non-scrolling row. Children are sorted into left, centre and right buckets by their alignment, then sized: a pixel width is itself, a percent width is that percentage of the content area, and whatever those two leave over is divided among the _flex children in proportion to their values. Each group is finally placed from its own anchor: left from the left edge, centre about the middle, right against the right edge.
+
+> Percent and pixel widths are therefore independent of what the siblings ask for, and can overflow the row between them. Only _flex adapts, which is what makes it the sensible default.
 
 ---
 
@@ -380,6 +384,8 @@ checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum
 **Returns** — bool -- true when the row consumed the event
 
 Single-axis scroll, offered to the children first. A row scrolls horizontally, so it declines a zero delta and lets plain vertical wheel events bubble to a parent that can use them. `precise` marks a trackpad's pixel delta, which is scaled differently from a wheel's discrete step.
+
+> A floating child under the pointer takes the event and the row does not scroll, so the view does not slide out from under a panel laid over it.
 
 ---
 

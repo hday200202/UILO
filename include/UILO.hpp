@@ -9,6 +9,7 @@
 
 #include "Elements.hpp"
 #include "Palette.hpp"
+#include "Defaults.hpp"
 #include "utils/OS.hpp"
 #include "utils/Resources.hpp"
 #include "utils/Theme.hpp"
@@ -82,7 +83,7 @@ public:
 */
 class UILO {
 public:
-    UILO() = default;
+    UILO();
     UILO(Renderer& renderer, Page* page);
 
     void update();
@@ -116,7 +117,7 @@ public:
 #ifdef UILO_WT
     // Serves this UILO over the web (Wt) and blocks until the server stops --
     // the web counterpart of the desktop pollEvents/update/render loop. Set up
-    // the UILO exactly as on desktop (addPage/setPage/setPalette/callbacks)
+    // the UILO exactly as on desktop (addPage/setPage/setTheme/callbacks)
     // first; runWeb translates the active page, drives it from browser events,
     // and follows setPage() for navigation. `config` is server-side only.
     //
@@ -192,16 +193,19 @@ public:
     bool      hasRenderer()   const { return m_renderer != nullptr; }
 
 
-    // A palette set here belongs to this UILO and overrides the theme's, which
-    // is how the Wt backend gives one session a different look from another.
-    void setPalette(const Palette& palette)     { m_palette = palette; }
-    void setPalette(Palette&& palette)          { m_palette = std::move(palette); }
-    const Palette& getPalette() const;
-    Palette&       ownPalette();
-    // Whether this UILO has taken a palette of its own.
-    bool hasOwnPalette() const { return m_palette.has_value(); }
-    // Hands colour resolution back to the theme.
-    void clearPalette() { m_palette.reset(); }
+    // The look of everything this UILO owns: the palette, and a prototype for
+    // every Modifier and *Options type. Starts as Defaults.hpp. Setting one
+    // re-applies it to every element already built, so restyling needs no
+    // rebuild.
+    void setTheme(const Theme& theme);
+    // This UILO's theme, to change in place. Anything set through here reaches
+    // elements on the next frame; call refreshTheme() to apply it at once.
+    Theme&         getTheme()       { return m_theme; }
+    const Theme&   getTheme() const { return m_theme; }
+    const Palette& getPalette() const { return m_theme.palette(); }
+    // Re-applies the current theme to every element in the pool. setTheme()
+    // does this for you; call it directly after editing getTheme() in place.
+    void refreshTheme();
 
     void requestCursor(CursorType type, int priority = 0);
 
@@ -278,7 +282,7 @@ private:
     /* Window points to render pixels, which differ by the backing scale. */
     Vec2f toPixels(float x, float y) const;
 
-    std::optional<Palette> m_palette;
+    Theme m_theme;
 
     std::unordered_map<std::string, float> m_scrollLinksX;
     std::unordered_map<std::string, float> m_scrollLinksY;
@@ -328,37 +332,6 @@ inline std::vector<Element*> UILO::getPopupBackdrops() const {
     out.reserve(m_backdrops.size());
     for (Element* e : m_backdrops) out.push_back(e);
     return out;
-}
-
-
-/*
-    getPalette():
-    - Params:   none
-    - Returns:  const Palette&
-    - Desc:     The palette colours resolve against: this UILO's own when it has
-                one, otherwise the Theme's. Read live rather than cached, so
-                replacing the theme's palette restyles every UILO that has not
-                overridden it and theme switching needs no rebuild.
-*/
-inline const Palette& UILO::getPalette() const {
-    return m_palette ? *m_palette : Theme::palette();
-}
-
-
-/*
-    ownPalette():
-    - Params:   none
-    - Returns:  Palette& -- this UILO's own, to edit in place
-    - Desc:     Takes ownership of a palette: the theme's is copied in on the
-                first call and this UILO stops following Theme::setPalette()
-                from then on. Deliberately not an overload of getPalette(),
-                because that ownership transfer is too surprising to happen
-                merely because the caller happened to hold a non-const UILO --
-                reading through getPalette() always keeps following the theme.
-*/
-inline Palette& UILO::ownPalette() {
-    if (!m_palette) m_palette = Theme::palette();
-    return *m_palette;
 }
 
 

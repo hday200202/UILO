@@ -9,6 +9,8 @@
 
 #include "../Element.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -24,24 +26,37 @@ namespace uilo {
 */
 class ImageOptions {
 public:
-    ImageOptions() = default;
+    UILO_THEMED(ImageOptions)
+
+    /*
+        inheritFrom(const ImageOptions& prototype):
+        - Params:   const ImageOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const ImageOptions& prototype) {
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_innerPadding.inherit(prototype.m_innerPadding);
+        m_colorRole.inherit(prototype.m_colorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    ImageOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    ImageOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    ImageOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    ImageOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
-    // Space kept between this element's edge and the box the image is fitted into. Unset follows
-    // Theme::setInnerPadding().
-    ImageOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
-    ImageOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
-    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+    // Space kept between this element's edge and the box the image is fitted into. Unset follows the theme's default for this type.
+    ImageOptions& setInnerPadding(float px)   { m_innerPadding.set(px); return *this; }
+    ImageOptions& clearInnerPadding()         { m_innerPadding.clear(); return *this; }
+    float  getInnerPadding()     const { return m_innerPadding.get().value_or(0.f); }
 
     ImageOptions& setPath(const std::string& path)    { m_path = path; return *this; }
     ImageOptions& setColor(const Color& c)            { m_color = c; return *this; }
-    ImageOptions& setColorRole(const std::string& r)  { m_colorRole = r; return *this; }
+    ImageOptions& setColorRole(const std::string& r)  { m_colorRole.set(r); return *this; }
     ImageOptions& setLockAspectWidth(bool v)          { m_lockAspectWidth = v; return *this; }
     ImageOptions& setLockAspectHeight(bool v)         { m_lockAspectHeight = v; return *this; }
     ImageOptions& setRecolor(bool v)                  { m_recolor = v; return *this; }
@@ -51,7 +66,7 @@ public:
 
     const std::string& getPath()              const { return m_path; }
     Color              getColor()             const { return m_color; }
-    const std::string& getColorRole()         const { return m_colorRole; }
+    const std::string& getColorRole()         const { return m_colorRole.get(); }
     bool               getLockAspectWidth()   const { return m_lockAspectWidth; }
     bool               getLockAspectHeight()  const { return m_lockAspectHeight; }
     bool               getRecolor()           const { return m_recolor; }
@@ -60,11 +75,11 @@ public:
     bool               getFlipV()             const { return m_flipV; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::optional<float> m_innerPadding;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::optional<float>> m_innerPadding;
     std::string m_path;
     Color       m_color = Color::White;
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
 
     bool m_lockAspectWidth  = false;
     bool m_lockAspectHeight = false;
@@ -72,6 +87,8 @@ private:
     bool m_clipEllipse      = false;
     bool m_flipH            = false;
     bool m_flipV            = false;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -96,6 +113,11 @@ private:
 */
 class Image : public Element {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<ImageOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
     float getInnerPadding() const override { return m_options.getInnerPadding(); }
 

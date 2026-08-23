@@ -9,6 +9,8 @@
 #include "../../utils/Resources.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -33,20 +35,34 @@ namespace uilo {
 */
 class IconOptions {
 public:
-    IconOptions() = default;
+    UILO_THEMED(IconOptions)
+
+    /*
+        inheritFrom(const IconOptions& prototype):
+        - Params:   const IconOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const IconOptions& prototype) {
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_innerPadding.inherit(prototype.m_innerPadding);
+        m_strokeWidth.inherit(prototype.m_strokeWidth);
+        m_colorRole.inherit(prototype.m_colorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    IconOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    IconOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    IconOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    IconOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
-    // Space kept between this element's edge and the box the glyph is fitted into. Unset follows
-    // Theme::setInnerPadding().
-    IconOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
-    IconOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
-    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+    // Space kept between this element's edge and the box the glyph is fitted into. Unset follows the theme's default for this type.
+    IconOptions& setInnerPadding(float px)   { m_innerPadding.set(px); return *this; }
+    IconOptions& clearInnerPadding()         { m_innerPadding.clear(); return *this; }
+    float  getInnerPadding()     const { return m_innerPadding.get().value_or(0.f); }
 
     // Source
     IconOptions& setIcon(std::string_view name)    { m_name = std::string(name); return *this; }
@@ -55,10 +71,10 @@ public:
 
     // Appearance
     IconOptions& setColor(const Color& c)           { m_color = c; return *this; }
-    IconOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
+    IconOptions& setColorRole(const std::string& r) { m_colorRole.set(r); return *this; }
     // Unset (the default) keeps the width the markup declares.
-    IconOptions& setStrokeWidth(float w)            { m_strokeWidth = w; return *this; }
-    IconOptions& clearStrokeWidth()                 { m_strokeWidth.reset(); return *this; }
+    IconOptions& setStrokeWidth(float w)            { m_strokeWidth.set(w); return *this; }
+    IconOptions& clearStrokeWidth()                 { m_strokeWidth.clear(); return *this; }
     IconOptions& setPreserveOriginalColors(bool v)  { m_preserveColors = v; return *this; }
     // Letterbox the icon inside its bounds instead of stretching it.
     IconOptions& setPreserveAspect(bool v)          { m_preserveAspect = v; return *this; }
@@ -72,7 +88,7 @@ public:
     const std::string& getFile()      const { return m_file; }
     const std::string& getMarkup()    const { return m_markup; }
     Color              getColor()     const { return m_color; }
-    const std::string& getColorRole() const { return m_colorRole; }
+    const std::string& getColorRole() const { return m_colorRole.get(); }
     float              getStrokeWidth() const;
     bool               hasStrokeWidth() const;
     bool  getPreserveOriginalColors() const { return m_preserveColors; }
@@ -83,21 +99,23 @@ public:
     float getSupersample()            const { return m_supersample; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::optional<float> m_innerPadding;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::optional<float>> m_innerPadding;
     std::string m_name;
     std::string m_file;
     std::string m_markup;
 
     Color       m_color          = Color::White;
-    std::string m_colorRole      = "text";
-    std::optional<float> m_strokeWidth;
+    Themed<std::string> m_colorRole {"text"};
+    Themed<std::optional<float>> m_strokeWidth;
     bool        m_preserveColors = false;
     bool        m_preserveAspect = true;
     float       m_opacity        = 1.f;
     bool        m_flipH          = false;
     bool        m_flipV          = false;
     float       m_supersample    = 1.f;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -105,13 +123,12 @@ private:
     getStrokeWidth():
     - Params:   none
     - Returns:  float
-    - Desc:     Stroke width in the icon's own authoring units, resolved in
-                three steps: the value this icon was given, then the active
-                Theme's, then 0. Only meaningful when hasStrokeWidth() is true,
-                since 0 is also what an unset width reports.
+    - Desc:     Stroke width in the icon's own authoring units. Only meaningful
+                when hasStrokeWidth() is true, since 0 is also what an unset
+                width reports.
 */
 inline float IconOptions::getStrokeWidth() const {
-    return Theme::resolveIconStrokeWidth(m_strokeWidth, 0.f);
+    return m_strokeWidth.get().value_or(0.f);
 }
 
 
@@ -119,14 +136,13 @@ inline float IconOptions::getStrokeWidth() const {
     hasStrokeWidth():
     - Params:   none
     - Returns:  bool
-    - Desc:     Whether a stroke width was set on this icon or on the active
-                Theme. Only then is the width the markup declares overridden, so
-                a themed stroke reaches every icon while an unthemed one keeps
-                whatever its art was authored with.
+    - Desc:     Whether a stroke width was set, here or by the theme this icon
+                was built from. Only then is the width the markup declares
+                overridden, so a themed stroke reaches every icon while an
+                unthemed one keeps whatever its art was authored with.
 */
 inline bool IconOptions::hasStrokeWidth() const {
-    return m_strokeWidth.has_value()
-        || Theme::current().iconStrokeOpt().has_value();
+    return m_strokeWidth.get().has_value();
 }
 
 
@@ -144,6 +160,11 @@ inline bool IconOptions::hasStrokeWidth() const {
 */
 class Icon : public Element {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<IconOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
     float getInnerPadding() const override { return m_options.getInnerPadding(); }
 

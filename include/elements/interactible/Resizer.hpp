@@ -6,6 +6,8 @@
 
 #include "Interactible.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -29,18 +31,33 @@ enum class ResizerDir { Left, Right, Top, Bottom };
 */
 class ResizerOptions {
 public:
+    UILO_THEMED(ResizerOptions)
+
+    /*
+        inheritFrom(const ResizerOptions& prototype):
+        - Params:   const ResizerOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const ResizerOptions& prototype) {
+        m_thickness.inherit(prototype.m_thickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_colorRole.inherit(prototype.m_colorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    ResizerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    ResizerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    ResizerOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    ResizerOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     ResizerOptions& setDirection(ResizerDir d)      { m_direction       = d; return *this; }
-    ResizerOptions& setThickness(float t)           { m_thickness       = t; return *this; }
+    ResizerOptions& setThickness(float t)           { m_thickness.set(t); return *this; }
     ResizerOptions& setColor(Color c)   { m_color = c; return *this; }
-    ResizerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
+    ResizerOptions& setColorRole(const std::string& r) { m_colorRole.set(r); return *this; }
     ResizerOptions& setResizeWidthMin(Dimension d)  { m_resizeWidthMin  = d; return *this; }
     ResizerOptions& setResizeWidthMax(Dimension d)  { m_resizeWidthMax  = d; return *this; }
     ResizerOptions& setResizeWidthStep(Dimension d) { m_resizeWidthStep = d; return *this; }
@@ -49,9 +66,9 @@ public:
     ResizerOptions& setResizeHeightStep(Dimension d){ m_resizeHeightStep = d; return *this; }
 
     ResizerDir getDirection()       const { return m_direction; }
-    float      getThickness()       const { return m_thickness; }
+    float      getThickness()       const { return m_thickness.get(); }
     Color      getColor()           const { return m_color; }
-    const std::string& getColorRole() const { return m_colorRole; }
+    const std::string& getColorRole() const { return m_colorRole.get(); }
     Dimension  getResizeWidthMin()  const { return m_resizeWidthMin; }
     Dimension  getResizeWidthMax()  const { return m_resizeWidthMax; }
     Dimension  getResizeWidthStep() const { return m_resizeWidthStep; }
@@ -60,17 +77,19 @@ public:
     Dimension  getResizeHeightStep()const { return m_resizeHeightStep; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     ResizerDir m_direction       = ResizerDir::Right;
-    float      m_thickness       = 8.f;
+    Themed<float> m_thickness {8.f};
     Color   m_color = Color{0,0,0,0};
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
     Dimension  m_resizeWidthMin  = {0.f,       false};
     Dimension  m_resizeWidthMax  = {100000.f,  false};
     Dimension  m_resizeWidthStep = {0.f,       false};
     Dimension  m_resizeHeightMin = {0.f,       false};
     Dimension  m_resizeHeightMax = {100000.f,  false};
     Dimension  m_resizeHeightStep = {0.f,      false};
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 /*
@@ -92,6 +111,11 @@ private:
 */
 class Resizer : public Interactible {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<ResizerOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     explicit Resizer(

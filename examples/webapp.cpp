@@ -50,7 +50,7 @@ int main() {
 
 using namespace uilo;
 
-static Palette darkPalette() {
+static Palette sessionDark() {
     Palette p;
     p.set("app.bg",   { 24,  26,  35, 255});
     p.set("panel",    { 36,  39,  51, 255});
@@ -63,7 +63,7 @@ static Palette darkPalette() {
     return p;
 }
 
-static Palette lightPalette() {
+static Palette sessionLight() {
     Palette p;
     p.set("app.bg",   {238, 241, 247, 255});
     p.set("panel",    {252, 253, 255, 255});
@@ -78,13 +78,13 @@ static Palette lightPalette() {
 
 
 /*
-    heading(const std::string& content, unsigned size):
+    sectionHeading(const std::string& content, unsigned size):
     - Params:   const std::string& content, unsigned size
     - Returns:  Text*
     - Desc:     A left-aligned line of text at a given size, following the
                 palette rather than naming a colour.
 */
-static Text* heading(const std::string& content, unsigned size) {
+static Text* sectionHeading(const std::string& content, unsigned size) {
     return text(
         Modifier()
             .setHeight(Dimension{(float)size + 10.f, false}),
@@ -131,7 +131,7 @@ static Text* label(const std::string& content) {
 class Session : public wt::WebApp {
 public:
     Session() {
-        m_ui.setPalette(darkPalette());
+        m_ui.getTheme().setPalette(sessionDark());
         m_ui.addPage(page(buildRoot(), "main"));
         m_ui.setPage("main");
 
@@ -151,7 +151,7 @@ private:
                 .setColorRole("app.bg")
                 .setInnerPadding(24.f),
             contains{
-                heading("UILO on the web", 30),
+                sectionHeading("UILO on the web", 30),
                 label("The same element tree a desktop build would draw, "
                       "translated to HTML and CSS."),
 
@@ -192,15 +192,14 @@ private:
 
                 card(contains{
                     label("Theme, per session"),
-                    /* setPalette on the UILO rather than on the global Theme:
-                       Theme::current() is shared by every connection, so
-                       changing it here would restyle other people's browsers. */
+                    /* Each session owns its UILO, and each UILO owns its
+                       theme -- so this repaints one browser and no other. */
                     dropdown(
                         Modifier().setHeight(38_px).setWidth(220_px),
                         DropdownOptions()
                             .setOnItemChanged([this](const std::string& choice) {
-                                m_ui.setPalette(choice == "Light" ? lightPalette()
-                                                                  : darkPalette());
+                                m_ui.getTheme().setPalette(
+                                    choice == "Light" ? sessionLight() : sessionDark());
                             }),
                         {"Dark", "Light"},
                         "theme_select"

@@ -5,6 +5,8 @@
 #include "../Element.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -18,43 +20,61 @@ namespace uilo {
 */
 class SpacerOptions {
 public:
-    SpacerOptions() = default;
+    UILO_THEMED(SpacerOptions)
+
+    /*
+        inheritFrom(const SpacerOptions& prototype):
+        - Params:   const SpacerOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const SpacerOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    SpacerOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    SpacerOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    SpacerOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    SpacerOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
 
     SpacerOptions& setColor(const Color& c)           { m_color = c; return *this; }
-    SpacerOptions& setColorRole(const std::string& r) { m_colorRole = r; return *this; }
-    SpacerOptions& setRounding(float r)               { m_rounding = r; return *this; }
+    SpacerOptions& setColorRole(const std::string& r) { m_colorRole.set(r); return *this; }
+    SpacerOptions& setRounding(float r)               { m_rounding.set(r); return *this; }
 
     // Outline: a border drawn inside the element's bounds, so turning one on
     // never changes the space the element takes.
     SpacerOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    SpacerOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    SpacerOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
+    SpacerOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    SpacerOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
 
     Color              getColor()     const { return m_color; }
-    const std::string& getColorRole() const { return m_colorRole; }
+    const std::string& getColorRole() const { return m_colorRole.get(); }
     float              getRounding()  const;
 
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     Color                m_color = Color{0, 0, 0, 0};
-    std::string          m_colorRole;
-    std::optional<float> m_rounding;
+    Themed<std::string> m_colorRole;
+    Themed<std::optional<float>> m_rounding;
 
     Color       m_outlineColor = Color::Transparent;
-    std::string m_outlineColorRole;
-    float       m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -70,7 +90,7 @@ private:
       and a themed border would draw a line around every one of them.
 */
 inline float SpacerOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 0.f);
+    return m_rounding.get().value_or(0.f);
 }
 
 
@@ -85,6 +105,11 @@ inline float SpacerOptions::getRounding() const {
 */
 class Spacer : public Element {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<SpacerOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     explicit Spacer(

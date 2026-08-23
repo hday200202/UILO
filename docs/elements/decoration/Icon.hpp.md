@@ -40,7 +40,7 @@ getStrokeWidth()
 
 **Returns** — float
 
-Stroke width in the icon's own authoring units, resolved in three steps: the value this icon was given, then the active Theme's, then 0. Only meaningful when hasStrokeWidth() is true, since 0 is also what an unset width reports.
+Stroke width in the icon's own authoring units. Only meaningful when hasStrokeWidth() is true, since 0 is also what an unset width reports.
 
 ---
 
@@ -52,4 +52,4 @@ hasStrokeWidth()
 
 **Returns** — bool
 
-Whether a stroke width was set on this icon or on the active Theme. Only then is the width the markup declares overridden, so a themed stroke reaches every icon while an unthemed one keeps whatever its art was authored with.
+Whether a stroke width was set, here or by the theme this icon was built from. Only then is the width the markup declares overridden, so a themed stroke reaches every icon while an unthemed one keeps whatever its art was authored with.

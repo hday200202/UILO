@@ -53,7 +53,7 @@ static void setStatus(const std::string& text) {
 }
 
 
-static Palette darkPalette() {
+static Palette menuPalette() {
     Palette p;
     p.set("app.bg",     { 26,  28,  38, 255});
     p.set("panel",      { 38,  41,  54, 255});
@@ -387,7 +387,7 @@ int main() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.setPalette(darkPalette());
+    ui.getTheme().setPalette(menuPalette());
     ui.addPage(page(buildRoot(), "main"));
     ui.setPage("main");
     ui.setScale(OS::scale());

@@ -37,7 +37,7 @@ Palette generatorPalette() {
     return p;
 }
 
-Text* caption(const std::string& content) {
+Text* fieldCaption(const std::string& content) {
     return text(
         Modifier()
             .setHeight(22_px),
@@ -87,7 +87,7 @@ int runGui() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.setPalette(generatorPalette());
+    ui.getTheme().setPalette(generatorPalette());
     ui.setScale(OS::scale());
 
     Textbox*  pathBox = field("~/code/myapp", "");
@@ -202,7 +202,7 @@ int runGui() {
                         .setTextAlignY(Align::CenterY)
                 ),
 
-                caption("Path"),
+                fieldCaption("Path"),
                 row(
                     Modifier()
                         .setHeight(36_px),
@@ -231,7 +231,7 @@ int runGui() {
                 ),
                 spacer(Modifier().setHeight(12_px)),
 
-                caption("Name (optional)"),
+                fieldCaption("Name (optional)"),
                 nameBox,
                 spacer(Modifier().setHeight(12_px)),
 
@@ -243,13 +243,13 @@ int runGui() {
                         column(
                             Modifier().setWidth(1_flex),
                             ColumnOptions(),
-                            contains{ caption("Template"), tmplBox }
+                            contains{ fieldCaption("Template"), tmplBox }
                         ),
                         spacer(Modifier().setWidth(16_px)),
                         column(
                             Modifier().setWidth(1_flex),
                             ColumnOptions(),
-                            contains{ caption("UILO ref"), refBox }
+                            contains{ fieldCaption("UILO ref"), refBox }
                         ),
                     }
                 ),

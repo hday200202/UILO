@@ -78,7 +78,7 @@ getRounding()
 
 **Returns** — float
 
-Corner radius of the picker card, resolved in three steps: the value this picker was given, then the active Theme's, then 10.
+Corner radius of the picker card, resolved in three steps: the value this picker was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 10.
 
 ---
 
@@ -90,7 +90,7 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for every label in the picker, falling back to the active Theme's.
+[Font](../../renderer/Renderer.hpp.md#font) for every label in the picker, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s.
 
 ---
 

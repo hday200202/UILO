@@ -29,7 +29,7 @@ rowOptionsFrom(const ButtonOptions& o)
 
 **Returns** — [RowOptions](../containers/Row.hpp.md#rowoptions)
 
-The one place [ButtonOptions](Button.hpp.md#buttonoptions) becomes [RowOptions](../containers/Row.hpp.md#rowoptions). Three callers need the conversion -- the constructor, setOptions, and the per- frame sync in render -- and they were once written out separately, which is exactly how a newly added property ends up wired in one of them and forgotten in the other two. Rounding is passed through unresolved so the Theme keeps reaching the row.
+The one place [ButtonOptions](Button.hpp.md#buttonoptions) becomes [RowOptions](../containers/Row.hpp.md#rowoptions). Three callers need the conversion -- the constructor, setOptions, and the per- frame sync in render -- and they were once written out separately, which is exactly how a newly added property ends up wired in one of them and forgotten in the other two. Rounding is passed through unresolved so the [Theme](../../utils/Theme.hpp.md#theme) keeps reaching the row.
 
 ---
 

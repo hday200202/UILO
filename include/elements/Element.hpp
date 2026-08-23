@@ -81,6 +81,10 @@ public:
     void  erase();
 
     virtual void setUILO(UILO& uiloRef);
+    // Fills in whatever the call site left alone from the theme. Called when
+    // the element binds, and again whenever its UILO's theme changes, so a
+    // restyle needs no rebuild. Subclasses inherit their own Options here.
+    virtual void applyTheme(const Theme& theme);
     virtual void update(Rectf& parentBounds, float dt) = 0;
     void         tick(Rectf& parentBounds, float dt);
     virtual void render() = 0;

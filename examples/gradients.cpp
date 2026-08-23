@@ -8,7 +8,7 @@
 using namespace uilo;
 
 static Palette makePalette() {
-    Palette p = Palette::defaultDark();
+    Palette p = darkPalette();
     p.set("app.bg", {24, 25, 34, 255});
     // Named gradient: elements reference it with setGradientRole("hero"),
     // so swapping the palette restyles them all at once.
@@ -98,7 +98,7 @@ int main() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.setPalette(makePalette());
+    ui.getTheme().setPalette(makePalette());
     ui.addPage(page(buildRoot(), "main"));
     ui.setPage("main");
 

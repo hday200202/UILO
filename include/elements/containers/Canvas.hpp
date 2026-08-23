@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -32,39 +34,57 @@ enum class GridLineStyle {
 */
 class CanvasOptions {
 public:
-    CanvasOptions() = default;
+    UILO_THEMED(CanvasOptions)
+
+    /*
+        inheritFrom(const CanvasOptions& prototype):
+        - Params:   const CanvasOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const CanvasOptions& prototype) {
+        m_gridThickness.inherit(prototype.m_gridThickness);
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_innerPadding.inherit(prototype.m_innerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_gradientRole.inherit(prototype.m_gradientRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_gridColorRole.inherit(prototype.m_gridColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    CanvasOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    CanvasOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    CanvasOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    CanvasOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
-    // Space kept between this element's edge and the area its children are positioned in. Unset follows
-    // Theme::setInnerPadding().
-    CanvasOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
-    CanvasOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
-    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+    // Space kept between this element's edge and the area its children are positioned in. Unset follows the theme's default for this type.
+    CanvasOptions& setInnerPadding(float px)   { m_innerPadding.set(px); return *this; }
+    CanvasOptions& clearInnerPadding()         { m_innerPadding.clear(); return *this; }
+    float  getInnerPadding()     const { return m_innerPadding.get().value_or(0.f); }
 
     // Backdrop fill. A gradient takes precedence over color when active;
     // setGradientRole names a gradient stored in the Palette and wins over
     // the literal gradient when it resolves.
     CanvasOptions& setColor(const Color& c)             { m_color     = c; return *this; }
-    CanvasOptions& setColorRole(const std::string& r)   { m_colorRole = r; return *this; }
+    CanvasOptions& setColorRole(const std::string& r)   { m_colorRole.set(r); return *this; }
     CanvasOptions& setGradient(const Gradient& g)        { m_gradient     = g; return *this; }
-    CanvasOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
-    CanvasOptions& setRounding(float r)                 { m_rounding  = r; return *this; }
+    CanvasOptions& setGradientRole(const std::string& r) { m_gradientRole.set(r); return *this; }
+    CanvasOptions& setRounding(float r)                 { m_rounding.set(r); return *this; }
 
     // Outline -------------------------------------------------------------
     // A border drawn inside the element's bounds, so turning one on never
-    // changes the space the element takes. Thickness follows
-    // Theme::setOutlineThickness() when left unset, and an unnamed role falls
-    // back to Theme::setOutlineColorRole() -- 0 and transparent otherwise,
-    // which is no border at all.
+    // changes the space the element takes. Thickness and role default to
+    // whatever Defaults.hpp gives a CanvasOptions -- 0 and transparent out of
+    // the box, which is no border at all.
     CanvasOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    CanvasOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    CanvasOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
+    CanvasOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    CanvasOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
 
     // Grid metric. Children placed via addChild(elem, x, y) get x/y rounded
     // to the nearest multiple of these values. 0 on an axis disables snap
@@ -76,8 +96,8 @@ public:
     // draws a marker at every cell, 4 every fourth cell, etc.
     CanvasOptions& setGridLineStyle(GridLineStyle s)    { m_gridStyle = s; return *this; }
     CanvasOptions& setGridLineColor(const Color& c)     { m_gridColor = c; return *this; }
-    CanvasOptions& setGridLineColorRole(const std::string& r) { m_gridColorRole = r; return *this; }
-    CanvasOptions& setGridLineThickness(float t)        { m_gridThickness = t; return *this; }
+    CanvasOptions& setGridLineColorRole(const std::string& r) { m_gridColorRole.set(r); return *this; }
+    CanvasOptions& setGridLineThickness(float t)        { m_gridThickness.set(t); return *this; }
     CanvasOptions& setGridLineSpacing(int n)            { m_gridSpacing = n < 1 ? 1 : n; return *this; }
     CanvasOptions& setGridCrossSize(float px)           { m_gridCrossSize = px; return *this; }
 
@@ -116,18 +136,18 @@ public:
     CanvasOptions& setZoomAxisY(bool v)                 { m_zoomAxisY = v; return *this; }
 
     Color         getColor()           const { return m_color; }
-    const std::string& getColorRole()  const { return m_colorRole; }
+    const std::string& getColorRole()  const { return m_colorRole.get(); }
     const Gradient&    getGradient()     const { return m_gradient; }
-    const std::string& getGradientRole() const { return m_gradientRole; }
+    const std::string& getGradientRole() const { return m_gradientRole.get(); }
     float         getRounding()        const;
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
     Vec2f         getGridSize()        const { return m_gridSize; }
     GridLineStyle getGridLineStyle()   const { return m_gridStyle; }
     Color         getGridLineColor()   const { return m_gridColor; }
-    const std::string& getGridLineColorRole() const { return m_gridColorRole; }
-    float         getGridLineThickness() const { return m_gridThickness; }
+    const std::string& getGridLineColorRole() const { return m_gridColorRole.get(); }
+    float         getGridLineThickness() const { return m_gridThickness.get(); }
     int           getGridLineSpacing() const { return m_gridSpacing; }
     float         getGridCrossSize()   const { return m_gridCrossSize; }
     const std::optional<float>& getMinX() const { return m_minX; }
@@ -144,22 +164,22 @@ public:
     bool          getZoomAxisY()       const { return m_zoomAxisY; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::optional<float> m_innerPadding;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::optional<float>> m_innerPadding;
     Color       m_color         = Color{0, 0, 0, 0};
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
     Gradient    m_gradient;
-    std::string m_gradientRole;
-    std::optional<float>       m_rounding;
+    Themed<std::string> m_gradientRole;
+    Themed<std::optional<float>> m_rounding;
     Color                m_outlineColor = Color::Transparent;
-    std::string          m_outlineColorRole;
-    float m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
 
     Vec2f       m_gridSize      = {0.f, 0.f};
     GridLineStyle m_gridStyle   = GridLineStyle::None;
     Color       m_gridColor     = Color{255, 255, 255, 40};
-    std::string m_gridColorRole;
-    float       m_gridThickness = 1.f;
+    Themed<std::string> m_gridColorRole;
+    Themed<float> m_gridThickness {1.f};
     int         m_gridSpacing   = 1;
     float       m_gridCrossSize = 6.f;
 
@@ -173,6 +193,8 @@ private:
     bool        m_zoomEnabled   = true;
     bool        m_zoomAxisX     = true;
     bool        m_zoomAxisY     = true;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 /*
@@ -185,7 +207,7 @@ private:
                 already on screen.
 */
 inline float CanvasOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 0.f);
+    return m_rounding.get().value_or(0.f);
 }
 
 
@@ -205,6 +227,11 @@ inline float CanvasOptions::getRounding() const {
 */
 class Canvas : public Container {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<CanvasOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
     float getInnerPadding() const override { return m_options.getInnerPadding(); }
 

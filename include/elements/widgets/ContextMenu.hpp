@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -21,30 +23,53 @@ namespace uilo {
 */
 class ContextMenuOptions {
 public:
+    UILO_THEMED(ContextMenuOptions)
+
+    /*
+        inheritFrom(const ContextMenuOptions& prototype):
+        - Params:   const ContextMenuOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const ContextMenuOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_sepThickness.inherit(prototype.m_sepThickness);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_hoverColorRole.inherit(prototype.m_hoverColorRole);
+        m_textColorRole.inherit(prototype.m_textColorRole);
+        m_disabledColorRole.inherit(prototype.m_disabledColorRole);
+        m_sepColorRole.inherit(prototype.m_sepColorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_fontPath.inherit(prototype.m_fontPath);
+    }
+
     ContextMenuOptions& setColor(const Color& c)                   { m_color = c; return *this; }
-    ContextMenuOptions& setColorRole(const std::string& r)         { m_colorRole = r; return *this; }
+    ContextMenuOptions& setColorRole(const std::string& r)         { m_colorRole.set(r); return *this; }
     ContextMenuOptions& setHoverColor(const Color& c)              { m_hoverColor = c; return *this; }
-    ContextMenuOptions& setHoverColorRole(const std::string& r)    { m_hoverColorRole = r; return *this; }
+    ContextMenuOptions& setHoverColorRole(const std::string& r)    { m_hoverColorRole.set(r); return *this; }
     ContextMenuOptions& setTextColor(const Color& c)               { m_textColor = c; return *this; }
-    ContextMenuOptions& setTextColorRole(const std::string& r)     { m_textColorRole = r; return *this; }
+    ContextMenuOptions& setTextColorRole(const std::string& r)     { m_textColorRole.set(r); return *this; }
     ContextMenuOptions& setDisabledColor(const Color& c)           { m_disabledColor = c; return *this; }
-    ContextMenuOptions& setDisabledColorRole(const std::string& r) { m_disabledColorRole = r; return *this; }
+    ContextMenuOptions& setDisabledColorRole(const std::string& r) { m_disabledColorRole.set(r); return *this; }
     ContextMenuOptions& setSeparatorColor(const Color& c)          { m_sepColor = c; return *this; }
-    ContextMenuOptions& setSeparatorColorRole(const std::string& r){ m_sepColorRole = r; return *this; }
+    ContextMenuOptions& setSeparatorColorRole(const std::string& r){ m_sepColorRole.set(r); return *this; }
     ContextMenuOptions& setOutlineColor(const Color& c)            { m_outlineColor = c; return *this; }
-    ContextMenuOptions& setOutlineColorRole(const std::string& r)  { m_outlineColorRole = r; return *this; }
-    ContextMenuOptions& setOutlineThickness(float px)              { m_outlineThickness = px; return *this; }
+    ContextMenuOptions& setOutlineColorRole(const std::string& r)  { m_outlineColorRole.set(r); return *this; }
+    ContextMenuOptions& setOutlineThickness(float px)              { m_outlineThickness.set(px); return *this; }
 
     ContextMenuOptions& setRounding(float r)          { m_rounding = r; return *this; }
     ContextMenuOptions& setItemHeight(float px)       { m_itemHeight = px; return *this; }
     ContextMenuOptions& setItemPadding(float px)      { m_itemPadding = px; return *this; }
     ContextMenuOptions& setVerticalPadding(float px)  { m_verticalPadding = px; return *this; }
-    ContextMenuOptions& setSeparatorThickness(float px) { m_sepThickness = px; return *this; }
+    ContextMenuOptions& setSeparatorThickness(float px) { m_sepThickness.set(px); return *this; }
     ContextMenuOptions& setSeparatorSpacing(float px)   { m_sepSpacing = px; return *this; }
     ContextMenuOptions& setIconSize(float px)         { m_iconSize = px; return *this; }
     ContextMenuOptions& setIconSpacing(float px)      { m_iconSpacing = px; return *this; }
     ContextMenuOptions& setCharSize(unsigned px)      { m_charSize = px; return *this; }
-    ContextMenuOptions& setFont(const std::string& p) { m_fontPath = p; return *this; }
+    ContextMenuOptions& setFont(const std::string& p) { m_fontPath.set(p); return *this; }
     ContextMenuOptions& setMinWidth(float px)         { m_minWidth = px; return *this; }
     ContextMenuOptions& setMaxWidth(float px)         { m_maxWidth = px; return *this; }
     // Glyph on a row that opens a submenu.
@@ -54,29 +79,29 @@ public:
     ContextMenuOptions& setSubmenuOverlap(float px)   { m_submenuOverlap = px; return *this; }
 
     Color              getColor()             const { return m_color; }
-    const std::string& getColorRole()         const { return m_colorRole; }
+    const std::string& getColorRole()         const { return m_colorRole.get(); }
     Color              getHoverColor()        const { return m_hoverColor; }
-    const std::string& getHoverColorRole()    const { return m_hoverColorRole; }
+    const std::string& getHoverColorRole()    const { return m_hoverColorRole.get(); }
     Color              getTextColor()         const { return m_textColor; }
-    const std::string& getTextColorRole()     const { return m_textColorRole; }
+    const std::string& getTextColorRole()     const { return m_textColorRole.get(); }
     Color              getDisabledColor()     const { return m_disabledColor; }
-    const std::string& getDisabledColorRole() const { return m_disabledColorRole; }
+    const std::string& getDisabledColorRole() const { return m_disabledColorRole.get(); }
     Color              getSeparatorColor()    const { return m_sepColor; }
-    const std::string& getSeparatorColorRole() const { return m_sepColorRole; }
+    const std::string& getSeparatorColorRole() const { return m_sepColorRole.get(); }
     Color              getOutlineColor()      const { return m_outlineColor; }
-    const std::string& getOutlineColorRole()  const { return m_outlineColorRole; }
-    float              getOutlineThickness()  const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole()  const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness()  const { return m_outlineThickness.get(); }
 
     float    getRounding()           const { return m_rounding; }
     float    getItemHeight()         const { return m_itemHeight; }
     float    getItemPadding()        const { return m_itemPadding; }
     float    getVerticalPadding()    const { return m_verticalPadding; }
-    float    getSeparatorThickness() const { return m_sepThickness; }
+    float    getSeparatorThickness() const { return m_sepThickness.get(); }
     float    getSeparatorSpacing()   const { return m_sepSpacing; }
     float    getIconSize()           const { return m_iconSize; }
     float    getIconSpacing()        const { return m_iconSpacing; }
     unsigned getCharSize()           const { return m_charSize; }
-    const std::string& getFont()     const { return m_fontPath; }
+    const std::string& getFont()     const { return m_fontPath.get(); }
     float    getMinWidth()           const { return m_minWidth; }
     float    getMaxWidth()           const { return m_maxWidth; }
     const std::string& getSubmenuIcon() const { return m_submenuIcon; }
@@ -84,33 +109,35 @@ public:
 
 private:
     Color       m_color             = Color{0, 0, 0, 0};
-    std::string m_colorRole         = "panel";
+    Themed<std::string> m_colorRole {"panel"};
     Color       m_hoverColor        = Color{0, 0, 0, 0};
-    std::string m_hoverColorRole    = "panelAlt";
+    Themed<std::string> m_hoverColorRole {"panelAlt"};
     Color       m_textColor         = Color::White;
-    std::string m_textColorRole     = "text";
+    Themed<std::string> m_textColorRole {"text"};
     Color       m_disabledColor     = Color{0, 0, 0, 0};
-    std::string m_disabledColorRole = "textDim";
+    Themed<std::string> m_disabledColorRole {"textDim"};
     Color       m_sepColor          = Color{0, 0, 0, 0};
-    std::string m_sepColorRole      = "outline";
+    Themed<std::string> m_sepColorRole {"outline"};
     Color       m_outlineColor      = Color{0, 0, 0, 0};
-    std::string m_outlineColorRole  = "outline";
-    float       m_outlineThickness  = 1.f;
+    Themed<std::string> m_outlineColorRole {"outline"};
+    Themed<float> m_outlineThickness {1.f};
 
     float       m_rounding       = 6.f;
     float       m_itemHeight     = 28.f;
     float       m_itemPadding    = 10.f;
     float       m_verticalPadding = 6.f;
-    float       m_sepThickness   = 1.f;
+    Themed<float> m_sepThickness {1.f};
     float       m_sepSpacing     = 4.f;
     float       m_iconSize       = 16.f;
     float       m_iconSpacing    = 8.f;
     unsigned    m_charSize       = 14;
-    std::string m_fontPath;
+    Themed<std::string> m_fontPath;
     float       m_minWidth       = 140.f;
     float       m_maxWidth       = 420.f;
     std::string m_submenuIcon    = "chevron-right";
     float       m_submenuOverlap = 4.f;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -132,6 +159,11 @@ private:
 */
 class ContextMenu : public Column {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_cmOptions.inheritFrom(theme.cascade<ContextMenuOptions>(m_cmOptions.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     ContextMenu(
         Modifier modifier = {},
         ContextMenuOptions options = {},

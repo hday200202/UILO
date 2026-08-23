@@ -81,7 +81,7 @@ getRounding()
 
 **Returns** — float
 
-Corner radius of the panel, resolved in three steps: the value this widget was given, then the active Theme's, then 8. Resolved on every read rather than cached, so changing the Theme restyles a browser already on screen.
+Corner radius of the panel, resolved in three steps: the value this widget was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 8. Resolved on every read rather than cached, so changing the [Theme](../../utils/Theme.hpp.md#theme) restyles a browser already on screen.
 
 ---
 
@@ -117,7 +117,7 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for the entry labels, falling back to the active Theme's when this widget was not given one.
+[Font](../../renderer/Renderer.hpp.md#font) for the entry labels, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s when this widget was not given one.
 
 ---
 

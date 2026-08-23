@@ -8,7 +8,7 @@ using namespace uilo;
     Forward Declarations:
     - My prefered way of building UIs in UILO
 */
-Palette     buildPalette();
+Theme       buildTheme();
 Container*  buildTopBar();
 Container*  buildFilebrowser(const std::filesystem::path& path);
 Container*  buildMainContentContainer();
@@ -29,8 +29,8 @@ Page*       buildMainPage();
 /*
     main():
     - Initialize your renderer          (width, height, window title)
+    - Install the theme                 (before anything is built)
     - Initialize your UILO instance     (renderer, main page)
-    - Initialize and set your palette
     - Set the render scale to the OS render scale
 */
 int main() {
@@ -38,8 +38,9 @@ int main() {
     renderer.init(1280, 720, "Text Editor");
 
     UILO uilo(renderer, buildMainPage());
-
-    uilo.setPalette(buildPalette());
+    /* Order does not matter: a theme is applied when an element binds, and
+       setTheme re-applies it to everything already built. */
+    uilo.setTheme(buildTheme());
     uilo.setScale(OS::scale());
 
     while (uilo.isRunning()) {
@@ -61,12 +62,14 @@ int main() {
 
 
 /*
-    buildPalette():
-    - Setting a few reusable color roles, and some global theme customizations
+    buildTheme():
+    - The whole look of the editor: a few reusable color roles on top of the
+      default palette, and the corner radius every surface shares.
 */
-Palette buildPalette() {
-    Palette palette;
+Theme buildTheme() {
+    Theme theme = defaultTheme();
 
+    Palette palette = theme.palette();
     palette.set("panel",            Color::fromHex("#3b3b3b"));
     palette.set("panelHover",       Color::fromHex("#525252"));
     palette.set("background",       Color::fromHex("#292828"));
@@ -78,10 +81,16 @@ Palette buildPalette() {
     palette.set("textboxSelection", Color::fromHex("#c485ff5b"));
     palette.set("terminalBg",       Color::fromHex("#181818"));
     palette.set("transparent",      Color::Transparent);
+    theme.setPalette(palette);
 
-    Theme::current().setRounding(8.f);
+    /* Rounded surfaces throughout. One line per type that draws one, which is
+       the trade for a type's prototype carrying a whole look. */
+    theme.edit<ColumnOptions>().setRounding(8.f);
+    theme.edit<RowOptions>().setRounding(8.f);
+    theme.edit<ButtonOptions>().setRounding(8.f);
+    theme.edit<TextboxOptions>().setRounding(8.f);
 
-    return palette;
+    return theme;
 }
 
 

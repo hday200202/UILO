@@ -1,136 +1,327 @@
-// Theme: application-wide defaults, and what overrides them.
+// Theme: where the look of an application lives.
 //
-// Nothing below names a colour role, a corner radius or a font. Every element
-// and every widget follows Theme::current() on its own -- the dropdown, the
-// textbox and the date field are built with nothing but a placeholder. The rows
-// on the right override the theme, to show a manual setting still wins. Borders
-// are never themed, so the two rows that have one asked for it.
+// This file is split the way a web page is split. buildTheme() is the
+// stylesheet: every colour, size, radius and spacing value in this example is
+// inside that one function, grouped by what it styles. buildRoot() is the
+// markup: it calls h1(), card(), primaryButton() and names roles, and says
+// nothing about how any of them look.
 //
-// The buttons across the top change the theme while the app is running. Nothing
-// is rebuilt -- themed values are read where they are used, so the tree restyles
-// itself on the next frame.
+// If you want to change how this example looks, buildTheme() is the only
+// function you have to open.
+//
+// A theme belongs to a UILO -- ui.getTheme() / ui.setTheme() -- and is applied
+// when an element binds to it, filling in whatever the call site left alone and
+// never overriding a setting. That is what lets the buttons across the top
+// restyle a running app: nothing here is rebuilt, on either row.
+//
+// The defaults all of this starts from are in include/Defaults.hpp.
 
 #include "../include/UILO.hpp"
+#include "../include/Defaults.hpp"
 #include "../include/renderer/Renderer.hpp"
 #include <SDL3/SDL.h>
 #include <cstdio>
 
 using namespace uilo;
 
-static Palette darkPalette() {
-    Palette p;
-    p.set("app.bg",    { 33,  35,  47, 255});
-    p.set("panel",     { 44,  47,  60, 255});
-    p.set("panelAlt",  { 55,  58,  74, 255});
-    p.set("text",      {180, 190, 220, 255});
-    p.set("textDim",   {130, 138, 170, 255});
-    p.set("accent",    {151, 120, 206, 255});
-    p.set("outline",   { 80,  84, 100, 255});
-    p.set("onAccent",  {255, 255, 255, 255});
-    return p;
+namespace {
+
+/* ========================================================================== */
+/*  STYLESHEET                                                                */
+/*                                                                            */
+/*  Everything this example looks like is in this section and nowhere else.    */
+/*  Nothing below it names a colour, a character size, a radius or a gap.      */
+/* ========================================================================== */
+
+/*
+    applyShape(Theme& theme, float radius):
+    - Params:   Theme& theme, float radius
+    - Returns:  void
+    - Desc:     The corner radius of every surface, in one place. This is all
+                22 rounding knobs the library has -- one line per surface a type
+                draws, which is the trade for those types being able to carry a
+                whole look rather than one shared number. Miss one and that
+                surface quietly keeps its old shape, which is exactly what a
+                single global setting could never get wrong.
+    - The page and pane roles are left out on purpose: they are backgrounds that
+      run to the window edge, and rounding those would round the app itself.
+*/
+void applyShape(Theme& theme, float radius) {
+    /* Surfaces. */
+    theme.edit<ColumnOptions>().setRounding(radius);
+    theme.edit<RowOptions>().setRounding(radius);
+    theme.edit<CanvasOptions>().setRounding(radius);
+    theme.edit<SpacerOptions>().setRounding(radius);
+    theme.edit<WaveformOptions>().setRounding(radius);
+
+    /* Controls. */
+    theme.edit<ButtonOptions>().setRounding(radius);
+    theme.edit<TextboxOptions>().setRounding(radius);
+
+    SliderOptions& slider = theme.edit<SliderOptions>();
+    slider.setTrackRounding(radius);
+    slider.setThumbRounding(radius);
+
+    DropdownOptions& dropdown = theme.edit<DropdownOptions>();
+    dropdown.setHeaderRounding(radius);
+    dropdown.setPopupRounding(radius);
+    dropdown.setItemRounding(radius);
+
+    /* Composite widgets, each of which rounds more than one surface. */
+    theme.edit<ContextMenuOptions>().setRounding(radius);
+    theme.edit<TerminalOptions>().setRounding(radius);
+    theme.edit<DateFieldOptions>().setRounding(radius);
+
+    DatePickerOptions& picker = theme.edit<DatePickerOptions>();
+    picker.setRounding(radius);
+    picker.setNavRounding(radius);
+    picker.setCellRounding(radius);
+    picker.setButtonRounding(radius);
+
+    FileBrowserOptions& browser = theme.edit<FileBrowserOptions>();
+    browser.setRounding(radius);
+    browser.setEntryRounding(radius);
+    browser.setHeaderRounding(radius);
+
+    /* A role that pins its own radius has to be told separately -- that is what
+       pinning means, and it is why "page" and "pane" below stay square. */
+    theme.edit<ColumnOptions>("card").setRounding(radius);
 }
 
-static Palette lightPalette() {
-    Palette p;
-    p.set("app.bg",    {235, 238, 245, 255});
-    p.set("panel",     {250, 251, 254, 255});
-    p.set("panelAlt",  {220, 225, 238, 255});
-    p.set("text",      { 40,  46,  72, 255});
-    p.set("textDim",   { 95, 104, 132, 255});
-    p.set("accent",    {120,  90, 190, 255});
-    p.set("outline",   {180, 186, 205, 255});
-    p.set("onAccent",  {255, 255, 255, 255});
-    return p;
+
+/*
+    buildTheme():
+    - Params:   none
+    - Returns:  Theme
+    - Desc:     The whole look of this example. Starts from defaultTheme(), so
+                the roles Defaults.hpp already declares -- h1, h2, h3, body,
+                caption, label, primary, ghost, panel, card -- arrive for free
+                and only what this app adds or changes is spelled out below.
+*/
+Theme buildTheme() {
+    Theme theme = defaultTheme();
+
+    /* ---- Shape ---------------------------------------------------------- */
+    applyShape(theme, 8.f);
+
+    /* ---- Spacing scale ---------------------------------------------------
+       Vertical gaps for columns, horizontal gaps for rows. A spacer built with
+       a plain Modifier() is a 1_flex push, so it needs no role. */
+    theme.edit<Modifier>("gap.sm").setHeight(8_px);
+    theme.edit<Modifier>("gap.md").setHeight(16_px);
+    theme.edit<Modifier>("gap.lg").setHeight(24_px);
+
+    theme.edit<Modifier>("hgap.sm").setWidth(8_px);
+    theme.edit<Modifier>("hgap.md").setWidth(16_px);
+    theme.edit<Modifier>("hgap.lg").setWidth(24_px);
+
+    /* ---- Boxes -----------------------------------------------------------
+       The size half of each role. h1/h2/h3/caption already carry theirs from
+       Defaults.hpp. */
+    theme.edit<Modifier>("bar").setHeight(36_px);
+    theme.edit<Modifier>("body").setHeight(48_px);
+    theme.edit<Modifier>("field").setHeight(44_px);
+    theme.edit<Modifier>("pane").setWidth(320_px);
+
+    Modifier& switchBox = theme.edit<Modifier>("switch");
+    switchBox.setWidth(96_px);
+    switchBox.setHeight(36_px);
+
+    /* The button helpers take their box from the same role as their fill, so
+       giving "primary" a width here is all a call site needs. */
+    theme.edit<Modifier>("primary").setWidth(120_px);
+    theme.edit<Modifier>("ghost").setWidth(120_px);
+
+    /* ---- Surfaces --------------------------------------------------------
+       The page background and the two panes stay square whatever the shape
+       buttons do, since applyShape leaves these roles alone. */
+    ColumnOptions& page = theme.edit<ColumnOptions>("page");
+    page.setColorRole("app.bg");
+    page.setInnerPadding(24.f);
+    page.setRounding(0.f);
+
+    theme.edit<ColumnOptions>("pane").setRounding(0.f);
+    theme.edit<RowOptions>("bar").setRounding(0.f);
+
+    theme.edit<ButtonOptions>("switch").setColorRole("panelAlt");
+
+    return theme;
 }
 
-// A labelled button that runs `action`. Takes no colour and no radius: both come
-// from the theme.
-static Button* themedButton(const std::string& label, std::function<void()> action) {
+
+/* ========================================================================== */
+/*  MARKUP                                                                    */
+/*                                                                            */
+/*  Structure and content only. Every look here is a role name defined above.  */
+/* ========================================================================== */
+
+/*
+    switchButton(UILO& ui, const std::string& text, std::function<void(Theme&)> restyle):
+    - Params:   UILO& ui, const std::string& text,
+                std::function<void(Theme&)> restyle
+    - Returns:  Button*
+    - Desc:     One of the buttons across the top. Each edits the UILO's theme
+                in place and then asks for it to be re-applied, which is what
+                restyles the tree without rebuilding it.
+    - The long form rather than primaryButton(), because these want a fill role
+      of their own -- which is the point at which a helper stops being the
+      shorter way to say something.
+*/
+Button* switchButton(
+    UILO& ui,
+    const std::string& text,
+    std::function<void(Theme&)> restyle
+) {
     return button(
-        Modifier()
-            .setHeight(36_px)
-            .setOnLeftClick([action](Element*) { action(); }),
-        ButtonOptions()
-            .setColorRole("panelAlt")
-            .setLabel(
-                text(
-                    Modifier()
-                        .setWidth(100_pct)
-                        .setHeight(100_pct),
-                    TextOptions()
-                        .setContent(label)
-                        .setTextAlignX(Align::CenterX)
-                        .setTextAlignY(Align::CenterY)
-                )
-            )
+        Modifier("switch")
+            .setOnLeftClick([&ui, restyle](Element*) {
+                restyle(ui.getTheme());
+                ui.refreshTheme();
+            }),
+        ButtonOptions("switch")
+            .setLabel(heading("label", text))
     );
 }
 
-static Element* caption(const std::string& s) {
-    return text(
-        Modifier()
-            .setHeight(24_px),
-        TextOptions()
-            .setContent(s)
-            .setColorRole("textDim")
-    );
-}
 
-// One of the "Overrides it" rows: a label inside a panel styled however the
-// caller says, so each row shows exactly one setting winning over the theme.
-static Element* overrideRow(const std::string& label, RowOptions options) {
-    return row(
-        Modifier()
-            .setHeight(56_px),
-        options,
+/*
+    buildRoot(UILO& ui):
+    - Params:   UILO& ui
+    - Returns:  Container*
+    - Desc:     The whole tree, built once. The UILO is threaded through only so
+                the buttons can reach the theme they restyle.
+*/
+Container* buildRoot(UILO& ui) {
+    return column(
+        Modifier(),
+        ColumnOptions("page"),
         contains {
-            spacer(
-                Modifier()
-                    .setWidth(16_px)
+            h1("uilo::Theme"),
+            caption("Every button here restyles the tree in place. Nothing is rebuilt."),
+
+            spacer(Modifier("gap.lg")),
+
+            row(
+                Modifier("bar"),
+                RowOptions("bar"),
+                contains {
+                    switchButton(ui, "Dark",  [](Theme& t) { t.setPalette(darkPalette()); }),
+                    spacer(Modifier("hgap.sm")),
+                    switchButton(ui, "Light", [](Theme& t) { t.setPalette(lightPalette()); }),
+                    spacer(Modifier("hgap.lg")),
+                    switchButton(ui, "Square",  [](Theme& t) { applyShape(t, 0.f); }),
+                    spacer(Modifier("hgap.sm")),
+                    switchButton(ui, "Rounded", [](Theme& t) { applyShape(t, 8.f); }),
+                    spacer(Modifier("hgap.sm")),
+                    switchButton(ui, "Pill",    [](Theme& t) { applyShape(t, 18.f); }),
+                    spacer(Modifier())
+                }
             ),
 
-            text(
-                Modifier()
-                    .setAlign(Align::Left | Align::CenterY),
-                TextOptions()
-                    .setContent(label)
-                    .setCharSize(14)
-                    .setTextAlignY(Align::CenterY)
+            spacer(Modifier("gap.lg")),
+
+            row(
+                Modifier(),
+                RowOptions("bar"),
+                contains {
+                    /* ---- Built with empty options ---- */
+                    column(
+                        Modifier("pane"),
+                        ColumnOptions("pane"),
+                        contains {
+                            caption("Follows the theme"),
+
+                            spacer(Modifier("gap.sm")),
+
+                            textbox(
+                                Modifier("field"),
+                                TextboxOptions()
+                                    .setPlaceholder("a textbox")
+                            ),
+
+                            spacer(Modifier("gap.md")),
+
+                            /* The composite widgets follow it too, inner parts
+                               included. */
+                            datefield(
+                                Modifier("field"),
+                                DateFieldOptions()
+                            ),
+
+                            spacer(Modifier("gap.md")),
+
+                            dropdown(
+                                Modifier("field"),
+                                DropdownOptions()
+                                    .setPlaceholder("a dropdown"),
+                                {"one", "two", "three"}
+                            ),
+
+                            spacer(Modifier())
+                        }
+                    ),
+
+                    spacer(Modifier("hgap.lg")),
+
+                    /* ---- Built out of the named-role helpers ---- */
+                    column(
+                        Modifier(),
+                        ColumnOptions("pane"),
+                        contains {
+                            caption("Named roles"),
+
+                            spacer(Modifier("gap.sm")),
+
+                            card(contains {
+                                h2("Heading two"),
+                                h3("Heading three"),
+
+                                spacer(Modifier("gap.sm")),
+
+                                body("Body copy, at the size the theme gives it. "
+                                     "The call site says what this is, not what "
+                                     "it looks like."),
+
+                                spacer(Modifier("gap.md")),
+
+                                row(
+                                    Modifier("bar"),
+                                    RowOptions("bar"),
+                                    contains {
+                                        primaryButton("Primary", [] {}),
+                                        spacer(Modifier("hgap.md")),
+                                        ghostButton("Ghost", [] {}),
+                                        spacer(Modifier())
+                                    }
+                                ),
+
+                                spacer(Modifier())
+                            })
+                        }
+                    )
+                }
             )
-        }
+        },
+        "root"
     );
 }
 
-static Element* gap(Dimension height) {
-    return spacer(
-        Modifier()
-            .setHeight(height)
-    );
-}
+} // namespace
 
-Container* buildRoot();
 
 int main() {
     Renderer renderer;
-    if (!renderer.init(1100, 760, "Theme", 16)) {
+    if (!renderer.init(1100, 780, "Theme", 16)) {
         std::fprintf(stderr, "Failed to initialize renderer\n");
         return 1;
     }
 
-    // The whole look of the app, set once. No element below repeats any of it.
-    Theme::current()
-        .setPalette(darkPalette())
-        .setRounding(8.f)
-        .setCharSize(15)
-        .setIconStrokeWidth(1.75f);
-
     UILO ui;
     ui.setRenderer(renderer);
     ui.setScale(OS::scale());
-    // Note: no ui.setPalette(). Leaving it unset is what keeps this UILO
-    // following the theme, so the palette buttons below take effect live.
+    ui.setTheme(buildTheme());
 
-    ui.addPage(page(buildRoot(), "main_page"));
+    ui.addPage(page(buildRoot(ui), "main_page"));
     ui.setPage("main_page");
 
     while (ui.isRunning()) {
@@ -138,249 +329,10 @@ int main() {
         ui.update();
 
         renderer.beginFrame();
-        // Reads through the const getPalette(), so it follows the theme live.
+        /* Read through getPalette(), so it follows the theme live. */
         renderer.clear(ui.getPalette().get("app.bg"));
         ui.render();
         renderer.endFrame();
     }
     return 0;
-}
-
-Container* buildRoot() {
-    return column(
-        Modifier(),
-        ColumnOptions().setColorRole("app.bg"),
-        contains {
-            gap(24_px),
-
-            row(
-                Modifier()
-                    .setHeight(40_px),
-                RowOptions(),
-                contains {
-                    spacer(
-                        Modifier()
-                            .setWidth(24_px)
-                    ),
-
-                    text(
-                        Modifier(),
-                        TextOptions()
-                            .setContent("uilo::Theme")
-                            .setCharSize(22)
-                            .setBold(true)
-                    )
-                }
-            ),
-
-            gap(16_px),
-
-            // ---- Live theme switches ----
-            row(
-                Modifier()
-                    .setHeight(36_px),
-                RowOptions(),
-                contains {
-                    spacer(
-                        Modifier()
-                            .setWidth(24_px)
-                    ),
-
-                    themedButton("Square", [] {
-                        Theme::current().setRounding(0.f);
-                    }),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(8_px)
-                    ),
-
-                    themedButton("Rounded", [] {
-                        Theme::current().setRounding(8.f);
-                    }),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(8_px)
-                    ),
-
-                    themedButton("Pill", [] {
-                        Theme::current().setRounding(18.f);
-                    }),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(24_px)
-                    ),
-
-                    themedButton("Dark", [] {
-                        Theme::current().setPalette(darkPalette());
-                    }),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(8_px)
-                    ),
-
-                    themedButton("Light", [] {
-                        Theme::current().setPalette(lightPalette());
-                    }),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(1_flex)
-                    )
-                }
-            ),
-
-            gap(24_px),
-
-            row(
-                Modifier(),
-                RowOptions(),
-                contains {
-                    spacer(
-                        Modifier()
-                            .setWidth(24_px)
-                    ),
-
-                    // ---- Everything here follows the theme ----
-                    column(
-                        Modifier()
-                            .setWidth(300_px),
-                        ColumnOptions(),
-                        contains {
-                            caption("Follows the theme"),
-
-                            row(
-                                Modifier()
-                                    .setHeight(56_px),
-                                RowOptions()
-                                    .setColorRole("panel"),
-                                contains {
-                                    spacer(
-                                        Modifier()
-                                            .setWidth(12_px)
-                                    ),
-
-                                    icon(
-                                        Modifier()
-                                            .setWidth(22_px)
-                                            .setAlign(Align::CenterY),
-                                        IconOptions()
-                                            .setIcon(Resources::icons::layers)
-                                    ),
-
-                                    spacer(
-                                        Modifier()
-                                            .setWidth(12_px)
-                                    ),
-
-                                    text(
-                                        Modifier()
-                                            .setAlign(Align::Left | Align::CenterY),
-                                        TextOptions()
-                                            .setContent("panel, icon, text")
-                                            .setTextAlignY(Align::CenterY)
-                                    )
-                                }
-                            ),
-
-                            gap(12_px),
-
-                            textbox(
-                                Modifier()
-                                    .setHeight(44_px),
-                                TextboxOptions()
-                                    .setPlaceholder("a textbox")
-                            ),
-
-                            gap(12_px),
-
-                            // The widgets follow it too, inner parts included.
-                            datefield(
-                                Modifier()
-                                    .setHeight(48_px),
-                                DateFieldOptions()
-                            ),
-
-                            gap(12_px),
-
-                            dropdown(
-                                Modifier()
-                                    .setHeight(40_px),
-                                DropdownOptions()
-                                    .setPlaceholder("a dropdown"),
-                                {"one", "two", "three"}
-                            )
-                        }
-                    ),
-
-                    spacer(
-                        Modifier()
-                            .setWidth(32_px)
-                    ),
-
-                    // ---- Rows that opt out ----
-                    column(
-                        Modifier()
-                            .setWidth(300_px),
-                        ColumnOptions(),
-                        contains {
-                            caption("Overrides it"),
-
-                            overrideRow(
-                                "setRounding(0) -- stays square",
-                                RowOptions()
-                                    .setColorRole("panel")
-                                    .setRounding(0.f)
-                            ),
-
-                            gap(12_px),
-
-                            overrideRow(
-                                "setRounding(28) -- stays round",
-                                RowOptions()
-                                    .setColorRole("panel")
-                                    .setRounding(28.f)
-                            ),
-
-                            gap(12_px),
-
-                            // Borders are per-element only, never themed.
-                            overrideRow(
-                                "1px outline, set by hand",
-                                RowOptions()
-                                    .setColorRole("panel")
-                                    .setOutlineColorRole("outline")
-                                    .setOutlineThickness(1.f)
-                            ),
-
-                            gap(12_px),
-
-                            overrideRow(
-                                "3px accent border",
-                                RowOptions()
-                                    .setColorRole("panel")
-                                    .setOutlineColorRole("accent")
-                                    .setOutlineThickness(3.f)
-                            ),
-
-                            gap(12_px),
-
-                            // A literal colour wins too: no role, so no palette.
-                            overrideRow(
-                                "literal colour -- ignores palette",
-                                RowOptions()
-                                    .setColor({120, 60, 60, 255})
-                            )
-                        }
-                    )
-                }
-            ),
-
-            gap(1_flex)
-        },
-        "root"
-    );
 }

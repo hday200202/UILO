@@ -20,9 +20,11 @@
 - [`claimsPointerEvents()`](#claimspointerevents)
 - [`checkLeftClick(const Vec2f& mousePosition)`](#checkleftclick)
 - [`checkRightClick(const Vec2f& mousePosition)`](#checkrightclick)
+- [`openContextMenu(const Vec2f& at)`](#opencontextmenu)
 - [`checkHover(const Vec2f& mousePosition)`](#checkhover)
 - [`checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum)`](#checkscroll)
 - [`setUILO(UILO& uiloRef)`](#setuilo)
+- [`applyTheme(const Theme& theme)`](#applytheme)
 
 ---
 
@@ -224,6 +226,22 @@ As checkLeftClick, for the right button.
 
 ---
 
+### openContextMenu
+
+```cpp
+openContextMenu(const Vec2f& at)
+```
+
+**Parameters**
+
+- `const Vec2f& at`
+
+**Returns** — bool -- true when a menu opened
+
+Hands this element's items to the one menu [UILO](../UILO.hpp.md#uilo) holds at the root of the UI. The builder runs here, on the frame of the click, so a menu whose contents depend on application state is current. An element with no menu, or a builder that returned nothing, opens nothing and does not consume the click.
+
+---
+
 ### checkHover
 
 ```cpp
@@ -274,3 +292,19 @@ setUILO(UILO& uiloRef)
 **Returns** — void
 
 Binds the element to a [UILO](../UILO.hpp.md#uilo), which puts it in the element pool and registers its name for lookup. Re-binding to the same [UILO](../UILO.hpp.md#uilo) is a no-op: switching the active page from A to B and back re- walks A's tree, and emplacing the element a second time would leave two unique_ptrs owning it and double-delete at shutdown.
+
+---
+
+### applyTheme
+
+```cpp
+applyTheme(const Theme& theme)
+```
+
+**Parameters**
+
+- `const Theme& theme`
+
+**Returns** — void
+
+Fills in the [Modifier](Modifier.hpp.md#modifier)'s unset fields from the theme. Subclasses override to do the same for their own Options and then call this, which is the one place an element's look is decided.
