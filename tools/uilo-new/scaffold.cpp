@@ -440,7 +440,7 @@ int main() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.setPalette(palette());
+    ui.getTheme().setPalette(palette());
     ui.setScale(OS::scale());
 
     int clicks = 0;
@@ -600,7 +600,7 @@ int main() {
 
     UILO ui;
     ui.setRenderer(renderer);
-    ui.setPalette(palette());
+    ui.getTheme().setPalette(palette());
     ui.setScale(OS::scale());
 
     g_status = text(

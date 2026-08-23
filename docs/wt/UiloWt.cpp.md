@@ -49,7 +49,7 @@ argPointers()
 UILO::runWeb(const WebConfig& config)
 ```
 
-> Serves this [UILO](../UILO.hpp.md#uilo) over the web and blocks until the server stops. Set the [UILO](../UILO.hpp.md#uilo) up exactly as on desktop first (addPage/setPage/setPalette); this stands up Wt, points every browser connection at this instance, and returns the server's exit code. No render/update loop and no argv -- the server settings come from the config. Every connection shares this instance, and Wt drives connections from different threads: two browsers are two views of one UI, with no lock between them. Use the factory overload for anything multi-user.
+> Serves this [UILO](../UILO.hpp.md#uilo) over the web and blocks until the server stops. Set the [UILO](../UILO.hpp.md#uilo) up exactly as on desktop first (addPage/setPage/setTheme); this stands up Wt, points every browser connection at this instance, and returns the server's exit code. No render/update loop and no argv -- the server settings come from the config. Every connection shares this instance, and Wt drives connections from different threads: two browsers are two views of one UI, with no lock between them. Use the factory overload for anything multi-user.
 
 ---
 
@@ -59,4 +59,4 @@ UILO::runWeb(const WebConfig& config)
 UILO::runWeb(factory, const WebConfig& config)
 ```
 
-> The per-session counterpart: serves an app whose [UILO](../UILO.hpp.md#uilo) is built fresh for each browser connection, and blocks until the server stops. `factory` runs once per connection, on that connection's own thread, and builds that session's [UILO](../UILO.hpp.md#uilo) the same way a desktop app builds its one (addPage/setPage/setPalette). The [WebApp](../UILO.hpp.md#webapp) it returns is owned by the connection and destroyed with it, so sessions share no pages, no palette and no application state -- and cannot race each other's widget trees. Anything the factory itself touches is still shared, so whatever it reads (a global theme, a file on disk) has to be safe to read from several threads at once.
+> The per-session counterpart: serves an app whose [UILO](../UILO.hpp.md#uilo) is built fresh for each browser connection, and blocks until the server stops. `factory` runs once per connection, on that connection's own thread, and builds that session's [UILO](../UILO.hpp.md#uilo) the same way a desktop app builds its one (addPage/setPage/setTheme). The [WebApp](../UILO.hpp.md#webapp) it returns is owned by the connection and destroyed with it, so sessions share no pages, no palette and no application state -- and cannot race each other's widget trees. Anything the factory itself touches is still shared, so whatever it reads (a global theme, a file on disk) has to be safe to read from several threads at once.

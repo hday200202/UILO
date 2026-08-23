@@ -11,6 +11,8 @@
 #include "DatePicker.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 class UILO;
@@ -35,14 +37,36 @@ enum class DateFieldLayout { Auto, IconOnly, LabelOnly, IconAndLabel };
 */
 class DateFieldOptions {
 public:
-    DateFieldOptions() = default;
+    UILO_THEMED(DateFieldOptions)
+
+    /*
+        inheritFrom(const DateFieldOptions& prototype):
+        - Params:   const DateFieldOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const DateFieldOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_bgColorRole.inherit(prototype.m_bgColorRole);
+        m_hoverColorRole.inherit(prototype.m_hoverColorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_textColorRole.inherit(prototype.m_textColorRole);
+        m_placeholderColorRole.inherit(prototype.m_placeholderColorRole);
+        m_iconColorRole.inherit(prototype.m_iconColorRole);
+        m_chevronColorRole.inherit(prototype.m_chevronColorRole);
+        m_fontPath.inherit(prototype.m_fontPath);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    DateFieldOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    DateFieldOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    DateFieldOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    DateFieldOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     // Value -------------------------------------------------------------
     // DateAndTime pattern for the value once one is picked.
@@ -67,10 +91,10 @@ public:
 
     // Surface -----------------------------------------------------------
     DateFieldOptions& setBackgroundColor(const Color& c)           { m_bgColor = c; return *this; }
-    DateFieldOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole = r; return *this; }
+    DateFieldOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole.set(r); return *this; }
     DateFieldOptions& setHoverColor(const Color& c)                { m_hoverColor = c; return *this; }
-    DateFieldOptions& setHoverColorRole(const std::string& r)      { m_hoverColorRole = r; return *this; }
-    DateFieldOptions& setRounding(float r)                    { m_rounding = r; return *this; }
+    DateFieldOptions& setHoverColorRole(const std::string& r)      { m_hoverColorRole.set(r); return *this; }
+    DateFieldOptions& setRounding(float r)                    { m_rounding.set(r); return *this; }
     // Inset at each end of the row, ahead of the icon and after the chevron.
     // setInnerPadding is the spelling every other Options uses; setPadding is
     // kept as its alias.
@@ -79,20 +103,20 @@ public:
     float             getInnerPadding()                 const { return m_padding; }
 
     // Outline -------------------------------------------------------------
-    // A border around the field, drawn inside its bounds. Follows
-    // Theme::setOutlineThickness()/setOutlineColorRole() when left unset.
+    // A border around the field, drawn inside its bounds. Thickness and role
+    // default to whatever Defaults.hpp gives a DateFieldOptions.
     DateFieldOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    DateFieldOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    DateFieldOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
+    DateFieldOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    DateFieldOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
 
     // Text --------------------------------------------------------------
-    DateFieldOptions& setFont(std::string_view path)        { m_fontPath = std::string(path); return *this; }
+    DateFieldOptions& setFont(std::string_view path)        { m_fontPath.set(std::string(path)); return *this; }
     DateFieldOptions& setCharSize(unsigned int n)             { m_charSize = n; return *this; }
     DateFieldOptions& setTextColor(const Color& c)                 { m_textColor = c; return *this; }
-    DateFieldOptions& setTextColorRole(const std::string& r)       { m_textColorRole = r; return *this; }
+    DateFieldOptions& setTextColorRole(const std::string& r)       { m_textColorRole.set(r); return *this; }
     // Dimmer than the value by default, the way a placeholder should read.
     DateFieldOptions& setPlaceholderColor(const Color& c)           { m_placeholderColor = c; return *this; }
-    DateFieldOptions& setPlaceholderColorRole(const std::string& r) { m_placeholderColorRole = r; return *this; }
+    DateFieldOptions& setPlaceholderColorRole(const std::string& r) { m_placeholderColorRole.set(r); return *this; }
 
     // Icons -------------------------------------------------------------
     DateFieldOptions& setShowIcon(bool v)                     { m_showIcon = v; return *this; }
@@ -102,13 +126,13 @@ public:
     DateFieldOptions& setIconSpacing(float px)                { m_iconSpacing = px; return *this; }
     DateFieldOptions& setIconStrokeWidth(float w)             { m_iconStroke = w; m_hasIconStroke = true; return *this; }
     DateFieldOptions& setIconColor(const Color& c)                 { m_iconColor = c; return *this; }
-    DateFieldOptions& setIconColorRole(const std::string& r)       { m_iconColorRole = r; return *this; }
+    DateFieldOptions& setIconColorRole(const std::string& r)       { m_iconColorRole.set(r); return *this; }
     // The dropdown-style marker at the right end. Only drawn when the text is.
     DateFieldOptions& setShowChevron(bool v)                  { m_showChevron = v; return *this; }
     DateFieldOptions& setChevronIcon(std::string_view n)      { m_chevronIcon = std::string(n); return *this; }
     DateFieldOptions& setChevronSize(float px)                { m_chevronSize = px; return *this; }
     DateFieldOptions& setChevronColor(const Color& c)              { m_chevronColor = c; return *this; }
-    DateFieldOptions& setChevronColorRole(const std::string& r)    { m_chevronColorRole = r; return *this; }
+    DateFieldOptions& setChevronColorRole(const std::string& r)    { m_chevronColorRole.set(r); return *this; }
 
     // Popup -------------------------------------------------------------
     // How the calendar itself is configured. The field overrides only what it
@@ -147,21 +171,21 @@ public:
     float getLabelAspectThreshold()         const { return m_labelAspect; }
 
     Color getBackgroundColor()              const { return m_bgColor; }
-    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole.get(); }
     Color getHoverColor()                   const { return m_hoverColor; }
-    const std::string& getHoverColorRole()  const { return m_hoverColorRole; }
+    const std::string& getHoverColorRole()  const { return m_hoverColorRole.get(); }
     float getRounding()                     const;
     float getPadding()                      const { return m_padding; }
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
 
     const std::string& getFontPath()        const;
     unsigned int getCharSize()              const { return m_charSize; }
     Color getTextColor()                    const { return m_textColor; }
-    const std::string& getTextColorRole()   const { return m_textColorRole; }
+    const std::string& getTextColorRole()   const { return m_textColorRole.get(); }
     Color getPlaceholderColor()             const { return m_placeholderColor; }
-    const std::string& getPlaceholderColorRole() const { return m_placeholderColorRole; }
+    const std::string& getPlaceholderColorRole() const { return m_placeholderColorRole.get(); }
 
     bool  getShowIcon()                     const { return m_showIcon; }
     const std::string& getIcon()            const { return m_icon; }
@@ -170,12 +194,12 @@ public:
     float getIconStrokeWidth()              const { return m_iconStroke; }
     bool  hasIconStrokeWidth()              const { return m_hasIconStroke; }
     Color getIconColor()                    const { return m_iconColor; }
-    const std::string& getIconColorRole()   const { return m_iconColorRole; }
+    const std::string& getIconColorRole()   const { return m_iconColorRole.get(); }
     bool  getShowChevron()                  const { return m_showChevron; }
     const std::string& getChevronIcon()     const { return m_chevronIcon; }
     float getChevronSize()                  const { return m_chevronSize; }
     Color getChevronColor()                 const { return m_chevronColor; }
-    const std::string& getChevronColorRole() const { return m_chevronColorRole; }
+    const std::string& getChevronColorRole() const { return m_chevronColorRole.get(); }
 
     bool getCloseOnSelect()                 const { return m_closeOnSelect; }
 
@@ -188,11 +212,11 @@ public:
 
     // Raw, for handing to a child element that should keep following
     // the theme rather than being pinned to a resolved number.
-    const std::optional<float>& getRoundingOpt() const { return m_rounding; }
+    const std::optional<float>& getRoundingOpt() const { return m_rounding.get(); }
     static constexpr float getRoundingOptFallback() { return 8.f; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     std::string m_format      = "MMM D, YYYY";
     std::string m_placeholder = "Pick a date";
     std::optional<Date> m_initialDate;
@@ -203,21 +227,21 @@ private:
     float m_labelAspect      = 3.0f;
 
     Color       m_bgColor        = Color{0, 0, 0, 0};
-    std::string m_bgColorRole    = "panelAlt";
+    Themed<std::string> m_bgColorRole {"panelAlt"};
     Color       m_hoverColor     = Color{255, 255, 255, 20};
-    std::string m_hoverColorRole = "panel";
-    std::optional<float>       m_rounding;
+    Themed<std::string> m_hoverColorRole {"panel"};
+    Themed<std::optional<float>> m_rounding;
     float       m_padding        = 14.f;
     Color                m_outlineColor = Color::Transparent;
-    std::string          m_outlineColorRole;
-    float m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
 
-    std::string  m_fontPath;
+    Themed<std::string> m_fontPath;
     unsigned int m_charSize      = 16;
     Color        m_textColor     = Color::White;
-    std::string  m_textColorRole = "text";
+    Themed<std::string> m_textColorRole {"text"};
     Color        m_placeholderColor     = Color{255, 255, 255, 140};
-    std::string  m_placeholderColorRole = "textDim";
+    Themed<std::string> m_placeholderColorRole {"textDim"};
 
     bool        m_showIcon      = true;
     std::string m_icon          = "calendar";
@@ -226,12 +250,12 @@ private:
     float       m_iconStroke    = 0.f;
     bool        m_hasIconStroke = false;
     Color       m_iconColor     = Color::White;
-    std::string m_iconColorRole = "textDim";
+    Themed<std::string> m_iconColorRole {"textDim"};
     bool        m_showChevron   = true;
     std::string m_chevronIcon   = "chevron-down";
     float       m_chevronSize   = 20.f;
     Color       m_chevronColor  = Color::White;
-    std::string m_chevronColorRole = "textDim";
+    Themed<std::string> m_chevronColorRole {"textDim"};
 
     DatePickerOptions m_picker;
     bool              m_closeOnSelect = true;
@@ -241,6 +265,8 @@ private:
     VoidCallback  m_onOpened;
     VoidCallback  m_onClosed;
     VoidCallback  m_onCleared;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -252,7 +278,7 @@ private:
                 this field was given, then the active Theme's, then 8.
 */
 inline float DateFieldOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 8.f);
+    return m_rounding.get().value_or(8.f);
 }
 
 
@@ -264,7 +290,7 @@ inline float DateFieldOptions::getRounding() const {
                 field was not given one.
 */
 inline const std::string& DateFieldOptions::getFontPath() const {
-    return Theme::resolveFont(m_fontPath);
+    return m_fontPath.get();
 }
 
 
@@ -294,6 +320,11 @@ inline const std::string& DateFieldOptions::getFontPath() const {
 */
 class DateField : public Row {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_dfOptions.inheritFrom(theme.cascade<DateFieldOptions>(m_dfOptions.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_dfOptions.getOuterPadding(); }
 
     explicit DateField(Modifier modifier, DateFieldOptions options = {}, const std::string& name = "");

@@ -14,8 +14,6 @@
 
 - [`setRenderer(Renderer& renderer)`](#setrenderer)
 - [`getPopupBackdrops()`](#getpopupbackdrops)
-- [`getPalette()`](#getpalette)
-- [`ownPalette()`](#ownpalette)
 - [`getElement(const std::string& name)`](#getelement)
 
 ---
@@ -67,30 +65,6 @@ getPopupBackdrops()
 **Returns** — std::vector&lt;[Element](elements/Element.hpp.md#element)*&gt; -- in insertion order
 
 The elements currently in the floating layer. Native rendering walks the internal list directly; this exists for the web bridge, which cannot see it and reads this on each sync to mirror popups -- a picker adds its backdrop here when it opens -- into an on-top overlay.
-
----
-
-### getPalette
-
-```cpp
-getPalette()
-```
-
-**Returns** — const [Palette](Palette.hpp.md#palette)&
-
-The palette colours resolve against: this [UILO](#uilo)'s own when it has one, otherwise the Theme's. Read live rather than cached, so replacing the theme's palette restyles every [UILO](#uilo) that has not overridden it and theme switching needs no rebuild.
-
----
-
-### ownPalette
-
-```cpp
-ownPalette()
-```
-
-**Returns** — [Palette](Palette.hpp.md#palette)& -- this [UILO](#uilo)'s own, to edit in place
-
-Takes ownership of a palette: the theme's is copied in on the first call and this [UILO](#uilo) stops following Theme::setPalette() from then on. Deliberately not an overload of getPalette(), because that ownership transfer is too surprising to happen merely because the caller happened to hold a non-const [UILO](#uilo) -- reading through getPalette() always keeps following the theme.
 
 ---
 

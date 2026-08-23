@@ -45,7 +45,7 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for the text, falling back to the active Theme's when this box was not given one. May be a path or a name the [Resources](../../utils/Resources.hpp.md#resources) font registry knows.
+[Font](../../renderer/Renderer.hpp.md#font) for the text, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s when this box was not given one. May be a path or a name the [Resources](../../utils/Resources.hpp.md#resources) font registry knows.
 
 ---
 
@@ -57,7 +57,7 @@ getCharSize()
 
 **Returns** — unsigned int
 
-Character size in unscaled pixels, resolved in three steps: the value this box was given, then the active Theme's, then 18. Ask hasCharSize() to tell a real setting from the fallback, which is what the box does before deciding to size the text from its own height instead.
+Character size in unscaled pixels, resolved in three steps: the value this box was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 18. Ask hasCharSize() to tell a real setting from the fallback, which is what the box does before deciding to size the text from its own height instead.
 
 ---
 
@@ -69,4 +69,4 @@ getRounding()
 
 **Returns** — float
 
-Corner radius, resolved in three steps: the value this box was given, then the active Theme's, then 0.
+Corner radius, resolved in three steps: the value this box was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 0.

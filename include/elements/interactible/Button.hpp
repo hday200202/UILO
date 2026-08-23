@@ -6,6 +6,8 @@
 #include "../decoration/Text.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -20,66 +22,85 @@ namespace uilo {
 */
 class ButtonOptions {
 public:
-    ButtonOptions() = default;
+    UILO_THEMED(ButtonOptions)
+
+    /*
+        inheritFrom(const ButtonOptions& prototype):
+        - Params:   const ButtonOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const ButtonOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_innerPadding.inherit(prototype.m_innerPadding);
+        m_rounding.inherit(prototype.m_rounding);
+        m_colorRole.inherit(prototype.m_colorRole);
+        m_gradientRole.inherit(prototype.m_gradientRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    ButtonOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    ButtonOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    ButtonOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    ButtonOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
-    // Space kept between this element's edge and the box its label sits in. Unset follows
-    // Theme::setInnerPadding().
-    ButtonOptions& setInnerPadding(float px)   { m_innerPadding = px; return *this; }
-    ButtonOptions& clearInnerPadding()         { m_innerPadding.reset(); return *this; }
-    float  getInnerPadding()     const { return Theme::resolveInnerPadding(m_innerPadding, 0.f); }
+    // Space kept between this element's edge and the box its label sits in. Unset follows the theme's default for this type.
+    ButtonOptions& setInnerPadding(float px)   { m_innerPadding.set(px); return *this; }
+    ButtonOptions& clearInnerPadding()         { m_innerPadding.clear(); return *this; }
+    float  getInnerPadding()     const { return m_innerPadding.get().value_or(0.f); }
 
     ButtonOptions& setColor(const Color& c)              { m_color = c; return *this; }
-    ButtonOptions& setColorRole(const std::string& r)    { m_colorRole = r; return *this; }
+    ButtonOptions& setColorRole(const std::string& r)    { m_colorRole.set(r); return *this; }
     ButtonOptions& setGradient(const Gradient& g)        { m_gradient = g; return *this; }
-    ButtonOptions& setGradientRole(const std::string& r) { m_gradientRole = r; return *this; }
-    ButtonOptions& setRounding(float r)                  { m_rounding = r; return *this; }
+    ButtonOptions& setGradientRole(const std::string& r) { m_gradientRole.set(r); return *this; }
+    ButtonOptions& setRounding(float r)                  { m_rounding.set(r); return *this; }
     ButtonOptions& inheritRounding(const std::optional<float>& own, float fallback);
 
     // Outline: a border drawn inside the element's bounds, so turning one on
     // never changes the space the element takes.
     ButtonOptions& setOutlineColor(const Color& c)           { m_outlineColor = c; return *this; }
-    ButtonOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    ButtonOptions& setOutlineThickness(float px)             { m_outlineThickness = px; return *this; }
+    ButtonOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    ButtonOptions& setOutlineThickness(float px)             { m_outlineThickness.set(px); return *this; }
 
     ButtonOptions& setLabel(Text* t)                         { m_label = t; return *this; }
 
     Color              getColor()        const { return m_color; }
-    const std::string& getColorRole()    const { return m_colorRole; }
+    const std::string& getColorRole()    const { return m_colorRole.get(); }
     const Gradient&    getGradient()     const { return m_gradient; }
-    const std::string& getGradientRole() const { return m_gradientRole; }
+    const std::string& getGradientRole() const { return m_gradientRole.get(); }
     float              getRounding()     const;
-    const std::optional<float>& getRoundingOpt()      const { return m_rounding; }
+    const std::optional<float>& getRoundingOpt()      const { return m_rounding.get(); }
     float                       getRoundingFallback() const { return m_roundingFallback; }
 
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
 
     Text* getLabel() const { return m_label; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::optional<float> m_innerPadding;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::optional<float>> m_innerPadding;
     Color       m_color = Color{0, 0, 0, 0};
-    std::string m_colorRole;
+    Themed<std::string> m_colorRole;
     Gradient    m_gradient;
-    std::string m_gradientRole;
+    Themed<std::string> m_gradientRole;
 
-    std::optional<float> m_rounding;
+    Themed<std::optional<float>> m_rounding;
     float                m_roundingFallback = 0.f;
 
     Color       m_outlineColor = Color::Transparent;
-    std::string m_outlineColorRole;
-    float       m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole;
+    Themed<float> m_outlineThickness {0.f};
 
     Text* m_label = nullptr;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -93,12 +114,18 @@ private:
                 Passing it through unresolved, rather than as a number the
                 widget already worked out, is what lets the theme keep reaching
                 this element after it has been built.
+    - An empty `own` leaves the field following the theme rather than pinning it
+      empty, so a themed radius still reaches the part.
 */
 inline ButtonOptions& ButtonOptions::inheritRounding(
     const std::optional<float>& own,
     float fallback
 ) {
-    m_rounding         = own;
+    /* Only an actual value counts as a setting. Marking the field explicit
+       when `own` is empty would say "the widget chose no rounding", which the
+       theme must then leave alone -- and every inner part of every composite
+       widget would silently stop following it. */
+    if (own) m_rounding.set(own);
     m_roundingFallback = fallback;
     return *this;
 }
@@ -114,7 +141,7 @@ inline ButtonOptions& ButtonOptions::inheritRounding(
                 changing the Theme restyles a button already on screen.
 */
 inline float ButtonOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, m_roundingFallback);
+    return m_rounding.get().value_or(m_roundingFallback);
 }
 
 
@@ -134,6 +161,11 @@ inline float ButtonOptions::getRounding() const {
 */
 class Button : public Row {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_buttonOptions.inheritFrom(theme.cascade<ButtonOptions>(m_buttonOptions.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_buttonOptions.getOuterPadding(); }
     float getInnerPadding() const override { return m_buttonOptions.getInnerPadding(); }
 

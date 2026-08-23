@@ -3,12 +3,13 @@
 Generated from the block comments in `include/` by `tools/gen_docs.py`.
 Edit the comments, not these files.
 
-79 files, 97 types, 834 functions.
+88 files, 107 types, 879 functions.
 
 ## elements
 
 - [Element.cpp](elements/Element.cpp.md)
 - [Element.hpp](elements/Element.hpp.md) — `ElementType`, `Element`
+- [Factory.hpp](elements/Factory.hpp.md)
 - [Modifier.cpp](elements/Modifier.cpp.md)
 - [Modifier.hpp](elements/Modifier.hpp.md) — `cb_traits`, `Modifier`
 
@@ -55,6 +56,8 @@ Edit the comments, not these files.
 
 ## elements/widgets
 
+- [ContextMenu.cpp](elements/widgets/ContextMenu.cpp.md)
+- [ContextMenu.hpp](elements/widgets/ContextMenu.hpp.md) — `ContextMenuOptions`, `ContextMenu`
 - [DateField.cpp](elements/widgets/DateField.cpp.md)
 - [DateField.hpp](elements/widgets/DateField.hpp.md) — `DateFieldLayout`, `DateFieldOptions`, `DateField`
 - [DatePicker.cpp](elements/widgets/DatePicker.cpp.md)
@@ -83,10 +86,13 @@ Edit the comments, not these files.
 - [Alignment.hpp](utils/Alignment.hpp.md) — `Align`
 - [Color.cpp](utils/Color.cpp.md)
 - [Color.hpp](utils/Color.hpp.md) — `Color`
+- [ContextMenuItem.hpp](utils/ContextMenuItem.hpp.md) — `ContextMenuItem`, `ContextMenuBuilder`
 - [Cursor.hpp](utils/Cursor.hpp.md) — `CursorType`
 - [DateAndTime.cpp](utils/DateAndTime.cpp.md)
 - [DateAndTime.hpp](utils/DateAndTime.hpp.md) — `Weekday`, `Month`, `Date`, `Time`, …
 - [Dimension.hpp](utils/Dimension.hpp.md) — `Dimension`
+- [FileDialog.cpp](utils/FileDialog.cpp.md) — `FilterSpecs`
+- [FileDialog.hpp](utils/FileDialog.hpp.md) — `FileFilter`, `FileDialogOptions`
 - [FileTree.hpp](utils/FileTree.hpp.md) — `FileKind`, `EntryType`, `FSEntry`, `File`, …
 - [Gradient.cpp](utils/Gradient.cpp.md)
 - [Gradient.hpp](utils/Gradient.hpp.md) — `GradientColor`, `Gradient`
@@ -95,7 +101,8 @@ Edit the comments, not these files.
 - [OS.cpp](utils/OS.cpp.md)
 - [Resources.cpp](utils/Resources.cpp.md)
 - [Resources.hpp](utils/Resources.hpp.md) — `Resources`
-- [Theme.cpp](utils/Theme.cpp.md)
+- [Theme.hpp](utils/Theme.hpp.md) — `Theme`, `UILO_THEMED`
+- [Themed.hpp](utils/Themed.hpp.md) — `Themed`
 - [Timer.hpp](utils/Timer.hpp.md) — `Timer`
 
 ## wt
@@ -107,6 +114,8 @@ Edit the comments, not these files.
 
 ## (root)
 
+- [Defaults.cpp](Defaults.cpp.md)
+- [Defaults.hpp](Defaults.hpp.md)
 - [Page.cpp](Page.cpp.md)
 - [Page.hpp](Page.hpp.md) — `Page`
 - [Palette.cpp](Palette.cpp.md)
@@ -125,6 +134,10 @@ Edit the comments, not these files.
 - [Column](elements/containers/Column.hpp.md#column)
 - [ColumnOptions](elements/containers/Column.hpp.md#columnoptions)
 - [Container](elements/containers/Container.hpp.md#container)
+- [ContextMenu](elements/widgets/ContextMenu.hpp.md#contextmenu)
+- [ContextMenuBuilder](utils/ContextMenuItem.hpp.md#contextmenubuilder)
+- [ContextMenuItem](utils/ContextMenuItem.hpp.md#contextmenuitem)
+- [ContextMenuOptions](elements/widgets/ContextMenu.hpp.md#contextmenuoptions)
 - [CursorType](utils/Cursor.hpp.md#cursortype)
 - [Date](utils/DateAndTime.hpp.md#date)
 - [DateField](elements/widgets/DateField.hpp.md#datefield)
@@ -146,8 +159,11 @@ Edit the comments, not these files.
 - [FileBrowser](elements/widgets/Filebrowser.hpp.md#filebrowser)
 - [FileBrowserOptions](elements/widgets/Filebrowser.hpp.md#filebrowseroptions)
 - [FileBrowserSort](elements/widgets/Filebrowser.hpp.md#filebrowsersort)
+- [FileDialogOptions](utils/FileDialog.hpp.md#filedialogoptions)
+- [FileFilter](utils/FileDialog.hpp.md#filefilter)
 - [FileKind](utils/FileTree.hpp.md#filekind)
 - [FileTree](utils/FileTree.hpp.md#filetree)
+- [FilterSpecs](utils/FileDialog.cpp.md#filterspecs)
 - [Font](renderer/Renderer.hpp.md#font)
 - [Gradient](utils/Gradient.hpp.md#gradient)
 - [GradientColor](utils/Gradient.hpp.md#gradientcolor)
@@ -192,11 +208,14 @@ Edit the comments, not these files.
 - [TextOptions](elements/decoration/Text.hpp.md#textoptions)
 - [Textbox](elements/interactible/Textbox.hpp.md#textbox)
 - [TextboxOptions](elements/interactible/Textbox.hpp.md#textboxoptions)
+- [Theme](utils/Theme.hpp.md#theme)
+- [Themed](utils/Themed.hpp.md#themed)
 - [ThumbShape](elements/interactible/Slider.hpp.md#thumbshape)
 - [Time](utils/DateAndTime.hpp.md#time)
 - [Timer](utils/Timer.hpp.md#timer)
 - [Translator](wt/Translator.hpp.md#translator)
 - [UILO](UILO.hpp.md#uilo)
+- [UILO_THEMED](utils/Theme.hpp.md#uilo-themed)
 - [UiloApplication](wt/UiloWt.cpp.md#uiloapplication)
 - [ValueChangedFuncPtr](elements/interactible/Slider.hpp.md#valuechangedfuncptr)
 - [Vec2f](utils/Math.hpp.md#vec2f)

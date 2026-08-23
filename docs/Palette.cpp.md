@@ -16,8 +16,6 @@
 - [`getGradient(std::string_view role)`](#getgradient)
 - [`hasGradient(std::string_view role)`](#hasgradient)
 - [`clear()`](#clear)
-- [`defaultDark()`](#defaultdark)
-- [`defaultLight()`](#defaultlight)
 
 ---
 
@@ -179,27 +177,3 @@ clear()
 **Returns** — void
 
 Removes all color and gradient entries.
-
----
-
-### defaultDark
-
-```cpp
-defaultDark()
-```
-
-**Returns** — [Palette](Palette.hpp.md#palette)
-
-Returns a pre-populated dark palette covering every role [UILO](UILO.hpp.md#uilo)'s built-in widgets read. Intended as a starting point that consumers override per role as needed. bg panel panelAlt accent accentHover onAccent text textDim outline These are the role names the built-in widgets default to, so a palette covering them themes every widget without naming a single role at the call site.
-
----
-
-### defaultLight
-
-```cpp
-defaultLight()
-```
-
-**Returns** — [Palette](Palette.hpp.md#palette)
-
-Returns a pre-populated light palette covering every role [UILO](UILO.hpp.md#uilo)'s built-in widgets read. Intended as a starting point that consumers override per role as needed.

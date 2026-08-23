@@ -126,9 +126,11 @@ headers, not here.
 ## Features
 
 - [~] Palette
-      Done: central definitions, runtime switching, per-UILO override (which is
-      what gives Wt sessions their own look), and every widget following roles
-      with nothing named at the call site.
+      Done: central definitions in Defaults.hpp, runtime switching, per-UILO
+      override via UILO::setTheme (which is what gives Wt sessions their own
+      look), and every widget following roles with nothing named at the call
+      site. A Palette is now reachable only through a Theme -- there is no
+      UILO::setPalette any more.
       - [ ] Serialization / deserialization
       - Literal-only on purpose, not a gap: transparent-by-default container
         fills and outlines (a role would paint every container), Image tint (a
@@ -138,16 +140,51 @@ headers, not here.
         unknown background.
 
 - [~] Theme
-      Done: app-wide palette, rounding, outer padding, char size, font and icon
-      stroke width; cascading element -> theme -> type default, so a theme only
-      fills in what was left alone; composite widgets that keep following the
-      theme after construction (inheritRounding). Deliberately NOT outline -- a
-      border on everything reads as noise.
-      - [ ] Font and char size still resolve once into widget label options, the
-            way rounding used to. Only matters for a theme swapped at runtime;
-            the same inherit* treatment fixes it.
-      - [ ] Reusable style bundles: a named set of Options applied to many
-            elements, which is the piece Theme deliberately does not cover.
+      Rebuilt 2026-08-23, twice. A Theme is the palette plus one prototype per
+      Modifier and *Options type, all declared in include/Defaults.hpp -- the
+      single file that carries the library's look. A UILO owns its theme
+      (ui.getTheme() / ui.setTheme()); there is no global, and no way to install
+      a palette without going through a Theme.
+      - Applied when an element BINDS to its UILO, not when it is constructed,
+        which is what lets a tree be built before the UILO exists (the idiomatic
+        UILO ui(renderer, buildMainPage())) and what makes setTheme() restyle a
+        running app with nothing rebuilt.
+      - Every themeable field is a Themed<T>: a value plus one bit saying whether
+        the call site set it. That bit is the whole system -- a theme fills gaps
+        and never overrides a setting, and inheriting leaves the bit clear so a
+        later theme change still reaches the field.
+      - Named roles carry shape the way the palette carries colour, and the
+        h1/h2/h3/body/caption/panel/card/primaryButton/ghostButton helpers in
+        Factory.hpp are one line each over them. That is the "reusable style
+        bundles" item this entry used to carry.
+      - [ ] Not every field is themeable yet. Converted: the optionals (padding,
+            rounding, char size, stroke), every colour role, every thickness,
+            Modifier's width/height/align/visible, and Text's weight and
+            alignment. Still plain, so a theme cannot set them: literal Colors,
+            item heights, and most per-widget numbers. Same Themed<T> treatment
+            when one earns it.
+      - [x] Roles cascade over the type's default (fixed 2026-08-23). They used
+            to be a snapshot: edit() seeded a new role by copying the default,
+            so changing a shared value afterwards reached every plain element
+            and silently skipped every one that named a role -- the theme
+            example's Square/Rounded/Pill buttons did nothing to anything
+            role-styled. A role now holds only what it overrides, and cascade()
+            composes it over the default at read time.
+      - [x] inheritRounding pinned instead of deferring (fixed 2026-08-23).
+            Converting the fields to Themed<T> turned `m_rounding = own` into
+            `m_rounding.set(own)`, which marked the field explicit even when
+            `own` was empty -- so every inner part a composite widget built
+            through it stopped following the theme. The dropdown's popup was the
+            visible half; its header only appeared to work because it is a
+            Button picking up the base ButtonOptions radius. Now only a real
+            value counts as a setting.
+      - [ ] Composite widgets build their inner elements in their constructor,
+            before the theme is applied. Colour is fine (it resolves at draw),
+            but a themed SIZE on an inner part is read before it arrives. Either
+            rebuild inner parts in applyTheme or read those options lazily.
+      - [ ] Loading a theme from a file, so a look can be edited without a
+            rebuild. The prototypes are plain setters, so this is a
+            serialization problem shared with the Palette entry above.
       - [ ] More themed properties as they earn it -- scroll speed, spacing
             scale, hover/pressed tints.
 

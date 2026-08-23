@@ -51,7 +51,7 @@ panelOptionsFrom(const FileBrowserOptions& o)
 
 **Returns** — [ColumnOptions](../containers/Column.hpp.md#columnoptions)
 
-Builds the options for the panel the entries sit in. The panel is a plain [Column](../containers/Column.hpp.md#column), and [FileBrowserOptions](Filebrowser.hpp.md#filebrowseroptions) owns the subset of [ColumnOptions](../containers/Column.hpp.md#columnoptions) that makes sense to expose, so the widget keeps a single Options type in its public API. Rounding is passed through unresolved so the panel keeps following the Theme.
+Builds the options for the panel the entries sit in. The panel is a plain [Column](../containers/Column.hpp.md#column), and [FileBrowserOptions](Filebrowser.hpp.md#filebrowseroptions) owns the subset of [ColumnOptions](../containers/Column.hpp.md#columnoptions) that makes sense to expose, so the widget keeps a single Options type in its public API. Rounding is passed through unresolved so the panel keeps following the [Theme](../../utils/Theme.hpp.md#theme).
 
 ---
 

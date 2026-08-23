@@ -62,7 +62,7 @@ static Palette makeLightPalette() {
 }
 
 static void applyTheme(UILO& ui, bool dark) {
-    ui.setPalette(dark ? makeDarkPalette() : makeLightPalette());
+    ui.getTheme().setPalette(dark ? makeDarkPalette() : makeLightPalette());
 }
 
 // ---------------------------------------------------------------------------

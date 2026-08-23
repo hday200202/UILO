@@ -44,4 +44,4 @@ getRounding()
 
 **Returns** — float
 
-Corner radius, resolved in three steps: the value this element was given, then the active Theme's, then 0. Resolved on every read rather than cached, so changing the Theme restyles a canvas already on screen.
+Corner radius, resolved in three steps: the value this element was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 0. Resolved on every read rather than cached, so changing the [Theme](../../utils/Theme.hpp.md#theme) restyles a canvas already on screen.

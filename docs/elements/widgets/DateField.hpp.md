@@ -61,7 +61,7 @@ getRounding()
 
 **Returns** — float
 
-Corner radius of the field, resolved in three steps: the value this field was given, then the active Theme's, then 8.
+Corner radius of the field, resolved in three steps: the value this field was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 8.
 
 ---
 
@@ -73,4 +73,4 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for the label, falling back to the active Theme's when this field was not given one.
+[Font](../../renderer/Renderer.hpp.md#font) for the label, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s when this field was not given one.

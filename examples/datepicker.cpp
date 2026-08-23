@@ -27,7 +27,7 @@ static Palette makeDarkPalette() {
     return p;
 }
 
-static Element* caption(const std::string& s) {
+static Element* fieldCaption(const std::string& s) {
     return text(
         Modifier()
             .setHeight(26_px),
@@ -57,7 +57,7 @@ int main() {
     UILO ui;
     ui.setRenderer(renderer);
     ui.setScale(OS::scale());
-    ui.setPalette(makeDarkPalette());
+    ui.getTheme().setPalette(makeDarkPalette());
     ui.addPage(page(buildRoot(), "main_page"));
     ui.setPage("main_page");
 
@@ -163,22 +163,22 @@ Container* buildRoot() {
 
                     gap(12_px),
 
-                    caption("Default"),
+                    fieldCaption("Default"),
                     plain,
 
                     gap(18_px),
 
-                    caption("Range mode"),
+                    fieldCaption("Range mode"),
                     range,
 
                     gap(18_px),
 
-                    caption("Square: icon only, same widget"),
+                    fieldCaption("Square: icon only, same widget"),
                     compact,
 
                     gap(18_px),
 
-                    caption("Preset value, long format"),
+                    fieldCaption("Preset value, long format"),
                     preset
                 }
             )

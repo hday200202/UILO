@@ -10,10 +10,9 @@ int main(int argc, char** argv) {
     UILO uilo(renderer, buildMainPage());
     uilo.setScale(OS::scale());
 
-    Palette palette;
-    palette.set("termBg", Color::fromHex("#2f2d30"));
-    uilo.setPalette(palette);
-    Theme::current().setOuterPadding(0.f);
+    /* Added to the default palette rather than replacing it, so the built-in
+       widgets keep the roles Defaults.hpp gives them. */
+    uilo.getTheme().palette().set("termBg", Color::fromHex("#2f2d30"));
 
     /*
         A frame, so it can be drawn from the loop below and from the live-resize

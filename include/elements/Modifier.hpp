@@ -7,6 +7,7 @@
 #include "../utils/Utils.hpp"
 #include "../utils/Material.hpp"
 #include "../utils/Theme.hpp"
+#include "../utils/Themed.hpp"
 #include "../utils/Cursor.hpp"
 #include "../utils/ContextMenuItem.hpp"
 
@@ -127,7 +128,7 @@ inline ScrollFuncPtr makeScrollCb(F&& f) {
 */
 class Modifier {
 public:
-    Modifier() = default;
+    UILO_THEMED(Modifier)
 
     Modifier& setWidth(Dimension dim);
     Modifier& setHeight(Dimension dim);
@@ -197,6 +198,25 @@ public:
     // The builder form runs on every right-click, for a menu that depends on
     // application state:
     //     .setContextMenu([this] { return m_selection ? clipItems() : laneItems(); })
+    /*
+        inheritFrom(const Modifier& prototype):
+        - Params:   const Modifier& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+        - Callbacks are never inherited: a handler belongs to the element that
+          was given it, not to how that element looks.
+    */
+    void inheritFrom(const Modifier& prototype) {
+        m_width.inherit(prototype.m_width);
+        m_height.inherit(prototype.m_height);
+        m_align.inherit(prototype.m_align);
+        m_visible.inherit(prototype.m_visible);
+        inheritOptional(m_cursor, prototype.m_cursor);
+    }
+
     Modifier& setContextMenu(std::vector<ContextMenuItem> items);
     Modifier& setContextMenu(ContextMenuBuilder builder);
     Modifier& clearContextMenu();
@@ -208,9 +228,9 @@ public:
 private:
     /* A share rather than a percentage, so a row of unsized children divides
        itself evenly instead of every one of them claiming the whole row. */
-    Dimension m_width  = 1_flex;
-    Dimension m_height = 1_flex;
-    Align     m_align  = Align::Left | Align::Top;
+    Themed<Dimension> m_width  {1_flex};
+    Themed<Dimension> m_height {1_flex};
+    Themed<Align>     m_align  {Align::Left | Align::Top};
 
     FuncPtr       m_onLeftClick;
     FuncPtr       m_onRightClick;
@@ -220,7 +240,7 @@ private:
     FuncPtr       m_onUpdateEnd;
     ScrollFuncPtr m_onScroll;
 
-    bool                 m_visible      = true;
+    Themed<bool>         m_visible      {true};
     bool                 m_ignoreScroll = false;
     bool                 m_floating     = false;
     bool                 m_draggable    = false;
@@ -229,6 +249,9 @@ private:
     Material             m_material;
     std::optional<CursorType> m_cursor;
     ContextMenuBuilder   m_contextMenu;
+
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 

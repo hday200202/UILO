@@ -8,6 +8,8 @@
 #include "Interactible.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -25,22 +27,50 @@ namespace uilo {
 */
 class TextboxOptions {
 public:
-    TextboxOptions() = default;
+    UILO_THEMED(TextboxOptions)
+
+    /*
+        inheritFrom(const TextboxOptions& prototype):
+        - Params:   const TextboxOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const TextboxOptions& prototype) {
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_charSize.inherit(prototype.m_charSize);
+        m_rounding.inherit(prototype.m_rounding);
+        m_currentLineNumberBold.inherit(prototype.m_currentLineNumberBold);
+        m_currentLineNumberItalic.inherit(prototype.m_currentLineNumberItalic);
+        m_lineNumberCharSize.inherit(prototype.m_lineNumberCharSize);
+        m_textColorRole.inherit(prototype.m_textColorRole);
+        m_bgColorRole.inherit(prototype.m_bgColorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_placeholderColorRole.inherit(prototype.m_placeholderColorRole);
+        m_cursorColorRole.inherit(prototype.m_cursorColorRole);
+        m_selectionColorRole.inherit(prototype.m_selectionColorRole);
+        m_lineNumberColorRole.inherit(prototype.m_lineNumberColorRole);
+        m_currentLineNumberColorRole.inherit(prototype.m_currentLineNumberColorRole);
+        m_lineNumberBgColorRole.inherit(prototype.m_lineNumberBgColorRole);
+        m_fontPath.inherit(prototype.m_fontPath);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    TextboxOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    TextboxOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    TextboxOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    TextboxOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     // Font
-    TextboxOptions& setFont(std::string_view path) { m_fontPath = std::string(path); return *this; }
+    TextboxOptions& setFont(std::string_view path) { m_fontPath.set(std::string(path)); return *this; }
 
     // Text appearance
-    TextboxOptions& setCharSize(unsigned int n)      { m_charSize = n;         return *this; }
+    TextboxOptions& setCharSize(unsigned int n)      { m_charSize.set(n);         return *this; }
     TextboxOptions& setTextColor(Color c)        { m_textColor = c;        return *this; }
-    TextboxOptions& setTextColorRole(const std::string& r) { m_textColorRole = r; return *this; }
+    TextboxOptions& setTextColorRole(const std::string& r) { m_textColorRole.set(r); return *this; }
     TextboxOptions& setBold(bool v)                  { m_bold = v;             return *this; }
     TextboxOptions& setItalic(bool v)                { m_italic = v;           return *this; }
     TextboxOptions& setTextAlignX(Align a)           { m_textAlignX = a;       return *this; }
@@ -48,8 +78,8 @@ public:
 
     // Box appearance
     TextboxOptions& setBackgroundColor(Color c)  { m_bgColor = c;          return *this; }
-    TextboxOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole = r; return *this; }
-    TextboxOptions& setRounding(float r)             { m_rounding = r;         return *this; }
+    TextboxOptions& setBackgroundColorRole(const std::string& r) { m_bgColorRole.set(r); return *this; }
+    TextboxOptions& setRounding(float r)             { m_rounding.set(r);         return *this; }
     // Uniform padding: setInnerPadding is the spelling every other Options
     // uses, setPadding is kept as its alias, and the per-side setters below
     // override either one.
@@ -60,27 +90,26 @@ public:
     TextboxOptions& setPaddingTop(float p)           { m_paddingTop = p;        return *this; }
     TextboxOptions& setPaddingBottom(float p)        { m_paddingBottom = p;     return *this; }
 
-    // Focus outline, drawn only while the textbox is active. Thickness falls
-    // back to Theme::setOutlineThickness() and an unnamed role to
-    // Theme::setOutlineColorRole(), as elsewhere.
+    // Focus outline, drawn only while the textbox is active. Thickness and
+    // role default to whatever Defaults.hpp gives a TextboxOptions.
     TextboxOptions& setOutlineColor(Color c)     { m_outlineColor = c;     return *this; }
-    TextboxOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
-    TextboxOptions& setOutlineThickness(float t)     { m_outlineThickness = t; return *this; }
+    TextboxOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
+    TextboxOptions& setOutlineThickness(float t)     { m_outlineThickness.set(t); return *this; }
 
     // Placeholder
     TextboxOptions& setPlaceholder(const std::string& s) { m_placeholder = s;  return *this; }
     TextboxOptions& setPlaceholderColor(Color c) { m_placeholderColor = c; return *this; }
-    TextboxOptions& setPlaceholderColorRole(const std::string& r) { m_placeholderColorRole = r; return *this; }
+    TextboxOptions& setPlaceholderColorRole(const std::string& r) { m_placeholderColorRole.set(r); return *this; }
 
     // Cursor
     TextboxOptions& setCursorColor(Color c)      { m_cursorColor = c;      return *this; }
-    TextboxOptions& setCursorColorRole(const std::string& r) { m_cursorColorRole = r; return *this; }
+    TextboxOptions& setCursorColorRole(const std::string& r) { m_cursorColorRole.set(r); return *this; }
     TextboxOptions& setCursorWidth(float w)          { m_cursorWidth = w;      return *this; }
     TextboxOptions& setCursorBlinkRate(float s)      { m_blinkRate = s;        return *this; }
 
     // Selection
     TextboxOptions& setSelectionColor(Color c)   { m_selectionColor = c;   return *this; }
-    TextboxOptions& setSelectionColorRole(const std::string& r) { m_selectionColorRole = r; return *this; }
+    TextboxOptions& setSelectionColorRole(const std::string& r) { m_selectionColorRole.set(r); return *this; }
 
     // Line numbers: a gutter down the left edge, numbering the logical lines.
     // Multiline only -- a single-line box has nothing to number. The gutter takes
@@ -96,23 +125,23 @@ public:
     // digits up against the text, which is how an editor normally reads.
     TextboxOptions& setLineNumberAlign(Align a)          { m_lineNumberAlign = a; return *this; }
     TextboxOptions& setLineNumberColor(Color c)          { m_lineNumberColor = c; return *this; }
-    TextboxOptions& setLineNumberColorRole(const std::string& r) { m_lineNumberColorRole = r; return *this; }
+    TextboxOptions& setLineNumberColorRole(const std::string& r) { m_lineNumberColorRole.set(r); return *this; }
     // The line the cursor is on, so it stands out from the rest. Unset (alpha 0)
     // draws every number in the base colour.
     TextboxOptions& setCurrentLineNumberColor(Color c)   { m_currentLineNumberColor = c; return *this; }
-    TextboxOptions& setCurrentLineNumberColorRole(const std::string& r) { m_currentLineNumberColorRole = r; return *this; }
+    TextboxOptions& setCurrentLineNumberColorRole(const std::string& r) { m_currentLineNumberColorRole.set(r); return *this; }
     // Gutter background. Transparent by default, so it sits on the box's own fill.
     TextboxOptions& setLineNumberBackgroundColor(Color c) { m_lineNumberBgColor = c; return *this; }
-    TextboxOptions& setLineNumberBackgroundColorRole(const std::string& r) { m_lineNumberBgColorRole = r; return *this; }
+    TextboxOptions& setLineNumberBackgroundColorRole(const std::string& r) { m_lineNumberBgColorRole.set(r); return *this; }
     // Styling for the numbers themselves, independent of the editor text.
     TextboxOptions& setLineNumberBold(bool v)         { m_lineNumberBold = v; return *this; }
     TextboxOptions& setLineNumberItalic(bool v)       { m_lineNumberItalic = v; return *this; }
     // The cursor's own line can be styled differently again -- bold-only-current
     // is a common editor look. Unset, it follows the two above.
-    TextboxOptions& setCurrentLineNumberBold(bool v)   { m_currentLineNumberBold = v; return *this; }
-    TextboxOptions& setCurrentLineNumberItalic(bool v) { m_currentLineNumberItalic = v; return *this; }
+    TextboxOptions& setCurrentLineNumberBold(bool v)   { m_currentLineNumberBold.set(v); return *this; }
+    TextboxOptions& setCurrentLineNumberItalic(bool v) { m_currentLineNumberItalic.set(v); return *this; }
     // Unset (the default) draws the numbers at the editor's own char size.
-    TextboxOptions& setLineNumberCharSize(unsigned int n) { m_lineNumberCharSize = n; return *this; }
+    TextboxOptions& setLineNumberCharSize(unsigned int n) { m_lineNumberCharSize.set(n); return *this; }
 
     // Behaviour
     TextboxOptions& setMultiline(bool v)             { m_multiline = v;        return *this; }
@@ -138,48 +167,48 @@ public:
 
     const std::string& getFontPath()         const;
     unsigned int       getCharSize()         const;
-    bool               hasCharSize()         const { return m_charSize.has_value(); }
+    bool               hasCharSize()         const { return m_charSize.get().has_value(); }
     Color              getTextColor()        const { return m_textColor; }
-    const std::string& getTextColorRole()    const { return m_textColorRole; }
+    const std::string& getTextColorRole()    const { return m_textColorRole.get(); }
     bool               getBold()             const { return m_bold; }
     bool               getItalic()           const { return m_italic; }
     Align              getTextAlignX()       const { return m_textAlignX; }
     Align              getTextAlignY()       const { return m_textAlignY; }
     Color              getBackgroundColor()  const { return m_bgColor; }
-    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole.get(); }
     float              getRounding()         const;
     float              getPaddingLeft()      const { return m_paddingLeft; }
     float              getPaddingRight()     const { return m_paddingRight; }
     float              getPaddingTop()       const { return m_paddingTop; }
     float              getPaddingBottom()    const { return m_paddingBottom; }
     Color              getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
-    float              getOutlineThickness() const { return m_outlineThickness; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
+    float              getOutlineThickness() const { return m_outlineThickness.get(); }
     const std::string& getPlaceholder()      const { return m_placeholder; }
     Color              getPlaceholderColor() const { return m_placeholderColor; }
-    const std::string& getPlaceholderColorRole() const { return m_placeholderColorRole; }
+    const std::string& getPlaceholderColorRole() const { return m_placeholderColorRole.get(); }
     Color              getCursorColor()      const { return m_cursorColor; }
-    const std::string& getCursorColorRole()  const { return m_cursorColorRole; }
+    const std::string& getCursorColorRole()  const { return m_cursorColorRole.get(); }
     float              getCursorWidth()      const { return m_cursorWidth; }
     float              getBlinkRate()        const { return m_blinkRate; }
     Color              getSelectionColor()   const { return m_selectionColor; }
-    const std::string& getSelectionColorRole() const { return m_selectionColorRole; }
+    const std::string& getSelectionColorRole() const { return m_selectionColorRole.get(); }
     bool               getShowLineNumbers()  const { return m_showLineNumbers; }
     int                getLineNumberMinDigits() const { return m_lineNumberMinDigits; }
     float              getLineNumberPadding()   const { return m_lineNumberPadding; }
     Align              getLineNumberAlign()     const { return m_lineNumberAlign; }
     Color              getLineNumberColor()     const { return m_lineNumberColor; }
-    const std::string& getLineNumberColorRole() const { return m_lineNumberColorRole; }
+    const std::string& getLineNumberColorRole() const { return m_lineNumberColorRole.get(); }
     Color              getCurrentLineNumberColor()     const { return m_currentLineNumberColor; }
-    const std::string& getCurrentLineNumberColorRole() const { return m_currentLineNumberColorRole; }
+    const std::string& getCurrentLineNumberColorRole() const { return m_currentLineNumberColorRole.get(); }
     Color              getLineNumberBackgroundColor()     const { return m_lineNumberBgColor; }
-    const std::string& getLineNumberBackgroundColorRole() const { return m_lineNumberBgColorRole; }
+    const std::string& getLineNumberBackgroundColorRole() const { return m_lineNumberBgColorRole.get(); }
     bool               getLineNumberBold()          const { return m_lineNumberBold; }
     bool               getLineNumberItalic()        const { return m_lineNumberItalic; }
-    bool               getCurrentLineNumberBold()   const { return m_currentLineNumberBold.value_or(m_lineNumberBold); }
-    bool               getCurrentLineNumberItalic() const { return m_currentLineNumberItalic.value_or(m_lineNumberItalic); }
-    unsigned int       getLineNumberCharSize()      const { return m_lineNumberCharSize.value_or(0u); }
-    bool               hasLineNumberCharSize()      const { return m_lineNumberCharSize.has_value(); }
+    bool               getCurrentLineNumberBold()   const { return m_currentLineNumberBold.get().value_or(m_lineNumberBold); }
+    bool               getCurrentLineNumberItalic() const { return m_currentLineNumberItalic.get().value_or(m_lineNumberItalic); }
+    unsigned int       getLineNumberCharSize()      const { return m_lineNumberCharSize.get().value_or(0u); }
+    bool               hasLineNumberCharSize()      const { return m_lineNumberCharSize.get().has_value(); }
 
     bool               getMultiline()        const { return m_multiline; }
     bool               getWrap()             const { return m_wrap; }
@@ -192,49 +221,49 @@ public:
     const std::function<void(const std::string&)>& getOnEnterPressed()  const { return m_onEnterPressed; }
 
 private:
-    std::optional<float> m_outerPadding;
-    std::string        m_fontPath;
-    std::optional<unsigned int> m_charSize;
+    Themed<std::optional<float>> m_outerPadding;
+    Themed<std::string> m_fontPath;
+    Themed<std::optional<unsigned int>> m_charSize;
     Color              m_textColor        = Color::White;
-    std::string        m_textColorRole    = "text";
+    Themed<std::string> m_textColorRole {"text"};
     bool               m_bold             = false;
     bool               m_italic           = false;
     Align              m_textAlignX       = Align::Left;
     Align              m_textAlignY       = Align::CenterY;
     Color              m_bgColor          = Color{50, 50, 50};
-    std::string        m_bgColorRole      = "panelAlt";
-    std::optional<float>              m_rounding;
+    Themed<std::string> m_bgColorRole {"panelAlt"};
+    Themed<std::optional<float>> m_rounding;
     float              m_paddingLeft      = 6.f;
     float              m_paddingRight     = 6.f;
     float              m_paddingTop       = 6.f;
     float              m_paddingBottom    = 6.f;
     Color              m_outlineColor     = Color::White;
-    std::string        m_outlineColorRole = "accent";
-    float m_outlineThickness = 0.f;
+    Themed<std::string> m_outlineColorRole {"accent"};
+    Themed<float> m_outlineThickness {0.f};
     std::string        m_placeholder;
     Color              m_placeholderColor  = Color{128, 128, 128};
-    std::string        m_placeholderColorRole = "textDim";
+    Themed<std::string> m_placeholderColorRole {"textDim"};
     Color              m_cursorColor       = Color::White;
-    std::string        m_cursorColorRole  = "text";
+    Themed<std::string> m_cursorColorRole {"text"};
     float              m_cursorWidth       = 2.f;
     float              m_blinkRate         = 1.0f;   /* full blink cycle in seconds */
     Color              m_selectionColor    = Color{70, 130, 200, 160};
-    std::string        m_selectionColorRole;
+    Themed<std::string> m_selectionColorRole;
     bool        m_showLineNumbers      = false;
     int         m_lineNumberMinDigits  = 2;
     float       m_lineNumberPadding    = 6.f;
     Align       m_lineNumberAlign      = Align::Right;
     Color       m_lineNumberColor      = Color{128, 128, 128};
-    std::string m_lineNumberColorRole  = "textDim";
+    Themed<std::string> m_lineNumberColorRole {"textDim"};
     Color       m_currentLineNumberColor     = Color{0, 0, 0, 0};   /* a == 0 -> use base */
-    std::string m_currentLineNumberColorRole = "text";
+    Themed<std::string> m_currentLineNumberColorRole {"text"};
     Color       m_lineNumberBgColor     = Color{0, 0, 0, 0};
-    std::string m_lineNumberBgColorRole;
+    Themed<std::string> m_lineNumberBgColorRole;
     bool                        m_lineNumberBold   = false;
     bool                        m_lineNumberItalic = false;
-    std::optional<bool>         m_currentLineNumberBold;
-    std::optional<bool>         m_currentLineNumberItalic;
-    std::optional<unsigned int> m_lineNumberCharSize;
+    Themed<std::optional<bool>> m_currentLineNumberBold;
+    Themed<std::optional<bool>> m_currentLineNumberItalic;
+    Themed<std::optional<unsigned int>> m_lineNumberCharSize;
 
     bool               m_multiline         = false;
     bool               m_wrap              = true;   /* wrap text when multiline */
@@ -245,6 +274,8 @@ private:
     float              m_scrollSpeed       = 40.f;   // same default as a Column
     std::function<void(const std::string&)> m_onStringChanged;
     std::function<void(const std::string&)> m_onEnterPressed;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 // ---------------------------------------------------------------------------
@@ -258,7 +289,7 @@ private:
                 font registry knows.
 */
 inline const std::string& TextboxOptions::getFontPath() const {
-    return Theme::resolveFont(m_fontPath);
+    return m_fontPath.get();
 }
 
 
@@ -273,7 +304,7 @@ inline const std::string& TextboxOptions::getFontPath() const {
                 height instead.
 */
 inline unsigned int TextboxOptions::getCharSize() const {
-    return Theme::resolveCharSize(m_charSize, 18);
+    return m_charSize.get().value_or(18);
 }
 
 
@@ -285,7 +316,7 @@ inline unsigned int TextboxOptions::getCharSize() const {
                 given, then the active Theme's, then 0.
 */
 inline float TextboxOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 0.f);
+    return m_rounding.get().value_or(0.f);
 }
 
 
@@ -310,6 +341,11 @@ inline float TextboxOptions::getRounding() const {
 */
 class Textbox : public Interactible {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<TextboxOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     explicit Textbox(

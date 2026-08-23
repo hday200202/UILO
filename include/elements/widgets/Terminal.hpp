@@ -10,6 +10,8 @@
 #include "../../platform/Pty.hpp"
 #include "../../utils/Theme.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -47,14 +49,32 @@ struct TerminalCell {
 */
 class TerminalOptions {
 public:
-    TerminalOptions() = default;
+    UILO_THEMED(TerminalOptions)
+
+    /*
+        inheritFrom(const TerminalOptions& prototype):
+        - Params:   const TerminalOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const TerminalOptions& prototype) {
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_charSize.inherit(prototype.m_charSize);
+        m_rounding.inherit(prototype.m_rounding);
+        m_bgColorRole.inherit(prototype.m_bgColorRole);
+        m_fgColorRole.inherit(prototype.m_fgColorRole);
+        m_cursorColorRole.inherit(prototype.m_cursorColorRole);
+        m_fontPath.inherit(prototype.m_fontPath);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    TerminalOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    TerminalOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    TerminalOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    TerminalOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     // Shell. Empty follows $SHELL, then /bin/sh.
     TerminalOptions& setShell(const std::string& s)      { m_shell = s; return *this; }
@@ -62,18 +82,18 @@ public:
     TerminalOptions& setAutoStart(bool v)                { m_autoStart = v; return *this; }
 
     // Text
-    TerminalOptions& setFont(std::string_view path)    { m_fontPath = std::string(path); return *this; }
-    TerminalOptions& setCharSize(unsigned int n)         { m_charSize = n; return *this; }
+    TerminalOptions& setFont(std::string_view path)    { m_fontPath.set(std::string(path)); return *this; }
+    TerminalOptions& setCharSize(unsigned int n)         { m_charSize.set(n); return *this; }
     // Multiplier on the font's own line height, for tightening or opening up
     // the rows without changing the glyph size.
     TerminalOptions& setLineSpacing(float f)             { m_lineSpacing = f; return *this; }
 
     // Surface
     TerminalOptions& setBackgroundColor(const Color& c)          { m_bgColor = c; return *this; }
-    TerminalOptions& setBackgroundColorRole(const std::string& r){ m_bgColorRole = r; return *this; }
+    TerminalOptions& setBackgroundColorRole(const std::string& r){ m_bgColorRole.set(r); return *this; }
     TerminalOptions& setForegroundColor(const Color& c)          { m_fgColor = c; return *this; }
-    TerminalOptions& setForegroundColorRole(const std::string& r){ m_fgColorRole = r; return *this; }
-    TerminalOptions& setRounding(float r)                { m_rounding = r; return *this; }
+    TerminalOptions& setForegroundColorRole(const std::string& r){ m_fgColorRole.set(r); return *this; }
+    TerminalOptions& setRounding(float r)                { m_rounding.set(r); return *this; }
     // Gap between the widget's edge and the character grid. setInnerPadding is
     // the spelling every other Options uses; setPadding is kept as its alias.
     TerminalOptions& setInnerPadding(float p)             { m_padding = p; return *this; }
@@ -82,7 +102,7 @@ public:
 
     // Cursor
     TerminalOptions& setCursorColor(const Color& c)           { m_cursorColor = c; return *this; }
-    TerminalOptions& setCursorColorRole(const std::string& r) { m_cursorColorRole = r; return *this; }
+    TerminalOptions& setCursorColorRole(const std::string& r) { m_cursorColorRole.set(r); return *this; }
     TerminalOptions& setCursorBlinkRate(float seconds)        { m_blinkRate = seconds; return *this; }
 
     TerminalOptions& setSelectionColor(const Color& c)        { m_selectionColor = c; return *this; }
@@ -110,14 +130,14 @@ public:
     float              getLineSpacing() const { return m_lineSpacing; }
 
     Color              getBackgroundColor()     const { return m_bgColor; }
-    const std::string& getBackgroundColorRole() const { return m_bgColorRole; }
+    const std::string& getBackgroundColorRole() const { return m_bgColorRole.get(); }
     Color              getForegroundColor()     const { return m_fgColor; }
-    const std::string& getForegroundColorRole() const { return m_fgColorRole; }
+    const std::string& getForegroundColorRole() const { return m_fgColorRole.get(); }
     float              getRounding()    const;
     float              getPadding()     const { return m_padding; }
 
     Color              getCursorColor()     const { return m_cursorColor; }
-    const std::string& getCursorColorRole() const { return m_cursorColorRole; }
+    const std::string& getCursorColorRole() const { return m_cursorColorRole.get(); }
     float              getBlinkRate()   const { return m_blinkRate; }
     Color              getSelectionColor() const { return m_selectionColor; }
 
@@ -129,24 +149,24 @@ public:
     const std::function<void(const std::string&)>& getOnOutput() const { return m_onOutput; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     std::string m_shell;
     bool        m_autoStart = true;
 
-    std::string          m_fontPath;
-    std::optional<unsigned int> m_charSize;
+    Themed<std::string> m_fontPath;
+    Themed<std::optional<unsigned int>> m_charSize;
     float                m_lineSpacing = 1.f;
 
     Color       m_bgColor     = Color{16, 16, 20, 255};
-    std::string m_bgColorRole = "panel";
+    Themed<std::string> m_bgColorRole {"panel"};
     Color       m_fgColor     = Color{205, 210, 220, 255};
-    std::string m_fgColorRole = "text";
+    Themed<std::string> m_fgColorRole {"text"};
 
-    std::optional<float> m_rounding;
+    Themed<std::optional<float>> m_rounding;
     float                m_padding = 6.f;
 
     Color       m_cursorColor     = Color{220, 220, 230, 255};
-    std::string m_cursorColorRole = "text";
+    Themed<std::string> m_cursorColorRole {"text"};
     float       m_blinkRate       = 1.0f;
     Color       m_selectionColor  = Color{70, 130, 200, 110};
 
@@ -164,6 +184,8 @@ private:
 
     std::function<void()>                   m_onExit;
     std::function<void(const std::string&)> m_onOutput;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 
@@ -203,7 +225,7 @@ inline Color TerminalOptions::getAnsiColor(int index) const {
                 glyph's advance.
 */
 inline const std::string& TerminalOptions::getFontPath() const {
-    return Theme::resolveFont(m_fontPath);
+    return m_fontPath.get();
 }
 
 
@@ -215,7 +237,7 @@ inline const std::string& TerminalOptions::getFontPath() const {
                 then the Theme, then 14.
 */
 inline unsigned int TerminalOptions::getCharSize() const {
-    return Theme::resolveCharSize(m_charSize, 14);
+    return m_charSize.get().value_or(14);
 }
 
 
@@ -227,7 +249,7 @@ inline unsigned int TerminalOptions::getCharSize() const {
                 widget, then the Theme, then 0.
 */
 inline float TerminalOptions::getRounding() const {
-    return Theme::resolveRounding(m_rounding, 0.f);
+    return m_rounding.get().value_or(0.f);
 }
 
 
@@ -253,6 +275,11 @@ inline float TerminalOptions::getRounding() const {
 */
 class Terminal : public Interactible {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<TerminalOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     explicit Terminal(

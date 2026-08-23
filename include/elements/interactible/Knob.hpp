@@ -9,6 +9,8 @@
 
 #include "Interactible.hpp"
 
+#include "../../utils/Themed.hpp"
+
 namespace uilo {
 
 /*
@@ -42,32 +44,52 @@ enum class KnobArcDir { Clockwise, CounterClockwise };
 */
 class KnobOptions {
 public:
-    KnobOptions() = default;
+    UILO_THEMED(KnobOptions)
+
+    /*
+        inheritFrom(const KnobOptions& prototype):
+        - Params:   const KnobOptions& prototype
+        - Returns:  void
+        - Desc:     Fills in every field the call site left alone from the
+                    theme's prototype, and leaves the rest exactly as it was
+                    set. Run when the element binds to its UILO, and again
+                    whenever that UILO's theme changes.
+    */
+    void inheritFrom(const KnobOptions& prototype) {
+        m_arcThickness.inherit(prototype.m_arcThickness);
+        m_indicatorThickness.inherit(prototype.m_indicatorThickness);
+        m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_outerPadding.inherit(prototype.m_outerPadding);
+        m_bodyColorRole.inherit(prototype.m_bodyColorRole);
+        m_outlineColorRole.inherit(prototype.m_outlineColorRole);
+        m_trackColorRole.inherit(prototype.m_trackColorRole);
+        m_arcColorRole.inherit(prototype.m_arcColorRole);
+        m_indicatorColorRole.inherit(prototype.m_indicatorColorRole);
+    }
 
     // Space kept outside this element, inside the slot its parent gave it. It
-    // shrinks the element rather than displacing a sibling. Unset follows
-    // Theme::setOuterPadding().
-    KnobOptions& setOuterPadding(float px)   { m_outerPadding = px; return *this; }
-    KnobOptions& clearOuterPadding()         { m_outerPadding.reset(); return *this; }
-    float  getOuterPadding()     const { return Theme::resolveOuterPadding(m_outerPadding, 0.f); }
+    // shrinks the element rather than displacing a sibling. Unset follows the theme's default for this type.
+    KnobOptions& setOuterPadding(float px)   { m_outerPadding.set(px); return *this; }
+    KnobOptions& clearOuterPadding()         { m_outerPadding.clear(); return *this; }
+    float  getOuterPadding()     const { return m_outerPadding.get().value_or(0.f); }
 
     // Colors
     KnobOptions& setBodyColor(Color c)        { m_bodyColor = c;       return *this; }
-    KnobOptions& setBodyColorRole(const std::string& r) { m_bodyColorRole = r; return *this; }
+    KnobOptions& setBodyColorRole(const std::string& r) { m_bodyColorRole.set(r); return *this; }
     KnobOptions& setOutlineColor(Color c)     { m_outlineColor = c;    return *this; }
-    KnobOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole = r; return *this; }
+    KnobOptions& setOutlineColorRole(const std::string& r) { m_outlineColorRole.set(r); return *this; }
     KnobOptions& setTrackColor(Color c)       { m_trackColor = c;      return *this; }
-    KnobOptions& setTrackColorRole(const std::string& r) { m_trackColorRole = r; return *this; }
+    KnobOptions& setTrackColorRole(const std::string& r) { m_trackColorRole.set(r); return *this; }
     KnobOptions& setArcColor(Color c)         { m_arcColor = c;        return *this; }
-    KnobOptions& setArcColorRole(const std::string& r) { m_arcColorRole = r; return *this; }
+    KnobOptions& setArcColorRole(const std::string& r) { m_arcColorRole.set(r); return *this; }
     KnobOptions& setIndicatorColor(Color c)   { m_indicatorColor = c;  return *this; }
-    KnobOptions& setIndicatorColorRole(const std::string& r) { m_indicatorColorRole = r; return *this; }
+    KnobOptions& setIndicatorColorRole(const std::string& r) { m_indicatorColorRole.set(r); return *this; }
 
     // Geometry. These thicknesses are unscaled pixels, multiplied by the UILO
     // scale when drawn.
-    KnobOptions& setOutlineThickness(float t) { m_outlineThickness = t; return *this; }
-    KnobOptions& setArcThickness(float t)     { m_arcThickness = t;     return *this; }
-    KnobOptions& setIndicatorThickness(float t){m_indicatorThickness = t;return *this; }
+    KnobOptions& setOutlineThickness(float t) { m_outlineThickness.set(t); return *this; }
+    KnobOptions& setArcThickness(float t)     { m_arcThickness.set(t); return *this; }
+    KnobOptions& setIndicatorThickness(float t){ m_indicatorThickness.set(t); return *this; }
     // Gap (in px, unscaled) between body rim and inner edge of the arc.
     KnobOptions& setArcGap(float g)           { m_arcGap = g;           return *this; }
     // Indicator length as a fraction of body radius (1.0 = touches rim).
@@ -94,18 +116,18 @@ public:
     KnobOptions& setOnValueChanged(KnobValueChangedFuncPtr f) { m_onValueChanged = std::move(f); return *this; }
 
     Color getBodyColor()        const { return m_bodyColor; }
-    const std::string& getBodyColorRole() const { return m_bodyColorRole; }
+    const std::string& getBodyColorRole() const { return m_bodyColorRole.get(); }
     Color getOutlineColor()     const { return m_outlineColor; }
-    const std::string& getOutlineColorRole() const { return m_outlineColorRole; }
+    const std::string& getOutlineColorRole() const { return m_outlineColorRole.get(); }
     Color getTrackColor()       const { return m_trackColor; }
-    const std::string& getTrackColorRole() const { return m_trackColorRole; }
+    const std::string& getTrackColorRole() const { return m_trackColorRole.get(); }
     Color getArcColor()         const { return m_arcColor; }
-    const std::string& getArcColorRole() const { return m_arcColorRole; }
+    const std::string& getArcColorRole() const { return m_arcColorRole.get(); }
     Color getIndicatorColor()   const { return m_indicatorColor; }
-    const std::string& getIndicatorColorRole() const { return m_indicatorColorRole; }
-    float getOutlineThickness() const { return m_outlineThickness; }
-    float getArcThickness()     const { return m_arcThickness; }
-    float getIndicatorThickness()const{ return m_indicatorThickness; }
+    const std::string& getIndicatorColorRole() const { return m_indicatorColorRole.get(); }
+    float getOutlineThickness() const { return m_outlineThickness.get(); }
+    float getArcThickness()     const { return m_arcThickness.get(); }
+    float getIndicatorThickness()const{ return m_indicatorThickness.get(); }
     float getArcGap()           const { return m_arcGap; }
     float getIndicatorLength()  const { return m_indicatorLength; }
     float getIndicatorInset()   const { return m_indicatorInset; }
@@ -123,20 +145,20 @@ public:
     const KnobValueChangedFuncPtr& getOnValueChanged() const { return m_onValueChanged; }
 
 private:
-    std::optional<float> m_outerPadding;
+    Themed<std::optional<float>> m_outerPadding;
     Color m_bodyColor          = Color{55, 58, 74};
-    std::string m_bodyColorRole      = "panel";
+    Themed<std::string> m_bodyColorRole {"panel"};
     Color m_outlineColor       = Color::Transparent;
-    std::string m_outlineColorRole;
+    Themed<std::string> m_outlineColorRole;
     Color m_trackColor         = Color{30, 32, 42};
-    std::string m_trackColorRole     = "panelAlt";
+    Themed<std::string> m_trackColorRole {"panelAlt"};
     Color m_arcColor           = Color{151, 120, 206};
-    std::string m_arcColorRole       = "accent";
+    Themed<std::string> m_arcColorRole {"accent"};
     Color m_indicatorColor     = Color::White;
-    std::string m_indicatorColorRole = "text";
-    float m_outlineThickness   = 0.f;
-    float m_arcThickness       = 4.f;
-    float m_indicatorThickness = 2.f;
+    Themed<std::string> m_indicatorColorRole {"text"};
+    Themed<float> m_outlineThickness {0.f};
+    Themed<float> m_arcThickness {4.f};
+    Themed<float> m_indicatorThickness {2.f};
     float m_arcGap             = 3.f;
     float m_indicatorLength    = 0.75f;
     float m_indicatorInset     = 0.15f;
@@ -154,6 +176,8 @@ private:
     bool  m_invertScroll       = false;
     float m_dragPixelsPerRange = 150.f;
     KnobValueChangedFuncPtr m_onValueChanged;
+    // The theme role this was constructed with; resolved at bind time.
+    std::string m_themeRole;
 };
 
 /*
@@ -171,6 +195,11 @@ private:
 */
 class Knob : public Interactible {
 public:
+    void applyTheme(const Theme& theme) override {
+        m_options.inheritFrom(theme.cascade<KnobOptions>(m_options.getThemeRole()));
+        Element::applyTheme(theme);
+    }
+
     float getOuterPadding() const override { return m_options.getOuterPadding(); }
 
     Knob(

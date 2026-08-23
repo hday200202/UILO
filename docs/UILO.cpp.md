@@ -7,6 +7,9 @@
 ## Functions
 
 - [`UILO(Renderer& renderer, Page* page)`](#uilo)
+- [`UILO()`](#uilo)
+- [`setTheme(const Theme& theme)`](#settheme)
+- [`refreshTheme()`](#refreshtheme)
 - [`addPage(Page* page)`](#addpage)
 - [`setPage(const std::string& pageName)`](#setpage)
 - [`setActivePage(Page* page)`](#setactivepage)
@@ -14,6 +17,10 @@
 - [`setScale(float scale)`](#setscale)
 - [`registerOverlay(Element* e, std::function&lt;void()&gt; onDismiss)`](#registeroverlay)
 - [`unregisterOverlay(Element* e)`](#unregisteroverlay)
+- [`contextMenu()`](#contextmenu)
+- [`showContextMenu(const std::vector&lt;ContextMenuItem&gt;& items, const Vec2f& at)`](#showcontextmenu)
+- [`closeContextMenu()`](#closecontextmenu)
+- [`isContextMenuOpen()`](#iscontextmenuopen)
 - [`addPopupBackdrop(Element* e)`](#addpopupbackdrop)
 - [`removePopupBackdrop(Element* e)`](#removepopupbackdrop)
 - [`requestCursor(CursorType type, int priority)`](#requestcursor)
@@ -25,6 +32,7 @@
 - [`update()`](#update)
 - [`render()`](#render)
 - [`queryMousePixelPosition()`](#querymousepixelposition)
+- [`toPixels(float x, float y)`](#topixels)
 - [`dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum)`](#dispatchscroll)
 - [`dispatchZoom(const Vec2f& pos, float magnification)`](#dispatchzoom)
 - [`wantsScrollMomentum(const Vec2f& pos)`](#wantsscrollmomentum)
@@ -47,6 +55,46 @@ UILO(Renderer& renderer, Page* page)
 **Returns** — [UILO](UILO.hpp.md#uilo)
 
 Set's [UILO](UILO.hpp.md#uilo)'s renderer reference, adds the [Page](Page.hpp.md#page) to [UILO](UILO.hpp.md#uilo), sets active page
+
+---
+
+### UILO
+
+```cpp
+UILO()
+```
+
+**Returns** — n/a
+
+Starts on the defaults in Defaults.hpp. A [UILO](UILO.hpp.md#uilo) owns its theme outright, so two of them can look different in the same process -- which is what a Wt session needs.
+
+---
+
+### setTheme
+
+```cpp
+setTheme(const Theme& theme)
+```
+
+**Parameters**
+
+- `const Theme& theme`
+
+**Returns** — void
+
+Replaces the look of everything this [UILO](UILO.hpp.md#uilo) owns and re-applies it to every element already built, so a restyle needs no rebuild.
+
+---
+
+### refreshTheme
+
+```cpp
+refreshTheme()
+```
+
+**Returns** — void
+
+Pushes the current theme through every element in the pool. Each one takes only what its call site left alone, so this is safe to run repeatedly and never undoes an explicit setting.
 
 ---
 
@@ -160,6 +208,59 @@ unregisterOverlay(Element* e)
 **Returns** — void
 
 Removes an element from the overlay list.
+
+---
+
+### contextMenu
+
+```cpp
+contextMenu()
+```
+
+**Returns** — [ContextMenu](elements/widgets/ContextMenu.hpp.md#contextmenu)*
+
+The shared menu, built on first use. It is held here rather than in the page tree so it survives navigation and is never clipped by whatever container the click landed in, and it is bound to this [UILO](UILO.hpp.md#uilo) immediately so it can measure text before it is first laid out.
+
+---
+
+### showContextMenu
+
+```cpp
+showContextMenu(const std::vector<ContextMenuItem>& items, const Vec2f& at)
+```
+
+**Parameters**
+
+- `const std::vector<ContextMenuItem>& items`
+- `const Vec2f& at`
+
+**Returns** — void
+
+Fills the shared menu and opens it at a point. An empty item list closes whatever was open instead, so a builder that declines has the same effect as no menu at all.
+
+---
+
+### closeContextMenu
+
+```cpp
+closeContextMenu()
+```
+
+**Returns** — void
+
+Puts the menu away, submenus included. Safe before one has ever been built.
+
+---
+
+### isContextMenuOpen
+
+```cpp
+isContextMenuOpen()
+```
+
+**Returns** — bool
+
+Whether a menu is showing. Worth testing before acting on a key the menu also uses.
 
 ---
 
@@ -331,6 +432,23 @@ queryMousePixelPosition()
 **Returns** — [Vec2f](utils/Math.hpp.md#vec2f)
 
 The cursor in render pixels. SDL reports it in window points, so the ratio between the window's point and pixel size converts it; on a retina display those differ by the backing scale.
+
+---
+
+### toPixels
+
+```cpp
+toPixels(float x, float y)
+```
+
+**Parameters**
+
+- `float x`
+- `float y -- a position in window points`
+
+**Returns** — [Vec2f](utils/Math.hpp.md#vec2f) -- the same position in render pixels
+
+SDL reports both the cursor and mouse-button events in window points; [UILO](UILO.hpp.md#uilo) lays out in render pixels, and on a retina display those differ by the backing scale.
 
 ---
 

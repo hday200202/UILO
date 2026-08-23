@@ -24,6 +24,7 @@
 - [`textAlignItems(Align a)`](#textalignitems)
 - [`isRowLike(ElementType t)`](#isrowlike)
 - [`axisOf(Element* el)`](#axisof)
+- [`hasFloatingChild(Container* c)`](#hasfloatingchild)
 - [`backgroundOf(Element* el, Background& out)`](#backgroundof)
 - [`aspectLocked(const ImageOptions& o)`](#aspectlocked)
 - [`knobGeometry(Knob* k)`](#knobgeometry)
@@ -40,6 +41,7 @@
 - [`fontFamilyFor(const std::string& path)`](#fontfamilyfor)
 - [`jsDimension(Dimension d)`](#jsdimension)
 - [`ownHeightExpr(...)`](#ownheightexpr)
+- [`floatingHeightExpr(Element* el, float parentInnerPadding, const std::string& parentHeight)`](#floatingheightexpr)
 - [`styleFor(const Node& n, PseudoRules& pseudo)`](#stylefor)
 - [`applyImageAspect(Image* img)`](#applyimageaspect)
 - [`buildKnob(Knob* k, KnobWidget* w)`](#buildknob)
@@ -269,6 +271,22 @@ axisOf(Element* el)
 **Returns** — Axis
 
 Which axis a container lays out on, so its children can be emitted as flex items in the matching direction.
+
+---
+
+### hasFloatingChild
+
+```cpp
+hasFloatingChild(Container* c)
+```
+
+**Parameters**
+
+- `Container* c`
+
+**Returns** — bool
+
+Whether the container holds a floating child. Such a child is absolutely positioned against the container, so the container has to be a containing block for it -- and only then, since making every box positioned would move them all into the browser's positioned-descendant paint layer for nothing.
 
 ---
 
@@ -534,6 +552,24 @@ The element's drawn height as a CSS length, when the tree alone determines it. U
 
 ---
 
+### floatingHeightExpr
+
+```cpp
+floatingHeightExpr(Element* el, float parentInnerPadding, const std::string& parentHeight)
+```
+
+**Parameters**
+
+- `Element* el`
+- `float parentInnerPadding`
+- `const std::string& parentHeight`
+
+**Returns** — std::string
+
+ownHeightExpr for a floating element. Its height always follows from the parent, whichever axis the parent lays out on, because it is placed rather than distributed -- and outer padding does not shrink it, since it has no siblings to be spaced from. The fraction of the parent's inner padding is taken off instead: the percentage is of the content area, not the whole box.
+
+---
+
 ### styleFor
 
 ```cpp
@@ -679,6 +715,8 @@ translateChildren(...)
 - `const std::string& parentHeight`
 
 [UILO](../UILO.hpp.md#uilo) lays a container out in three groups -- start, centre, end -- and draws them in that order regardless of child order, so the widgets are emitted grouped the same way.
+
+> Floating children are held back and emitted last. They take no part in the flow and their alignment means nothing, and being last in the DOM is what puts them over their siblings once they are absolutely positioned.
 
 ---
 

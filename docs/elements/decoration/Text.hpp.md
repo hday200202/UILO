@@ -40,7 +40,7 @@ getFontPath()
 
 **Returns** — const std::string&
 
-[Font](../../renderer/Renderer.hpp.md#font) for the string, falling back to the active Theme's when this element was not given one. May be either a path or a name the [Resources](../../utils/Resources.hpp.md#resources) font registry knows; [Text](#text) resolves which at load time.
+[Font](../../renderer/Renderer.hpp.md#font) for the string, falling back to the active [Theme](../../utils/Theme.hpp.md#theme)'s when this element was not given one. May be either a path or a name the [Resources](../../utils/Resources.hpp.md#resources) font registry knows; [Text](#text) resolves which at load time.
 
 ---
 
@@ -52,4 +52,4 @@ getCharSize()
 
 **Returns** — unsigned int
 
-Character size in unscaled pixels, resolved in three steps: the value this element was given, then the active Theme's, then 30. Ask hasCharSize() to tell a real setting from the fallback, which is what [Text](#text) does before deciding to size the glyphs from its own height instead.
+Character size in unscaled pixels, resolved in three steps: the value this element was given, then the active [Theme](../../utils/Theme.hpp.md#theme)'s, then 30. Ask hasCharSize() to tell a real setting from the fallback, which is what [Text](#text) does before deciding to size the glyphs from its own height instead.
