@@ -111,10 +111,12 @@ namespace wt {
 namespace {
 
 /*
-    serverArgs():
-    - Wt is configured from a command line; synthesize one from the config so
-      the caller passes nothing. Returned as strings -- WRun wants char*, which
-      the callers point at these.
+    serverArgs(const WebConfig& config):
+    - Params:   const WebConfig& config
+    - Returns:  std::vector<std::string>
+    - Desc:     Wt is configured from a command line; synthesize one from the
+                config so the caller passes nothing. Returned as strings --
+                WRun wants char*, which the callers point at these.
 */
 std::vector<std::string> serverArgs(const WebConfig& config) {
     std::vector<std::string> args = {
@@ -132,8 +134,10 @@ std::vector<std::string> serverArgs(const WebConfig& config) {
 
 
 /*
-    argPointers():
-    - The char* view of serverArgs()'s strings that WRun takes.
+    argPointers(std::vector<std::string>& args):
+    - Params:   std::vector<std::string>& args
+    - Returns:  std::vector<char*>
+    - Desc:     The char* view of serverArgs()'s strings that WRun takes.
 */
 std::vector<char*> argPointers(std::vector<std::string>& args) {
     std::vector<char*> argv;
@@ -148,15 +152,17 @@ std::vector<char*> argPointers(std::vector<std::string>& args) {
 
 /*
     UILO::runWeb(const WebConfig& config):
-    - Serves this UILO over the web and blocks until the server stops. Set the
-      UILO up exactly as on desktop first (addPage/setPage/setTheme); this
-      stands up Wt, points every browser connection at this instance, and
-      returns the server's exit code. No render/update loop and no argv -- the
-      server settings come from the config.
-
-      Every connection shares this instance, and Wt drives connections from
-      different threads: two browsers are two views of one UI, with no lock
-      between them. Use the factory overload for anything multi-user.
+    - Params:   const wt::WebConfig& config
+    - Returns:  int
+    - Desc:     Serves this UILO over the web and blocks until the server
+                stops. Set the UILO up exactly as on desktop first
+                (addPage/setPage/setTheme); this stands up Wt, points every
+                browser connection at this instance, and returns the server's
+                exit code. No render/update loop and no argv -- the server
+                settings come from the config. Every connection shares this
+                instance, and Wt drives connections from different threads:
+                two browsers are two views of one UI, with no lock between
+                them. Use the factory overload for anything multi-user.
 */
 int UILO::runWeb(const wt::WebConfig& config) {
     // The web build never draws, but UILO still expects a renderer to exist.
@@ -176,18 +182,19 @@ int UILO::runWeb(const wt::WebConfig& config) {
 
 /*
     UILO::runWeb(factory, const WebConfig& config):
-    - The per-session counterpart: serves an app whose UILO is built fresh for
-      each browser connection, and blocks until the server stops.
-
-      `factory` runs once per connection, on that connection's own thread, and
-      builds that session's UILO the same way a desktop app builds its one
-      (addPage/setPage/setTheme). The WebApp it returns is owned by the
-      connection and destroyed with it, so sessions share no pages, no palette
-      and no application state -- and cannot race each other's widget trees.
-
-      Anything the factory itself touches is still shared, so whatever it reads
-      (a global theme, a file on disk) has to be safe to read from several
-      threads at once.
+    - Params:   std::function<std::unique_ptr<wt::WebApp>()> factory, const wt::WebConfig& config
+    - Returns:  int
+    - Desc:     The per-session counterpart: serves an app whose UILO is built
+                fresh for each browser connection, and blocks until the server
+                stops. `factory` runs once per connection, on that
+                connection's own thread, and builds that session's UILO the
+                same way a desktop app builds its one (addPage/setPage/
+                setTheme). The WebApp it returns is owned by the connection and
+                destroyed with it, so sessions share no pages, no palette and
+                no application state -- and cannot race each other's widget
+                trees. Anything the factory itself touches is still shared, so
+                whatever it reads (a global theme, a file on disk) has to be
+                safe to read from several threads at once.
 */
 int UILO::runWeb(std::function<std::unique_ptr<wt::WebApp>()> factory,
                  const wt::WebConfig& config) {
