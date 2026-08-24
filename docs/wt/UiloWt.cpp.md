@@ -10,8 +10,8 @@
 
 ## Functions
 
-- [`serverArgs()`](#serverargs)
-- [`argPointers()`](#argpointers)
+- [`serverArgs(const WebConfig& config)`](#serverargs)
+- [`argPointers(std::vector&lt;std::string&gt;& args)`](#argpointers)
 - [`UILO::runWeb(const WebConfig& config)`](#uilo-runweb)
 - [`UILO::runWeb(factory, const WebConfig& config)`](#uilo-runweb)
 
@@ -26,20 +26,32 @@ One browser connection. Renders a [UILO](../UILO.hpp.md#uilo) into this connecti
 ### serverArgs
 
 ```cpp
-serverArgs()
+serverArgs(const WebConfig& config)
 ```
 
-> Wt is configured from a command line; synthesize one from the config so the caller passes nothing. Returned as strings -- WRun wants char*, which the callers point at these.
+**Parameters**
+
+- `const WebConfig& config`
+
+**Returns** — std::vector&lt;std::string&gt;
+
+Wt is configured from a command line; synthesize one from the config so the caller passes nothing. Returned as strings -- WRun wants char*, which the callers point at these.
 
 ---
 
 ### argPointers
 
 ```cpp
-argPointers()
+argPointers(std::vector<std::string>& args)
 ```
 
-> The char* view of serverArgs()'s strings that WRun takes.
+**Parameters**
+
+- `std::vector<std::string>& args`
+
+**Returns** — std::vector&lt;char*&gt;
+
+The char* view of serverArgs()'s strings that WRun takes.
 
 ---
 
@@ -49,7 +61,13 @@ argPointers()
 UILO::runWeb(const WebConfig& config)
 ```
 
-> Serves this [UILO](../UILO.hpp.md#uilo) over the web and blocks until the server stops. Set the [UILO](../UILO.hpp.md#uilo) up exactly as on desktop first (addPage/setPage/setTheme); this stands up Wt, points every browser connection at this instance, and returns the server's exit code. No render/update loop and no argv -- the server settings come from the config. Every connection shares this instance, and Wt drives connections from different threads: two browsers are two views of one UI, with no lock between them. Use the factory overload for anything multi-user.
+**Parameters**
+
+- `const wt::WebConfig& config`
+
+**Returns** — int
+
+Serves this [UILO](../UILO.hpp.md#uilo) over the web and blocks until the server stops. Set the [UILO](../UILO.hpp.md#uilo) up exactly as on desktop first (addPage/setPage/setTheme); this stands up Wt, points every browser connection at this instance, and returns the server's exit code. No render/update loop and no argv -- the server settings come from the config. Every connection shares this instance, and Wt drives connections from different threads: two browsers are two views of one UI, with no lock between them. Use the factory overload for anything multi-user.
 
 ---
 
@@ -59,4 +77,11 @@ UILO::runWeb(const WebConfig& config)
 UILO::runWeb(factory, const WebConfig& config)
 ```
 
-> The per-session counterpart: serves an app whose [UILO](../UILO.hpp.md#uilo) is built fresh for each browser connection, and blocks until the server stops. `factory` runs once per connection, on that connection's own thread, and builds that session's [UILO](../UILO.hpp.md#uilo) the same way a desktop app builds its one (addPage/setPage/setTheme). The [WebApp](../UILO.hpp.md#webapp) it returns is owned by the connection and destroyed with it, so sessions share no pages, no palette and no application state -- and cannot race each other's widget trees. Anything the factory itself touches is still shared, so whatever it reads (a global theme, a file on disk) has to be safe to read from several threads at once.
+**Parameters**
+
+- `std::function<std::unique_ptr<wt::WebApp>()> factory`
+- `const wt::WebConfig& config`
+
+**Returns** — int
+
+The per-session counterpart: serves an app whose [UILO](../UILO.hpp.md#uilo) is built fresh for each browser connection, and blocks until the server stops. `factory` runs once per connection, on that connection's own thread, and builds that session's [UILO](../UILO.hpp.md#uilo) the same way a desktop app builds its one (addPage/setPage/ setTheme). The [WebApp](../UILO.hpp.md#webapp) it returns is owned by the connection and destroyed with it, so sessions share no pages, no palette and no application state -- and cannot race each other's widget trees. Anything the factory itself touches is still shared, so whatever it reads (a global theme, a file on disk) has to be safe to read from several threads at once.

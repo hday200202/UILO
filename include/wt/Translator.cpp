@@ -2216,10 +2216,13 @@ void Translator::translateChildren(Container* container, Wt::WContainerWidget* p
 
 /*
     reconcilePages():
-    - Follows UILO's active page. The first time a page is shown it is
-      translated into a fresh hidden host; then the previous host is hidden and
-      the active one shown. Navigation is therefore just setPage() in a handler
-      -- the next sync() moves the view here.
+    - Params:   none
+    - Returns:  void
+    - Desc:     Follows UILO's active page. The first time a page is shown it
+                is translated into a fresh hidden host; then the previous host
+                is hidden and the active one shown. Navigation is therefore
+                just setPage() in a handler -- the next sync() moves the view
+                here.
 */
 void Translator::reconcilePages() {
     Page* active = m_uilo.getActivePage();
@@ -2244,9 +2247,11 @@ void Translator::reconcilePages() {
 
 /*
     translatePageInto(Page* page, Wt::WContainerWidget* host):
-    - Walks a page once and creates a widget for every element in it, as
-      children of `host`. Called the first time a page is shown; everything
-      afterwards goes through sync().
+    - Params:   Page* page, Wt::WContainerWidget* host
+    - Returns:  void
+    - Desc:     Walks a page once and creates a widget for every element in
+                it, as children of `host`. Called the first time a page is
+                shown; everything afterwards goes through sync().
 */
 void Translator::translatePageInto(Page* page, Wt::WContainerWidget* host) {
     Container* root = page->getRoot();
