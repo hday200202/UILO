@@ -301,14 +301,25 @@ BUILD_DIR="build/$MODE"
 
 GENERATOR="Unix Makefiles"
 command -v ninja >/dev/null 2>&1 && GENERATOR="Ninja"
-case "$OS" in MINGW*|MSYS*|CYGWIN*) GENERATOR="" ;; esac
+PLATFORM_ARGS=()
+case "$OS" in
+    MINGW*|MSYS*|CYGWIN*)
+        # Visual Studio, named explicitly: cmake's default generator depends on
+        # which cmake is first on PATH, and MSYS2's defaults to Ninja.
+        VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+        VS_VER="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion 2>/dev/null || true)"
+        case "${VS_VER%%.*}" in
+            18) GENERATOR="Visual Studio 18 2026" ;;
+            17) GENERATOR="Visual Studio 17 2022" ;;
+            16) GENERATOR="Visual Studio 16 2019" ;;
+            *)  die "no Visual Studio with the C++ x64 toolset found (install 'Desktop development with C++')" ;;
+        esac
+        PLATFORM_ARGS=(-A x64)
+        ;;
+esac
 
-say "configure ($MODE)"
-if [[ -n "$GENERATOR" ]]; then
-    cmake -S . -B "$BUILD_DIR" -G "$GENERATOR" -DCMAKE_BUILD_TYPE="$MODE"
-else
-    cmake -S . -B "$BUILD_DIR" -A x64 -DCMAKE_BUILD_TYPE="$MODE"
-fi
+say "configure ($MODE, $GENERATOR)"
+cmake -S . -B "$BUILD_DIR" -G "$GENERATOR" ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} -DCMAKE_BUILD_TYPE="$MODE"
 
 say "build"
 cmake --build "$BUILD_DIR" --config "$MODE" --parallel

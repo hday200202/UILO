@@ -101,27 +101,49 @@ if [[ $UILO_CLEAN_EXT -eq 1 ]]; then
 fi
 
 # Clones a dependency at a pinned ref, which may be a tag, a branch or a bare
-# commit SHA. --branch takes the first two but not the third, so a SHA falls
-# back to fetching that one commit directly -- GitHub serves any commit this
-# way, and it is still a one-commit download.
+# commit SHA: fetching the one commit directly takes all three, and GitHub
+# serves any commit this way. The clone is partial (blob:none), so file
+# contents are downloaded only for what is checked out. Any further arguments
+# are sparse-checkout patterns, for a repository that carries far more than
+# UILO builds from. They go in on stdin: as arguments, Git Bash would rewrite
+# a pattern such as '!/examples/' into a Windows path.
 clone_if_missing() {
-    local name="$1" url="$2" ref="${3:-}"
-    [[ -d "$EXT/$name" ]] && return 0
+    local name="$1" url="$2" ref="${3:-HEAD}"
+    local dir="$EXT/$name"
+    shift $(( $# < 3 ? $# : 3 ))
+    [[ -d "$dir" ]] && return 0
 
-    echo "[UILO] cloning $name into ext/"
-    if [[ -z "$ref" ]]; then
-        git clone --depth 1 "$url" "$EXT/$name"
-        return
+    echo "[UILO] cloning $name ($ref) into ext/"
+    if git clone -q --depth 1 --filter=blob:none --no-checkout "$url" "$dir" &&
+       { [[ $# -eq 0 ]] ||
+         printf '%s\n' "$@" | git -C "$dir" sparse-checkout set --no-cone --stdin; } &&
+       git -C "$dir" fetch -q --depth 1 origin "$ref" &&
+       git -C "$dir" -c advice.detachedHead=false checkout FETCH_HEAD; then
+        return 0
     fi
-    if git clone --depth 1 --branch "$ref" "$url" "$EXT/$name" 2>/dev/null; then
-        return
-    fi
+    rm -rf "$dir"
+    echo "[UILO] error: could not clone $name ($ref) from $url" >&2
+    exit 1
+}
 
-    rm -rf "$EXT/$name"
-    git init -q "$EXT/$name"
-    git -C "$EXT/$name" remote add origin "$url"
-    git -C "$EXT/$name" fetch -q --depth 1 origin "$ref"
-    git -C "$EXT/$name" checkout -q FETCH_HEAD
+# VALO's examples/ holds over 500 MB of models and textures for its own demo
+# programs, none of which UILO builds.
+VALO_SPARSE=('/*' '!/examples/')
+
+# The Visual Studio generator for the newest Visual Studio with the C++ x64
+# toolset. Named explicitly, because cmake's default generator depends on which
+# cmake is first on PATH -- MSYS2's defaults to Ninja, which takes no -A.
+vs_generator() {
+    local vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+    local ver
+    ver="$("$vswhere" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion 2>/dev/null || true)"
+    case "${ver%%.*}" in
+        18) echo "Visual Studio 18 2026" ;;
+        17) echo "Visual Studio 17 2022" ;;
+        16) echo "Visual Studio 16 2019" ;;
+        *)  echo "[UILO] error: no Visual Studio with the C++ x64 toolset found (install 'Desktop development with C++')" >&2
+            exit 1 ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -132,7 +154,7 @@ clone_if_missing() {
 if [[ $WT_MODE -eq 1 ]]; then
     clone_if_missing wt "https://github.com/emweb/wt.git" "$WT_TAG"
     # Header-only use: UILO's input headers name VALO's key and button types.
-    clone_if_missing VALO "$VALO_REPO" "$VALO_REF"
+    clone_if_missing VALO "$VALO_REPO" "$VALO_REF" "${VALO_SPARSE[@]}"
 
     # Only the compiled Boost libraries Wt links against, built static so the
     # final executable needs no Boost runtime beside it. The staged name differs
@@ -230,8 +252,9 @@ BAT
                 [[ -n "$VS_WIN" ]] || { echo "[UILO] error: cmake not on PATH and no Visual Studio found" >&2; exit 1; }
                 CMAKE="$(cygpath -u "$VS_WIN")/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
             fi
-            echo "[UILO] configure ($MODE, $LINK_TAG, web, Visual Studio)"
-            "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -A x64 \
+            VS_GEN="$(vs_generator)"
+            echo "[UILO] configure ($MODE, $LINK_TAG, web, $VS_GEN)"
+            "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$VS_GEN" -A x64 \
                 -DCMAKE_BUILD_TYPE="$MODE" \
                 -DUILO_SHARED="$UILO_SHARED" \
                 -DUILO_WT=ON
@@ -262,7 +285,7 @@ fi
 # Vulkan SDK, fetched into ext/VALO/ext once. VALO pins the SDL3 version; UILO
 # builds it from there. Without curl or network access the Vulkan SDK cannot be
 # fetched, and VALO then builds its software renderer only.
-clone_if_missing VALO "$VALO_REPO" "$VALO_REF"
+clone_if_missing VALO "$VALO_REPO" "$VALO_REF" "${VALO_SPARSE[@]}"
 echo "[UILO] fetching VALO's dependencies"
 bash "$EXT/VALO/build.sh" deps
 
@@ -289,8 +312,9 @@ case "$(uname -s)" in
             CMAKE="$(cygpath -u "$VS_WIN")/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
         fi
 
-        echo "[UILO] configure ($MODE, $LINK_TAG, desktop, Visual Studio)"
-        "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -A x64 \
+        VS_GEN="$(vs_generator)"
+        echo "[UILO] configure ($MODE, $LINK_TAG, desktop, $VS_GEN)"
+        "$CMAKE" -S "$ROOT_DIR" -B "$BUILD_DIR" -G "$VS_GEN" -A x64 \
             -DCMAKE_BUILD_TYPE="$MODE" \
             -DUILO_SHARED="$UILO_SHARED" \
             -DUILO_WT=OFF
