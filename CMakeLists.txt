@@ -17,7 +17,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-option(UILO_AUTO_FETCH    "Auto-download missing SDL3 via FetchContent" ON)
 # Examples and tools are for working ON UILO, not for a project that vendors it,
 # so they default off when UILO is pulled in with add_subdirectory. Spelled with
 # the source-dir comparison rather than PROJECT_IS_TOP_LEVEL, which needs 3.21.
@@ -53,7 +52,6 @@ if(MSVC AND NOT UILO_WT)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-include(FetchContent)
 find_package(Threads REQUIRED)
 
 # ---------------------------------------------------------------------------
@@ -125,15 +123,17 @@ endif()
 if(NOT UILO_WT)
 
 # ---------------------------------------------------------------------------
-# SDL3 (vendored in ext/SDL3, cloned by build.sh at a pinned tag)
-# Built once in a separate directory so `./build.sh clean` doesn't rebuild it
+# SDL3 (vendored by VALO in ext/VALO/ext/SDL3, at the release VALO pins)
+# Built here rather than from VALO's prebuilt install so it follows this
+# project's configuration and MSVC runtime. Built once in a separate directory
+# so `./build.sh clean` doesn't rebuild it
 # ---------------------------------------------------------------------------
-set(UILO_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/SDL3")
+set(UILO_SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/VALO/ext/SDL3")
 if(NOT EXISTS "${UILO_SDL3_DIR}")
     message(FATAL_ERROR
-        "[UILO] vendored SDL3 not found at ${UILO_SDL3_DIR}\n"
-        "Run ./build.sh (from Git Bash on Windows) -- it clones SDL3 "
-        "into ext/SDL3 at a pinned release tag.")
+        "[UILO] SDL3 not found at ${UILO_SDL3_DIR}\n"
+        "Run ./build.sh (from Git Bash on Windows) -- it clones VALO into "
+        "ext/VALO and has VALO fetch SDL3 and its other dependencies.")
 endif()
 
 set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
@@ -189,7 +189,7 @@ endif()
 
 # ---------------------------------------------------------------------------
 # VALO (vendored in ext/VALO, cloned by build.sh; its own build.sh fetches
-# its header-only libraries and the Vulkan SDK into ext/VALO/ext)
+# SDL3's source, its header-only libraries and the Vulkan SDK into ext/VALO/ext)
 # ---------------------------------------------------------------------------
 # VALO is UILO's renderer and window: Vulkan where the vendored SDK is present,
 # its software rasteriser everywhere. Added as a subproject, it builds no
