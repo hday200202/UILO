@@ -2,7 +2,7 @@
 
 # UILO
 
-A lightweight, modern C++20 UI library with fast, hardware-accelerated rendering powered by **bgfx** and **SDL3**.
+A lightweight, modern C++20 UI library with fast, hardware-accelerated rendering powered by **VALO** (Vulkan, with a software fallback) and **SDL3**.
 
 ## Overview
 
@@ -16,7 +16,7 @@ Elements are created with lowercase factory functions and configured with two ob
 
 - **Retained-mode UI** — elements persist between frames and only re-layout when something changes
 - **Automatic layout** — rows, columns, grids and canvases sized in pixels, percentages or shares of what is left
-- **Hardware accelerated** — bgfx over Metal, Vulkan, D3D11 or OpenGL
+- **Hardware accelerated** — VALO over Vulkan (MoltenVK on macOS), falling back to its software renderer
 - **Cross-platform** — macOS, Linux and Windows; see [IOS_BUILD.md](IOS_BUILD.md) for iOS
 - **Themed by role** — each UILO owns a `Theme`: the palette plus a prototype for every widget, all of it in `include/Defaults.hpp`
 - **Nothing to ship beside the binary** — two fonts and ~280 icons are compiled in
@@ -47,10 +47,9 @@ UILO_CLEAN_EXT=1 ./build.sh # Force rebuild of dependencies
 
 The build script:
 
-- Clones and caches SDL3 at `.sdl3build/` (one-time)
-- Clones and builds bgfx + tools at `ext/bgfx/` (one-time)
-- Compiles the shaders for every backend the platform supports
-- Configures and builds UILO via CMake
+- Clones VALO into `ext/VALO/`, which fetches SDL3, a few header-only libraries and the Vulkan SDK into `ext/VALO/ext/` (one-time)
+- Builds SDL3 once into `.sdl3build/`, cached across clean builds
+- Configures and builds UILO and VALO via CMake, compiling the UI shader to SPIR-V
 - Outputs binaries to `build/{Release,Debug}-{static,dynamic}/`
 
 Examples build into `examples/bin/`. Run them **from `examples/`**, since a few load files by relative path:
@@ -629,7 +628,6 @@ Full generated reference for every type and function: **[docs/](docs/)** (regene
 | `datepicker.cpp` | date picker and date field |
 | `gradients.cpp` | per-corner and role-driven gradients |
 | `theme.cpp` | the theme, named roles, and live palette switching |
-| `glass_trail_test.cpp` | `Material` blur / glass |
 | `render_bench.cpp` | throughput benchmark |
 
 ## Dependencies
@@ -637,7 +635,7 @@ Full generated reference for every type and function: **[docs/](docs/)** (regene
 UILO vendors and manages all dependencies:
 
 - **SDL3** — window, input, event handling
-- **bgfx / bx / bimg** — rendering backend and utilities
+- **VALO** — renderer (Vulkan and software) and window, wrapping SDL3
 - **stb_truetype** — glyph rasterisation
 - **NanoSVG** — SVG icon parsing
 - **Wt** — only for the optional web backend (`-DUILO_WT=ON`)
@@ -649,7 +647,7 @@ All are cloned into `ext/` and built once, then cached. Clean builds don't rebui
 - **One-time dependency builds**, cached between clean builds
 - **Dirty-tracked layout** — elements re-layout only when something changed
 - **Run-merged text** — a row of same-styled glyphs becomes one draw call
-- **Hardware accelerated** — bgfx with minimal overhead
+- **Batched drawing** — each frame's geometry is uploaded once and drawn in as few calls as clipping allows
 
 ## License
 

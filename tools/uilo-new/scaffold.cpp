@@ -122,7 +122,7 @@ const char* kBuildScript = R"SH(#!/usr/bin/env bash
 #     Wayland development packages SDL3 links against, and offers to install
 #     whatever is missing with the platform's package manager
 #   - clones UILO into ext/UILO at a pinned ref, if it is not already there
-#   - has UILO provision its own vendored dependencies (SDL3, bgfx, shaders)
+#   - has UILO provision its own vendored dependencies (VALO, SDL3, Vulkan SDK)
 #   - configures and builds this project, with the binary landing in bin/
 #
 # Usage:
@@ -289,9 +289,9 @@ else
     say "UILO already present in ext/UILO"
 fi
 
-# UILO vendors SDL3 and bgfx under its own ext/ and compiles the shaders. This
-# provisions them without building UILO itself, which is about to be built as
-# part of this project.
+# UILO vendors VALO (its renderer) under its own ext/, and VALO fetches SDL3 and
+# the Vulkan SDK. This provisions them without building UILO itself, which is
+# about to be built as part of this project.
 say "provisioning UILO's dependencies (first run takes a while)"
 bash ext/UILO/build.sh deps
 
@@ -379,7 +379,7 @@ A [UILO](@REPO@) application.
 ./build.sh clean      # wipe build/, keep the fetched dependencies
 ```
 
-The first run fetches UILO into `ext/UILO` and has it vendor SDL3 and bgfx, so
+The first run fetches UILO into `ext/UILO` and has it vendor VALO, SDL3 and the Vulkan SDK, so
 it takes a while. Later runs reuse all of it.
 
 `build.sh` also checks for git, CMake, Python 3, a C++ compiler and, on Linux,

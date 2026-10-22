@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Cross-platform build wrapper for UILO (Linux / macOS / WSL / Git-Bash).
 # Vendors all third-party dependencies under ext/:
-#   - SDL3: cloned at a pinned release tag, built via CMake as part of UILO
 #   - VALO: UILO's renderer and window, cloned into ext/VALO and built as part
-#     of UILO; its own `build.sh deps` fetches the header-only libraries it
-#     needs and the Vulkan SDK (loader, validation layers, glslc) into
-#     ext/VALO/ext
+#     of UILO; its own `build.sh deps` fetches SDL3's source, the header-only
+#     libraries it needs and the Vulkan SDK (loader, validation layers, glslc)
+#     into ext/VALO/ext. SDL3 is built from there as part of UILO
 #   - stb: headers copied from third_party (for backwards compatibility)
 #
 # The `wt` argument selects the web backend instead: UILO renders through Wt
@@ -60,8 +59,6 @@ else
     LINK_TAG="static"
 fi
 
-# Pinned versions.
-SDL_TAG="release-3.2.10"
 # VALO tracks main: UILO and VALO are developed together, so UILO always
 # builds against the latest VALO. Set VALO_REF to build against another ref.
 VALO_REPO="https://github.com/hday200202/VALO.git"
@@ -99,7 +96,7 @@ mkdir -p "$EXT"
 UILO_CLEAN_EXT="${UILO_CLEAN_EXT:-0}"
 if [[ $UILO_CLEAN_EXT -eq 1 ]]; then
     echo "[UILO] cleaning ext/ (UILO_CLEAN_EXT=1)"
-    rm -rf "$EXT"/{SDL3,VALO,wt,boost}
+    rm -rf "$EXT"/{VALO,wt,boost}
     mkdir -p "$EXT"
 fi
 
@@ -128,7 +125,7 @@ clone_if_missing() {
 }
 
 # ---------------------------------------------------------------------------
-# Web backend: Wt + Boost instead of SDL3 + VALO
+# Web backend: Wt + Boost instead of VALO
 # ---------------------------------------------------------------------------
 # UILO_WT swaps the rendering target, so it needs a different set of vendored
 # dependencies -- and none of the GPU ones. Provision those and skip the rest.
@@ -261,23 +258,20 @@ BAT
     exit 0
 fi
 
-# SDL3: pinned release tag for reproducible builds
-clone_if_missing SDL3 "https://github.com/libsdl-org/SDL.git" "$SDL_TAG"
-
-# VALO, then its dependencies: the header-only libraries and the Vulkan SDK,
-# fetched into ext/VALO/ext once. SDL3 is UILO's own (above), so VALO's deps
-# step skips it. Without curl or network access the Vulkan SDK cannot be
+# VALO, then its dependencies: SDL3's source, the header-only libraries and the
+# Vulkan SDK, fetched into ext/VALO/ext once. VALO pins the SDL3 version; UILO
+# builds it from there. Without curl or network access the Vulkan SDK cannot be
 # fetched, and VALO then builds its software renderer only.
 clone_if_missing VALO "$VALO_REPO" "$VALO_REF"
 echo "[UILO] fetching VALO's dependencies"
 bash "$EXT/VALO/build.sh" deps
 
-# A host project that add_subdirectory()s UILO needs ext/ provisioned -- SDL3
-# and VALO cloned, VALO's dependencies fetched -- but not UILO itself built
-# here, since it is about to be built inside the host's own tree. Same contract
-# as the web path.
+# A host project that add_subdirectory()s UILO needs ext/ provisioned -- VALO
+# cloned and its dependencies fetched -- but not UILO itself built here, since
+# it is about to be built inside the host's own tree. Same contract as the web
+# path.
 if [[ $DEPS_ONLY -eq 1 ]]; then
-    echo "[UILO] desktop dependencies ready (ext/SDL3, ext/VALO)"
+    echo "[UILO] desktop dependencies ready (ext/VALO)"
     exit 0
 fi
 

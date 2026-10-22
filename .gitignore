@@ -16,13 +16,7 @@ build
 .claude
 # Vendored dependencies in ext/ — all cloned by build.sh at pinned versions.
 # Keep the ext/stb/ directory (contains committed headers), wipe the rest on clean.
-/ext/SDL3
 /ext/VALO
-# Left over from the bgfx renderer, which VALO replaced. Nothing uses them any
-# more; delete the directories at will.
-/ext/bgfx
-/ext/bimg
-/ext/bx
 # Web backend (UILO_WT) only.
 /ext/wt
 /ext/boost
