@@ -1,6 +1,6 @@
 // Renderer stress bench: a 30x30 grid of flat colored cells (each cell is a
 // Row, so the per-child pushRoundClip/popRoundClip churn in Container render
-// is exercised 900+ times a frame) plus text labels. Prints bgfx draw-call
+// is exercised 900+ times a frame) plus text labels. Prints the draw-call
 // count, CPU frame time, and average framerate so renderer changes can be
 // compared before/after. Deterministic layout and colors; also used for
 // pixel-identity screenshots.
@@ -13,7 +13,6 @@
 // Arguments may appear in any order.
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
-#include <SDL3/SDL.h>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -103,11 +102,8 @@ int main(int argc, char** argv) {
 
     bool running = true;
     while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) running = false;
-            ui.handleEvent(event);
-        }
+        ui.pollEvents();
+        if (!ui.isRunning()) running = false;
         ui.update();
         renderer.beginFrame();
         renderer.clear(Color{24, 25, 34, 255});

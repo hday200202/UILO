@@ -1,21 +1,21 @@
 # Migration: bgfx + SDL → VALO
 
-Checklist for moving UILO onto VALO ([ext/VALO](ext/VALO)). VALO replaces
-both bgfx (rendering) **and** SDL (window, input, platform). When this is done,
-UILO has no direct dependency on either, and nothing from SDL appears in UILO's
-public API. VALO's own public API is fixed. Anything it's missing is listed in §2
-as an *addition* to VALO, with a UILO-side fallback where one exists.
+Checklist for moving UILO onto VALO ([ext/VALO](ext/VALO)). VALO replaces bgfx
+(rendering) **and** SDL (window, input, platform). When this is done, UILO has no
+direct dependency on either, and nothing from SDL appears in UILO's public API.
+
+Everything VALO needed for this is in place: the six items in
+[ext/VALO/UILO_BLOCKERS.md](ext/VALO/UILO_BLOCKERS.md) are done and verified
+(per-frame updates without stalls, embedded shaders, the window/input surface,
+subproject + MSVC builds, matching blend on both backends, dynamic stencil
+reference). What's left is UILO-side work.
 
 UILO's public API stays the same apart from two intended changes:
 1. **The material/glass system is removed (§0).**
-2. **SDL types are removed from the public API (§1).**
+2. **SDL types are removed from the public API (§2).**
 
-The `Renderer` swap is done at link time, the same way
-[include/wt/HeadlessBackend.cpp](include/wt/HeadlessBackend.cpp) already
-provides a second implementation for the Wt build.
-
-VALO is software-only for now, so everything here targets the software path.
-§12 lists what to re-check once VALO's Vulkan backend exists.
+VALO has two backends, software and Vulkan, chosen at runtime. Both run the same
+UILO code; §12 is the per-backend verification.
 
 ---
 
@@ -23,28 +23,33 @@ VALO is software-only for now, so everything here targets the software path.
 
 | bgfx / SDL (today) | VALO |
 |---|---|
-| `SDL_CreateWindow` + `SDL_Init`/`SDL_Quit` | `valo::Window(title, size, WinFlags::Resize \| WinFlags::HiDPI)`, which does its own init/quit |
-| `SDL_PollEvent` loop → `UILO::handleEvent` | `window.pollEvents()`, then read per-frame state (`wasKeyPressed`, `wasMousePressed`, `scrollDelta`, `mouseDelta`, …) |
-| `SDL_GetKeyboardState` / `SDL_GetMouseState` | `window.isKeyDown(Key)` / `isMouseDown(MouseButton)` / `mousePosition()` (already in pixels) |
-| `SDL_Scancode` | `valo::Key` (its values are SDL scancodes) |
-| `SDL_BUTTON_*` | `valo::MouseButton` |
-| `SDL_SetWindowRelativeMouseMode` | `window.grabMouse()` / `releaseMouse()` / `isMouseGrabbed()` |
-| `SDL_GetWindowSizeInPixels` | `window.getSize()` |
-| `SDL_SetWindowTitle` | `window.setTitle()` |
+| `SDL_CreateWindow` + `SDL_Init`/`SDL_Quit` | `valo::Window(title, size, WinFlags::Resize \| WinFlags::HiDPI [\| WinFlags::Vulkan])` |
+| `SDL_PollEvent` loop → `UILO::handleEvent` | `window.pollEvents()`, then walk `window.events()` (ordered `WindowEvent`s) |
+| `SDL_GetKeyboardState` / `SDL_GetMouseState` | `window.isKeyDown(Key)` / `isMouseDown(MouseButton)` / `mousePosition()` (pixels) |
+| `SDL_Scancode` / `SDLK_*` | `valo::Key` (scancode) + `WindowEvent::symbol` (layout character) |
+| `SDL_GetModState` / `SDL_KMOD_*` | `window.modState()` / `WindowEvent::mods`, `valo::KeyMod` |
+| `SDL_EVENT_TEXT_INPUT`, `SDL_StartTextInput` | `WindowEventType::Text` (`text[32]`), `startTextInput()` / `stopTextInput()` |
+| `SDL_Get/SetClipboardText` | `window.getClipboardText()` / `setClipboardText()` |
+| `SDL_CreateSystemCursor` / `SDL_SetCursor` | `window.setCursor(CursorShape)` |
+| `SDL_SetWindowRelativeMouseMode` | `grabMouse()` / `releaseMouse()` / `isMouseGrabbed()` |
+| `SDL_AddEventWatch` (live resize) | `window.setResizeCallback(fn)` |
+| `SDL_GetPointerProperty(... COCOA_WINDOW ...)` | `window.nativeHandle()` |
+| `SDL_GetWindowDisplayScale`, refresh rate, `SDL_GetSystemTheme`, base/pref path | `getDisplayScale()`, `getRefreshRate()`, `Window::getSystemTheme()`, `Window::basePath()` / `prefPath()` |
 | `SDL_GetTicks` | `valo::Clock` (or `std::chrono`) |
-| `bgfx::init` on the native window | `VALO::init(window, cfg)` |
-| `bgfx::frame()` | `VALO::endFrame()` (executes every queued command, then presents) |
+| `bgfx::init` | `VALO::init(window, cfg)` with `cfg.backend = Backend::Software / Vulkan` |
+| `bgfx::frame()` | `VALO::endFrame()` |
 | `bgfx::reset` on resize | Automatic: `VALO::beginFrame` checks `window.resized()` |
 | Scene view + offscreen FB + composite | `BASE_LAYER` drawing straight into `BACKBUFFER` |
-| Framebuffer / render target | `createTarget(w, h)`. Targets and textures share one ID space, so any target can be sampled with `texture(id, uv)` |
-| Transient VB/IB | None. Use one persistent **arena** VB/IB, uploaded once per frame (§5) |
-| `setState` blend | `RenderCommand::blendmode` = `Opaque` / `Alpha` / `Additive` |
-| `setScissor` | None yet. Use `pushClip` with a rect quad |
-| Rounded-clip uniforms in every shader | `pushClip(shapeCmd)` / `popClip`, a stencil stack that nests to any depth |
-| `setUniform` vec4s | `RenderCommand::setUniforms(struct)`, up to 512 B per command |
-| `.sc` shaders compiled by shaderc | C++ functions `vs(const V&, const U&, Vy&)` / `fs(const Vy&, const U&)` writing `valo_Position` / `valo_FragColor` |
+| Framebuffer / render target | `createTarget(w, h)`; targets and textures share one ID space |
+| Transient VB/IB | One persistent **arena** VB/IB, `updateVertexBuffer`/`updateIndexBuffer` once per frame (cheap on both backends now) |
+| `setState` blend | `RenderCommand::blendmode` (`Alpha` = standard "over", same on both backends) |
+| `setScissor` | `RenderCommand::scissor` |
+| Rounded-clip uniforms | `VALO::pushClip(shapeCmd)` / `popClip()` (stencil, nests to any depth) |
+| `setUniform` vec4s | `RenderCommand::setUniforms(struct)` (**≤ 128 B** to run on Vulkan) |
+| `.sc` shaders + shaderc + embedded headers | `.vert.hpp`/`.frag.hpp` C++ shaders, `createProgram(vsPath, fsPath)`, `valo_embed_shaders()` in CMake |
+| R8 glyph atlas | RGBA8 texture (VALO has no R8 yet) |
 | `bgfx::getStats()` | None. Count commands in UILO and time `endFrame` |
-| 16-bit indices | 32-bit indices, so the 65535-vertex flush logic goes away |
+| 16-bit indices | 32-bit indices |
 
 ---
 
@@ -68,255 +73,222 @@ with the offscreen scene target, blur ladder, deferred glass or glass views.
 
 ---
 
-## 1. Remove SDL from UILO's public API
+## 1. Bring VALO into the build
+
+- [ ] **Track VALO properly.** `ext/VALO` is currently an untracked clone in UILO's tree. Make it a git submodule (or vendor it at a pinned commit) so UILO builds against a known VALO.
+- [ ] **Fetch VALO's own dependencies.** VALO's `build.sh` fetches SDL3 (`ext/SDL3-install`), stb, tinyobjloader, cgltf, VMA and the Vulkan SDK (which provides `glslc` for `valo_embed_shaders`). UILO's `build.sh` runs it, or does the same fetches.
+- [ ] `add_subdirectory(ext/VALO)` and link `VALO::VALO`. As a subproject VALO builds no examples, no valoc, and writes nothing into its own `lib/`.
+- [ ] **One SDL3.** Either let VALO find its own `ext/SDL3-install` (UILO stops vendoring SDL entirely), or have UILO define `SDL3::SDL3-static` before `add_subdirectory` and VALO will use it. Pick one; never both.
+- [ ] **MSVC runtime:** VALO leaves `CMAKE_MSVC_RUNTIME_LIBRARY` to the parent. UILO forces `/MT` today because of bgfx (CMakeLists ~line 49); once bgfx is gone, pick one runtime for the whole build.
+- [ ] **stb:** VALO defines `STB_IMAGE_IMPLEMENTATION` and exposes its `ext/stb` include dir publicly. Remove the define from UILO's `Renderer_Texture.cpp` and UILO's copy of `stb_image.h`. UILO keeps `stb_truetype` (VALO has no font code).
+- [ ] VALO's `software/Sampling.hpp` defines `discard` as a macro (it pre-includes `<random>` so the standard library is safe). Only UILO's renderer `.cpp` files and its shader headers should include VALO render headers. Public UILO headers may include `render/Window.hpp` (for `Key`, `MouseButton`, `KeyMod`, `CursorShape`); it forward-declares its SDL types and includes no SDL header.
+- [ ] `valo::Color` (float `Vec4f`), `valo::Vec2f` and friends clash with `uilo::Color` / `uilo::Vec2f`. Don't `using namespace valo`.
+- [ ] **Wt build (`UILO_WT`):** it still links no renderer. If public headers include `render/Window.hpp` for the key types, the Wt build needs VALO's include path but not the library. Delete `wt/shim/SDL3/SDL.h` and the SDL stubs in `HeadlessBackend.cpp` once nothing in UILO calls SDL.
+
+---
+
+## 2. Remove SDL from UILO's public API
 
 **Decisions first:**
-- [ ] **Key and button types in UILO's API:** use `valo::Key` / `valo::MouseButton` directly, or re-export them as `uilo::Key` / `uilo::MouseButton` (`using Key = valo::Key;`). The re-export keeps VALO's names out of user code and costs nothing.
-- [ ] **Event model:** UILO is event-driven today (`handleEvent(const SDL_Event&)`), and `valo::Window` is polled state. Recommended: drop `handleEvent`, make `UILO::pollEvents()` call `window.pollEvents()` and read the state, and have every example use `ui.pollEvents()`. The alternative is a UILO-owned event struct, which needs VALO to expose an event queue (§2b).
-- [ ] **Window access:** `Renderer::sdlWindow()` goes away. Either expose the `valo::Window&`, or keep it private and give UILO's .cpp files an internal accessor. Nothing outside UILO calls it except `tools/ctxmenu_probe`.
+- [ ] **Key types in UILO's API:** re-export as `uilo::Key = valo::Key`, `uilo::MouseButton`, `uilo::KeyMod` (recommended, since it keeps VALO's names out of user code), or use `valo::` directly.
+- [ ] **Event model:** drop `UILO::handleEvent(const SDL_Event&)`. `UILO::pollEvents()` calls `window.pollEvents()` and walks `window.events()`. VALO's ordered event list carries everything `handleEvent` used (order, timestamps, mods, press position, repeat, text), so the logic ports one-to-one. If you want custom loops back later, expose a UILO-owned event type; don't expose `valo::WindowEvent` directly.
+- [ ] **Window access:** remove `Renderer::sdlWindow()`. UILO's .cpp files get the `valo::Window&` through an internal accessor.
 
 **Public headers to change:**
-- [ ] [UILO.hpp](include/UILO.hpp): remove `handleEvent(const SDL_Event&)` (or replace it per the decision above); update the `pollEvents` / `setRenderer` / `queryMousePixelPosition` comments
-- [ ] [Renderer.hpp](include/renderer/Renderer.hpp): remove `struct SDL_Window;`, `sdlWindow()`, `m_window`, and `attach(SDL_Window*, uint16_t)`. `attach` has no callers, and VALO can't share a host's window or composite transparently (§2a), so remove it or replace it later.
-- [ ] [input/Keybinds.hpp](include/input/Keybinds.hpp): drop `<SDL3/SDL.h>`; `SDL_Scancode` → `Key`; `SDL_GetKeyboardState` → `window.isKeyDown`. It's header-only, so it needs the window passed in, or its implementation moved to a .cpp.
-- [ ] [input/Mousebinds.hpp](include/input/Mousebinds.hpp): drop `<SDL3/SDL.h>`; `SDL_Window*` → `valo::Window*`; button masks → `MouseButton`; relative mode → `grabMouse`/`releaseMouse`; relative delta → `mouseDelta()`. That delta is already multiplied by pixel density, so remove the extra `SDL_GetWindowDisplayScale` multiply.
-- [ ] [Interactible.hpp](include/elements/interactible/Interactible.hpp): drop `<SDL3/SDL.h>`; change `handleKeyInput(SDL_Keycode, …)` to UILO's key type (see §2b on keycodes); update the `SDL_StartTextInput` comment
-- [ ] [Textbox.hpp](include/elements/interactible/Textbox.hpp), [Terminal.hpp](include/elements/widgets/Terminal.hpp): `handleKeyInput` and `sendKey(SDL_Keycode, …)` signatures
-- [ ] [Knob.hpp](include/elements/interactible/Knob.hpp), [Slider.hpp](include/elements/interactible/Slider.hpp): drop the unused-in-header `<SDL3/SDL.h>` include
+- [ ] [UILO.hpp](include/UILO.hpp): remove `handleEvent(const SDL_Event&)`; update the `pollEvents` / `setRenderer` / `queryMousePixelPosition` comments
+- [ ] [Renderer.hpp](include/renderer/Renderer.hpp): remove `struct SDL_Window;`, `sdlWindow()`, `m_window`, `attach(SDL_Window*, uint16_t)` (no callers; VALO owns its window), and the bgfx leftovers (`namespace bgfx { … }`, `FrameBuffer::viewId`, `m_nextViewId`, `m_viewStack*`, `currentViewId()`, `submitOrtho()`, `m_resetFlags`). Fix the bgfx wording in the `Texture`, `RendererStats` and `FrameBuffer` comments.
+- [ ] [input/Keybinds.hpp](include/input/Keybinds.hpp): `SDL_Scancode` → `Key`; `SDL_GetKeyboardState` → `window.isKeyDown`. It's header-only, so pass the window in or move the implementation to a .cpp.
+- [ ] [input/Mousebinds.hpp](include/input/Mousebinds.hpp): `SDL_Window*` → the window; button masks → `MouseButton`; relative mode → `grabMouse`/`releaseMouse`; relative delta → `mouseDelta()`, which is already in pixels, so drop the extra `SDL_GetWindowDisplayScale` multiply.
+- [ ] [Interactible.hpp](include/elements/interactible/Interactible.hpp): `handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui)` → `handleKeyInput(Key key, char32_t symbol, KeyMod mods)` (or keep the bool flags). Named keys (arrows, Return, Backspace, F-keys) match on `Key`; letter shortcuts (Ctrl+Z/C/V/A/X/Y) match on `symbol`, so they follow the keyboard layout as `SDLK_*` did.
+- [ ] [Textbox.hpp](include/elements/interactible/Textbox.hpp), [Terminal.hpp](include/elements/widgets/Terminal.hpp): the `handleKeyInput` and `sendKey(SDL_Keycode, …)` signatures
+- [ ] [Knob.hpp](include/elements/interactible/Knob.hpp), [Slider.hpp](include/elements/interactible/Slider.hpp): drop the `<SDL3/SDL.h>` include
 
-**Implementation files that use SDL directly** (port each onto `valo::Window`, or onto a §2b addition):
-- [ ] `UILO.cpp`: events, text input, modifiers, live-resize watch, the Cocoa handle for the macOS hooks
-- [ ] `Textbox.cpp`, `Terminal.cpp`: `SDLK_*` handling, modifiers, clipboard
-- [ ] `Canvas.cpp`: `SDL_GetModState`
+**Implementation files that use SDL directly:**
+- [ ] `UILO.cpp`: event handling (§4), text input start/stop, modifiers, the live-resize event watch → `setResizeCallback`, the Cocoa window lookup → `nativeHandle()`
+- [ ] `Textbox.cpp` (16 `SDLK_*` uses), `Terminal.cpp` (22): key handling → `Key` + `symbol`; `SDL_GetModState` → `modState()`; clipboard → `get/setClipboardText`
+- [ ] `Canvas.cpp`: `SDL_GetModState` → `modState()`
+- [ ] `Container.cpp`: `SDL_GetMouseState` + left mask during a drag → `isMouseDown(MouseButton::Left)` / `mousePosition()`
 - [ ] `Knob.cpp`, `Slider.cpp`, `Resizer.cpp`: `SDL_GetTicks` → `valo::Clock` / `std::chrono`
-- [ ] `Container.cpp`: `SDL_GetMouseState` + left-button mask during a drag → `window.isMouseDown(MouseButton::Left)` / `mousePosition()`
-- [ ] `utils/OS.cpp`: displays, theme, CPU, RAM, paths (see §2b)
-- [ ] `renderer/*`: goes away with the port
-- [ ] **Examples** that run their own `SDL_PollEvent` loop (`gradients`, `pixel_test`, `render_bench`): switch to `ui.pollEvents()`. Also remove the SDL includes from `containers`, `contextmenu`, `datepicker`, `terminal`, `theme`.
+- [ ] `utils/OS.cpp`:
+  - display scale → `getDisplayScale()`
+  - refresh rate → `getRefreshRate()`
+  - display size → `getMonitorSize()`
+  - theme → `Window::getSystemTheme()`
+  - paths → `Window::basePath()` / `prefPath()`
+  - CPU count → `std::thread::hardware_concurrency()`
+  - RAM → a native API (VALO has none)
+
+  The functions that run before a window exists (primary-display queries) need a window, or keep a small native implementation. Check each caller.
+- [ ] `renderer/*`: replaced by the port (§5–§9)
+- [ ] **Examples** with their own `SDL_PollEvent` loop (`gradients`, `pixel_test`, `render_bench`): switch to `ui.pollEvents()`. Remove the SDL includes from `containers`, `contextmenu`, `datepicker`, `terminal`, `theme`.
 - [ ] `tools/ctxmenu_probe.cpp`: it synthesises input with `SDL_PushEvent`, which VALO has no equivalent for. Rework it or retire it.
-- [ ] **Wt build:** `wt/shim/SDL3/SDL.h` and the SDL stubs in `HeadlessBackend.cpp` exist only because UILO called SDL. Replace them with stubs for whatever `valo::Window` surface UILO ends up using, or keep VALO out of the Wt build behind the same `UILO_WT` guard.
-- [ ] Verify with `grep -rn "SDL" include/*.hpp include/**/*.hpp` returning nothing except comments you mean to keep
+- [ ] Verify with `grep -rn "SDL" include` returning only comments you mean to keep
 
 ---
 
-## 2. VALO gaps
+## 3. Window setup
 
-None of these change VALO's existing API; they are additions.
-
-### 2a. Rendering (all already on [VALO's TODO](ext/VALO/TODO.md))
-
-- [ ] **`updateTexture(id, data)`**. UILO needs it for glyph atlases and `Renderer::updateTexture` (Icon, Image).
-  - Workaround: `destroyTexture` + `createTexture` once per frame for each dirty texture, done in UILO's `endFrame` *before* `valo.endFrame`. VALO's free list is LIFO, so the ID normally comes back the same, but check it and remap if it doesn't.
-- [ ] **R8 texture format**. Workaround: store glyph atlases as RGBA8 with coverage in alpha. That's 4 MB per 1024² atlas instead of 1 MB.
-- [ ] **`fwidth` / derivatives**. Workaround: compute AA analytically. Every UI shader works in pixel space, so an SDF distance is already in pixels and a ~1px smoothstep is correct.
-- [ ] **Scissor on `RenderCommand`**. Workaround: a rect `pushClip` (§7), which costs two extra raster passes over the rect.
-- [ ] **Mipmaps**. Without them, heavily downscaled images alias. It's acceptable for now.
-
-Things VALO does differently that UILO has to live with:
-- [ ] **Alpha blend forces destination alpha to 1**, so a transparent overlay over a host app's image is impossible (hence removing `attach`).
-- [ ] **Stencil clips have hard edges.** Children spilling past a rounded container's corner lose their AA. The container's own background is still an AA'd SDF. Accept it, or supersample with `renderScale` > 1 (slow in software).
-
-### 2b. Window / input / platform
-
-`valo::Window::pollEvents()` drains the SDL queue itself and keeps only
-per-frame bitsets, so UILO can't read these events on its own. The only
-UILO-side fallback for event-type gaps is an `SDL_AddEventWatch` installed
-inside a UILO .cpp through `window.sdlHandle()`. That keeps SDL out of the
-public API but still links UILO to SDL internally. Adding them to VALO is the
-clean fix.
-
-| # | Needed by UILO | Used by | `valo::Window` today | Fix |
-|---|---|---|---|---|
-| 1 | **Text input** (UTF-8 text events) + start/stop text input | Textbox, Terminal, `UILO.cpp` | missing | [ ] add to VALO: e.g. `textInput()` returning this frame's UTF-8, plus `startTextInput()`/`stopTextInput()` |
-| 2 | **Key repeat** | holding Backspace/arrows in Textbox/Terminal | `pollEvents` ignores `e.key.repeat` | [ ] add to VALO: e.g. `wasKeyRepeated(Key)`, or count repeats in `wasKeyPressed` |
-| 3 | **Layout-aware keys** (`SDLK_*`, `SDL_SCANCODE_TO_KEYCODE`) | `handleKeyInput` in Textbox (16 uses), Terminal (22), `UILO.cpp` (18) | scancodes only | [ ] decide: scancodes are fine for arrows, editing keys and F-keys, but Ctrl+Z/C/V/A on AZERTY/Dvorak need the keycode. Add a key→keycode/char query to VALO, or accept physical-position shortcuts. |
-| 4 | **Ordered key events with modifiers** | `handleKeyInput(key, shift, ctrl, gui)` per keypress; the key-up vs text-input timestamp check in `UILO.cpp` | per-frame bitsets, no order, no timestamps | [ ] polled bitsets lose ordering when two keys go down in one frame. Either add an event queue to VALO, or accept frame-granular input and drop the timestamp logic. |
-| 5 | Modifier state | `SDL_GetModState` in `UILO.cpp`, Canvas, Textbox | derivable | [ ] map `isKeyDown(LCtrl \|\| RCtrl)` etc. in UILO. No VALO change needed. |
-| 6 | **Horizontal + precise wheel** | `dispatchScroll(pos, {dx, dy}, precise)` | `scrollDelta()` is y only | [ ] add to VALO: an x component (e.g. `scrollDelta2D()`) |
-| 7 | Press position | `m_pendingPressPos` from the event's x/y | only the current position | [ ] use `mousePosition()` at poll time (fine unless the mouse moves a lot within a frame) |
-| 8 | **Clipboard** get/set | Textbox copy/cut/paste, Terminal | missing | [ ] add to VALO: `getClipboardText()` / `setClipboardText()` |
-| 9 | **System cursors** | `Renderer::setCursor` (Arrow, Hand, SizeH/V, Text, Crosshair) | missing | [ ] add to VALO: `setCursor(CursorType)` |
-| 10 | **Live-resize redraw** | `SDL_AddEventWatch` in `UILO.cpp` so the UI keeps drawing inside the OS modal resize loop | missing | [ ] add to VALO: a resize callback (e.g. `setResizeCallback(fn)`) |
-| 11 | **Native window handle** | macOS: `configureMacWindowForLiveResize`, trackpad scroll and zoom monitors (`platform/Mac*.mm`) need the `NSWindow` | `sdlHandle()` only | [ ] add to VALO: `nativeHandle()`, or move UILO's Mac hooks into VALO |
-| 12 | **Display info**: primary display, content scale, bounds, refresh rate, display list | `utils/OS.cpp` | `getPixelDensity()` only | [ ] add to VALO (e.g. a `Display` query), or move `OS.cpp` onto native APIs |
-| 13 | **System theme** (light/dark) | `utils/OS.cpp` | missing | [ ] add to VALO, or use native APIs |
-| 14 | Base path / pref path | `utils/OS.cpp`, resources | missing | [ ] native APIs (`GetModuleFileName` / `NSBundle` / `/proc/self/exe`; `%APPDATA%` / `~/Library/Application Support` / `$XDG_DATA_HOME`), or add to VALO |
-| 15 | CPU cores / system RAM | `utils/OS.cpp` | missing | [ ] `std::thread::hardware_concurrency()`; RAM via native APIs, or add to VALO |
-| 16 | Quit / close | `SDL_EVENT_QUIT` → `m_running = false` | `pollEvents()` returns false, `isOpen()` | [ ] map directly; no VALO change |
-| 17 | Relative mouse mode + delta | Mousebinds | `grabMouse` + `mouseDelta` | [ ] map directly (mind the density scaling, §1) |
-| 18 | Timing | `SDL_GetTicks` | `valo::Clock` | [ ] map directly |
-| 19 | Synthetic input | `tools/ctxmenu_probe` (`SDL_PushEvent`) | missing | [ ] rework or retire the tool (§1) |
+- [ ] `Renderer::init` builds a `valo::Window(title, {w, h}, WinFlags::Resize | WinFlags::HiDPI | (vulkan ? WinFlags::Vulkan : None))`. The Vulkan backend needs `WinFlags::Vulkan` on the window, so choose the backend before creating it.
+- [ ] Keep `respectOSScale = false` (the default): sizes are in pixels, matching how UILO works today. `getSize()` and `mousePosition()` are already in pixels, so delete UILO's logical-to-pixel mouse conversion.
+- [ ] **Backend selection:** keep the existing `UILO_RENDERER` environment variable, with values `software` and `vulkan`, and drop `metal`, `d3d11`, `d3d12` and `gl`. Decide the default: Vulkan when available, falling back to software if `VALO::init` fails, is the friendliest.
+- [ ] Shutdown order: `valo.shutdown()`, then let the `valo::Window` destruct (it quits SDL when it's the last window).
+- [ ] Set `RenderConfig::validation = true` in debug builds while porting; it now includes synchronization validation.
 
 ---
 
-## 3. Integration / build
-
-- [ ] **UILO stops vendoring SDL3.** Remove SDL from `build.sh`, `CMakeLists.txt` and the `uilo-new` scaffold. VALO's SDL3 is the only one in the process, and nothing in UILO includes `<SDL3/SDL.h>` (apart from any §2b fallback you choose).
-- [ ] **VALO's CMake uses `${CMAKE_SOURCE_DIR}`** for `ext/SDL3-install`, `ext/stb`, `ext/cgltf`, `ext/tinyobjloader` and `lib/`. Under `add_subdirectory(ext/VALO)` those resolve to UILO's root. Either fix that in VALO (`CMAKE_CURRENT_SOURCE_DIR`; this is build only, not API) or add the sources to UILO's target by hand.
-- [ ] **Duplicate stb_image.** VALO's `RenderTarget.cpp` defines `STB_IMAGE_IMPLEMENTATION`, and so does UILO's `Renderer_Texture.cpp`. Keep one definition and one `stb_image.h`.
-- [ ] VALO also pulls in tinyobjloader and cgltf. They're unused by UILO, but they still have to be present to build.
-- [ ] **MSVC.** VALO is developed on macOS. Check that it builds with MSVC, and drop UILO's forced static runtime (`/MT`, CMakeLists ~line 49) once bgfx is gone.
-- [ ] **VALO headers in UILO's public headers:** the only acceptable ones are the `Key`/`MouseButton` (and possibly `Window`) types from §1. Pull those from `render/Window.hpp` alone, never `VALO.hpp`/`Renderer.hpp`, because:
-  - `Sampling.hpp` does `#define discard valo::vDiscard()`, which clobbers any identifier named `discard` in any file that includes it. Keep it in `include/renderer/*.cpp` only.
-  - `valo::Color` (float `Vec4f`), `valo::Vec2f` and friends clash with `uilo::Color` / `uilo::Vec2f`. Don't `using namespace valo`.
-- [ ] **Window ownership:** the `Renderer` owns a `valo::Window` built with `WinFlags::Resize | WinFlags::HiDPI` (matching today's `RESIZABLE | HIGH_PIXEL_DENSITY`), then calls `VALO::init(window, cfg)`.
-  - Decide on `respectOSScale`: `false` (the default) means sizes are in pixels, which matches how UILO works in pixels today.
-  - Because `window.pollEvents()` now runs every frame, `window.resized()` works and `VALO::beginFrame` resizes the targets itself.
-- [ ] Shutdown order: `valo.shutdown()` first, then let the `valo::Window` destruct (it destroys the window and `SDL_Quit`s when it's the last one).
-- [ ] **Remove the bgfx leftovers from `Renderer.hpp`** (private): `namespace bgfx { … }`, `FrameBuffer::viewId`, `m_nextViewId`, `m_viewStack*`, `currentViewId()`, `submitOrtho()`, `m_resetFlags`. Also delete the matching `HeadlessBackend.cpp` stubs, and fix the bgfx wording in the comments on `Texture`, `RendererStats` and `FrameBuffer`.
-- [ ] [examples/containers.cpp](examples/containers.cpp): drop `#include <bgfx/bgfx.h>` and the `bgfx::getRendererName` print.
-- [ ] Shaders run on VALO's worker threads, so they must not touch shared mutable state. Pass everything they need in uniforms or vertices.
-
----
-
-## 4. Frame and input loop
-
-The frame loop:
+## 4. Input loop
 
 ```
-ui.pollEvents()      → window.pollEvents(); translate state into UILO input; quit if it returned false
-ui.update()          → layout, hover, clicks, key dispatch
-renderer.beginFrame()→ valo.beginFrame()  (handles resize, clears backbuffer + stencil)
-renderer.clear(c)    → see §5
-ui.render()          → shapes into the arena, clips via pushClip/popClip
-renderer.endFrame()  → flush, upload arena, valo.endFrame(), frame limiter
+ui.pollEvents()       → window.pollEvents(); walk window.events(); quit on CloseRequested / false return
+ui.update()           → layout, hover, clicks, key dispatch
+renderer.beginFrame() → valo.beginFrame()   (resize, clears backbuffer + stencil)
+renderer.clear(c)     → §6
+ui.render()           → shapes into the arena, clips (§8)
+renderer.endFrame()   → flush, upload arena, valo.endFrame(), frame limiter
 ```
 
-- [ ] `UILO::pollEvents()`:
-  - Mouse: position, `wasMousePressed(Left/Right)` → pending press, scroll → `dispatchScroll` (with the shift/ctrl modifiers as today)
-  - Keys: `wasKeyPressed` for each key UILO handles, plus repeats (§2b #2)
-  - Text input (§2b #1) → focused Interactible
-  - Context-menu navigation keys
-- [ ] Focus changes start and stop text input (§2b #1), as `UILO.cpp` does today with `SDL_StartTextInput`
-- [ ] Keybinds / Mousebinds read from the same `valo::Window`
+- [ ] `KeyDown` → context-menu navigation, then the focused element's `handleKeyInput(key, symbol, mods)`. Repeats arrive as `KeyDown` with `repeat = true`, so held Backspace and arrows keep working.
+- [ ] `Text` → focused element (UTF-8 in `text`). Port the existing "text that arrives before the key's key-up is a command, not input" check using `timestamp`; the timestamps are nanoseconds, as `SDL_Event::common.timestamp` was.
+- [ ] `MouseDown` / `MouseUp` → pending press with `mouse` as the press position; `clicks` gives double-click for free
+- [ ] `Wheel` → `dispatchScroll(mouse, wheel, precise)`; Shift swaps axes and Ctrl/Cmd zooms, using the event's `mods` as before
+- [ ] `FocusLost` → release drags and held-key state
+- [ ] Focus moving into or out of a Textbox/Terminal → `startTextInput()` / `stopTextInput()`
+- [ ] `setResizeCallback` → the existing `m_onLiveResize` hook. It runs inside the OS's modal resize loop and also sets `resized()`, so VALO picks up the new size there.
+- [ ] macOS: `configureMacWindowForLiveResize`, `installMacScrollMonitor` and `installMacZoomMonitor` take `nativeHandle()` (an `NSWindow*`), unchanged otherwise
+- [ ] Keybinds / Mousebinds read from the same window
 
 ---
 
 ## 5. Frame structure (rendering)
 
-With materials gone, UILO needs a single layer: VALO's default `BASE_LAYER`, which draws into `BACKBUFFER`.
+UILO uses one layer: VALO's `BASE_LAYER`, drawing into `BACKBUFFER`.
 
-**Resources created in `init`:**
-- [ ] `valo::Window`, then `VALO::init(window, cfg)` with `cfg.vsync` set
-- [ ] The arena VB/IB. `createVertexBuffer` needs initial data, so create it with one dummy vertex.
-- [ ] The programs (§6)
+**`init`:**
+- [ ] `VALO::init(window, cfg)` with `cfg.backend` and `cfg.vsync`
+- [ ] The arena VB/IB (`createVertexBuffer` needs initial data: create with one dummy vertex)
+- [ ] Programs (§7)
 
 **`beginFrame`:**
-- [ ] `valo.beginFrame()`: resizes if the window changed, and clears colour, depth and stencil to `BASE_LAYER`'s clear colour
-- [ ] Reset the arena, stats counter and rotation
+- [ ] `valo.beginFrame()`: resizes if needed, clears colour/depth/stencil to `BASE_LAYER`'s clear colour, and retires destroyed resources
+- [ ] Reset the arena, pending batch, stats and rotation
 
-**Drawing, using the arena:**
-- [ ] Every shape appends its vertices and indices to CPU-side arena vectors and then extends or creates a pending command covering that index range (`firstIndex` / `indexCount`).
-- [ ] **Commands reference the VB/IB by ID and only run at `valo.endFrame`**, so upload the arena exactly once per frame with `updateVertexBuffer` / `updateIndexBuffer`, just before `valo.endFrame`. Never re-upload mid-frame: earlier commands would draw the new contents.
-- [ ] Command template for every UI draw:
-  - `topology = Triangles`, `cullmode = None` (y-down ortho flips the winding)
-  - `depthTest = false`, `depthWrite = false`, `blendmode = Alpha`
-  - Always set `program`. `DEFAULT_PROGRAM` crashes (VALO TODO robustness).
-- [ ] **Batching matters a lot.** Every VALO draw dispatches the thread pool over the whole target height, so a thousand tiny commands cost far more than a single one. Merge consecutive draws that share program, texture and uniforms into one command (§6).
-- [ ] **Flush the pending batch before every `pushClip`/`popClip`.** `pushClip` enqueues immediately, and `submit` stamps the stencil ref at submit time.
+**Drawing:**
+- [ ] Shapes append vertices and indices to CPU-side arena vectors, then extend or start a pending command covering that index range (`firstIndex` / `indexCount`).
+- [ ] **Upload the arena once, just before `valo.endFrame`.** Commands reference buffers by ID and run at `endFrame`, so the last update of a frame is what every draw that frame reads. On Vulkan this is now a `memcpy` into a per-frame mapped slot, with no stall.
+- [ ] Command template:
+  - `topology = Triangles`, `cullmode = None`
+  - `depthTest = false`, `depthWrite = false` (VALO defaults to reversed-Z depth on, which UI doesn't want)
+  - `blendmode = Alpha`
+  - always set `program`
+- [ ] **Merge consecutive draws** that share program, uniforms (including the texture ID) and scissor into one command. Software no longer pays per draw, but Vulkan still rebinds per command, and fewer commands is simpler anyway.
+- [ ] **Flush the pending batch before every `pushClip`/`popClip` and whenever the scissor changes.** `pushClip` enqueues immediately, and `submit` stamps the stencil test at submit time.
 
 **`endFrame`:**
-- [ ] Flush the pending batch
-- [ ] Re-upload any dirty textures (§2a workaround)
-- [ ] Upload the arena
-- [ ] `valo.endFrame()`
-- [ ] Frame-rate limiter: keep UILO's sleep+spin (VALO's `RenderConfig::maxFps` is unused)
+- [ ] Flush the pending batch → upload the arena → `valo.endFrame()` → frame limiter (UILO's sleep+spin; `RenderConfig::maxFps` is not used by VALO)
 
 **`clear(color)`:**
-- [ ] VALO clears in `beginFrame`, before UILO's `clear()` is called. Setting the layer clear colour alone would lag a frame, so:
-  - `setLayerClearColor(BASE_LAYER, c)` so later frames get it for free
-  - **and**, if `c` differs from what `beginFrame` just cleared to, submit a fullscreen `Opaque` quad now
+- [ ] VALO clears in `beginFrame`, before UILO's `clear()` runs. So:
+  - `setLayerClearColor(BASE_LAYER, c)` for the following frames
+  - **and**, if `c` differs from what was just cleared, submit a fullscreen `Opaque` quad for this frame
 
 ---
 
-## 6. Shaders (C++ functions)
+## 6. Textures and text
 
-The sources to port are `vs_solid`, `vs_tex`, `fs_solid`, `fs_tex` and `fs_text` in [include/renderer/shaders/](include/renderer/shaders/).
+- [ ] `loadTexture(path)`: keep UILO's cache and its stb decode (it needs width and height), then `createTexture(w, h, data, srgb = false, mips = true)`. Mips are fine for static images and fix downscaled shimmer.
+- [ ] `createTexture(w, h)` + `updateTexture(tex, rgba)` (Icon, Image): `createTexture(w, h, zeroed, false, mips = false)`, then `valo.updateTexture(id, data)`. **Pass `mips = false` for anything updated**, otherwise each update rebuilds the mip chain.
+- [ ] `destroyTexture` → `valo.destroyTexture` (destruction is deferred until no frame in flight uses it, and the ID is not reused before then)
+- [ ] Keep `srgb = false` everywhere and `RenderConfig::srgbBackbuffer = false`. bgfx blended in gamma space, and matching that keeps every colour identical.
+- [ ] **Glyph atlas:** an RGBA8 texture per (font, `round(size)`), 1024², `mips = false`, white RGB with coverage in alpha (no R8 in VALO yet; 4 MB per atlas). Each new glyph → `valo.updateTextureRect(id, x, y, w, h, rgba)`. On Vulkan these are recorded into the frame's upload command buffer, so many per frame are fine.
+- [ ] `Texture::handle` is uint16 and VALO's `TextureID` is uint32; assert below `UINT16_MAX`
+- [ ] Sampling: `texture(id, uv, Sampler(Wrap::Clamp, Wrap::Clamp, Filter::Linear))`. Texture IDs are bindless on Vulkan, so the ID lives in the uniforms (or the vertex) rather than being bound.
 
-**Recommended: one vertex format and one "ui" program for everything.**
+---
+
+## 7. Shaders
+
+The sources to port are `vs_solid`, `vs_tex`, `fs_solid`, `fs_tex` and `fs_text` in [include/renderer/shaders/](include/renderer/shaders/). [ext/VALO/examples/shaders/roundrect.vert.hpp](ext/VALO/examples/shaders/roundrect.vert.hpp) / `.frag.hpp` is the template: it's a UI rounded rect, and it's what `clipstack` embeds.
+
+**Format:** one `ui.vert.hpp` and one `ui.frag.hpp` (the frag includes the vert, so they share structs), each ending with `VALO_VERTEX_SHADER(fn)` / `VALO_FRAGMENT_SHADER(fn)`. Shared helpers such as the SDF function can live in a plain project header; valoc now translates only the helpers a shader actually reaches.
 
 ```cpp
-struct UiVertex {                 // VtxLayout({Vec2f, Vec2f, Uint32, Vec4f, Vec4f})
-    Vec2f    pos;                 // pixels
-    Vec2f    uv;
-    uint32_t abgr;                // uilo::packColor; unpack in vs
-    Vec4f    shape;               // SDF rect: cx, cy, halfW, halfH (pixels)
-    Vec4f    params;              // x = radius, y = mode (solid/rrect/tex/text/ellipse), zw spare
+struct UiVertex {                 // VtxLayout({Vec2f, Vec2f, Vec4f, Vec4f, Vec4f})
+    Vec2f pos;                    // pixels
+    Vec2f uv;
+    Vec4f color;                  // linear 0..1 (or Uint32 + unpack; must be a GPU-legal type)
+    Vec4f shape;                  // SDF rect: cx, cy, halfW, halfH (pixels)
+    Vec4f params;                 // x = radius, y = mode (solid/rrect/tex/text/ellipse), zw spare
 };
-struct UiUniforms { Vec2f viewport; TextureID tex; };   // tiny, so batches merge
+struct UiUniforms { Vec2f viewport; TextureID tex; uint32_t pad; };   // 16 B, far under Vulkan's 128
 ```
 
-- [ ] **ui vs:** pixel → NDC from `viewport` (same convention as `clipstack.cpp`: y down, origin top-left), unpack colour, pass the varyings through
-- [ ] **ui fs, solid:** vertex colour (line and arc AA comes from vertex-alpha skirts, unchanged)
-- [ ] **ui fs, rounded rect / circle:** rounded-box SDF, `alpha *= 1 - smoothstep(-0.5, 0.5, d)`, `discard` at alpha 0
-- [ ] **ui fs, texture:** `texture(tex, uv, Sampler(Clamp, Clamp, Linear))` × tint
-- [ ] **ui fs, text:** atlas alpha × vertex colour
-- [ ] **ui fs, ellipse:** texture + analytic ellipse mask
-- [ ] **clip program:** the rounded-box SDF with `discard` outside, for `pushClip` shapes. It can be the ui program; VALO turns `colorWrite` off itself.
-- [ ] Write the shaders in a GLSL-portable style. VALO's Vulkan backend will need a GLSL/SPIR-V twin of every program (VALO TODO §3), and with this design that's only one or two.
+- [ ] **Rules valoc enforces:** no `bool` in GPU-read structs (use `uint32_t` flags), varyings are floats only, buffer slots are compile-time constants, and integers used as conditions are compared explicitly (`x != 0u`)
+- [ ] **ui vs:** pixel → NDC from `viewport`, using VALO's convention (clip space is Y-up, as in `clipstack.cpp`'s `Mat4f::orthographic(0, w, h, 0, -1, 1)`), and pass the varyings through
+- [ ] **ui fs modes:**
+  - solid: vertex colour (line and arc AA comes from vertex-alpha skirts, unchanged)
+  - rounded rect / circle: rounded-box SDF, `alpha *= 1 - smoothstep(-0.5, 0.5, d)` (d is already in pixels, so no `fwidth` is needed), `discard` at alpha 0
+  - texture: sample × tint
+  - text: atlas alpha × colour
+  - ellipse: texture + analytic ellipse mask
+- [ ] **clip program:** the rounded-box SDF that `discard`s outside, for `pushClip` shapes (VALO turns `colorWrite` off itself). It can be the ui program.
+- [ ] **Program creation:** `valo.createProgram("ui.vert.hpp", "ui.frag.hpp")`, the same call on both backends. Software resolves it through the shader registry, and Vulkan uses the embedded SPIR-V. It refuses a pair whose Uniforms or Varyings differ.
+- [ ] **CMake:** `valo_embed_shaders(uilo SHADERS include/renderer/shaders/ui.vert.hpp include/renderer/shaders/ui.frag.hpp [INCLUDES …])`
+- [ ] **Commit the generated `ui.vert` / `ui.frag` GLSL** beside the `.hpp`s. valoc (which needs libclang) only runs where it was built; everywhere else the embed step compiles the committed GLSL. If UILO's `.gitignore` ever ignores `*.vert` / `*.frag` the way VALO's does, add exceptions for these.
+- [ ] Delete the `.sc` files, `varying.def.sc`, the shaderc step, `cmake/bgfxToolUtils.cmake` and the `spirv/glsl/essl/metal/dxbc` header includes
 
 ---
 
-## 7. Clipping on VALO's stencil stack
+## 8. Clipping
 
-VALO's `pushClip` draws the shape into the stencil with `Incr`, tested against the current depth, so nested clips intersect exactly. That replaces UILO's scissor stack, round-clip stack, clip uniforms, the dedup cache and the "only the two innermost rounded clips" limit.
+Two mechanisms now, chosen per clip:
 
-- [ ] `pushRoundClip(b, r)`: flush, then `valo.pushClip(roundedRectCmd)`. Snap `b` to pixels (floor/ceil) and clamp `r` to min(halfW, halfH).
-- [ ] `pushScissor(b)`: same, with radius 0
-- [ ] `popRoundClip` / `popScissor`: flush, then `valo.popClip()`
-- [ ] **pushRoundClip = one pushClip and popRoundClip = one popClip** (today it also pushes a scissor). Keep the push/pop counts balanced.
-- [ ] Depth: the stencil is 8-bit. Keep UILO's cap of 64 and the overflow counting.
-- [ ] Zero-area clip: skip draws while it's active (today's `scissorEmpty`)
-- [ ] **Stop using clips for a shape's own mask.** `draw(RoundedRect)` and `draw(Circle)` use SDF mode instead.
-- [ ] If framebuffers are ever implemented: `submit` stamps the stencil test on every command whatever its layer, so only switch layers when the clip stack is empty
-- [ ] Behaviour change to check visually: every ancestor clip now applies, not just the two innermost rounded ones
+- [ ] **Rect clips → `RenderCommand::scissor`.** `pushScissor`, and `pushRoundClip` with radius ≤ 0, keep UILO's own scissor stack (intersection + floor/ceil pixel snapping, as today), and the current top goes into every command's `scissor`. That's free on both backends, with no stencil passes.
+- [ ] **Rounded clips → `valo.pushClip(roundedRectCmd)` / `popClip()`.** These are stencil-based and nest exactly to any depth; nesting no longer creates pipelines. Also push the rounded clip's bounds onto the scissor stack, so geometry outside them is rejected early.
+- [ ] **pushRoundClip = one VALO push and popRoundClip = one VALO pop.** Keep UILO's own counts balanced, the 64-deep cap, and overflow counting (the stencil is 8-bit).
+- [ ] A zero-area scissor skips draws entirely (today's `scissorEmpty`)
+- [ ] **Stop using clips for a shape's own mask.** `draw(RoundedRect)` and `draw(Circle)` use the SDF mode instead.
+- [ ] The scissor is not part of VALO's clip stack, so remember that `pushClip`'s own stencil draw also needs the current scissor set on its command
+- [ ] **Behaviour changes to check:**
+  - every ancestor rounded clip now applies, not just the two innermost
+  - children spilling past a rounded corner get a hard stencil edge rather than SDF AA (the panel's own background is still AA'd)
 
 ---
 
-## 8. Public API parity
+## 9. Public API parity
 
-Every method left in `Renderer.hpp` after §0 and §1. "Stub OK" means nothing in the repo calls it, but it's public API.
+Every method left in `Renderer.hpp` after §0 and §2. "Stub OK" means nothing in the repo calls it, but it's public API.
 
 ### Lifecycle / window
-- [ ] `init(w, h, title, msaa)`: `valo::Window` + VALO. Ignore `msaa`.
-- [ ] `ownsContext()`: always true now (or remove it along with `attach`)
-- [ ] `shutdown()` / destructor: destroy textures, buffers and programs, `valo.shutdown()`, then the window
+- [ ] `init(w, h, title, msaa)`: §3. Ignore `msaa`.
+- [ ] `ownsContext()`: always true, or remove it along with `attach`
+- [ ] `shutdown()` / destructor: §3
 - [ ] `beginFrame()` / `endFrame()`: §5
 - [ ] `getSize()` → `window.getSize()`
 - [ ] `setTitle()` → `window.setTitle()`
 - [ ] `setVsync()` / `getVsync()` → `valo.setVsync` / `getVsync`
-- [ ] `setFramerateLimit()` / `getFramerateLimit()`: UILO's own limiter
-- [ ] `getStats()`: `numDraw` = commands submitted, `numVertices` = arena vertex count, `cpuTimeMs` = time in `valo.endFrame`, `gpuTimeMs` = 0
-- [ ] `setCursor()`: needs §2b #9
+- [ ] `setFramerateLimit()` / `getFramerateLimit()`: UILO's limiter
+- [ ] `getStats()`: `numDraw` = commands submitted, `numVertices` = arena vertices, `cpuTimeMs` = time in `valo.endFrame`, `gpuTimeMs` = 0
+- [ ] `setCursor(CursorType)` → `window.setCursor(CursorShape)`: Arrow→Arrow, Hand→Hand, SizeHorizontal→ResizeEW, SizeVertical→ResizeNS, Text→Text, Crosshair→Crosshair
 
-### Shapes (all go into the arena as ui-vertex batches)
+### Shapes (into the arena)
 - [ ] `draw(Rect)`: optional gradient drawn as a 5-vertex centre fan; outline = 4 rects inside the bounds
-- [ ] `draw(RoundedRect)`: SDF mode, **not** a clip; outline = 4 `drawArc` corners + 4 edge rects, inset by the 0.5px arc fade
+- [ ] `draw(RoundedRect)`: SDF mode; outline = 4 `drawArc` corners + 4 edge rects, inset by the 0.5px arc fade
 - [ ] `draw(Circle)`: SDF mode with radius = r, quad padded 1px
 - [ ] `draw(Triangle)`: flat colour
-- [ ] `draw(Line)`: quad with 1px alpha skirts. Don't use `Topology::Lines`; VALO's lines are 1px and aliased.
+- [ ] `draw(Line)`: quad with 1px alpha skirts. Don't use `Topology::Lines` (1px, aliased).
 - [ ] `drawLines(lines, n)`: batched quads
 - [ ] `drawArc(...)`: annulus with radial and angular skirts; innerR ≤ 0 draws a solid wedge
 
-### Textures / images
-- [ ] `loadTexture(path)`: keep UILO's stb decode (it needs width and height), then `createTexture(w, h, data)`. Cached by path; failures cached as invalid.
-- [ ] `loadImagePixels(...)`: CPU only, unchanged
-- [ ] `createTexture(w, h)` / `updateTexture(tex, rgba)`: the §2a workaround until VALO has `updateTexture`
-- [ ] `destroyTexture(tex)` → `valo.destroyTexture`
-- [ ] `drawImage(dst, tex, tint, uv, flipH, flipV, clipEllipse)`
-- [ ] `Texture::handle` is uint16 and VALO's `TextureID` is uint32; assert the ID is below `UINT16_MAX`
-
-### Text
-- [ ] `loadFont`, `measureText`, `charPositions`: unchanged
-- [ ] Glyph atlas: an RGBA8 VALO texture per (font, `round(size)`), re-uploaded at `endFrame` when dirty
-- [ ] `drawText(...)`: ui text mode
+### Textures / images / text
+- [ ] `loadTexture`, `loadImagePixels`, `createTexture`, `updateTexture`, `destroyTexture`, `drawImage`: §6
+- [ ] `loadFont`, `measureText`, `charPositions`: unchanged. `drawText`: §6 and the ui text mode.
 
 ### Clipping
-- [ ] `pushScissor` / `popScissor`, `pushRoundClip` / `popRoundClip`: §7
+- [ ] `pushScissor` / `popScissor`, `pushRoundClip` / `popRoundClip`: §8
 - [ ] `clear(color)`: §5
 
 ### Framebuffers: none are called, stub OK
-Later: `createTarget(w, h)` plus a layer, and `drawFrameBuffer` = a textured quad sampling the target ID.
+Implementable later: `createTarget(w, h)` + a layer targeting it, and `drawFrameBuffer` = a textured quad sampling the target ID. Blend alpha now matches across backends, so compositing a target is consistent. VALO's `submit` stamps the current clip's stencil test on every layer, so switch layers only with the clip stack empty.
 - [ ] `createFrameBuffer` / `resizeFrameBuffer` / `destroyFrameBuffer` / `pushFrameBuffer` / `popFrameBuffer` / `drawFrameBuffer`
 
 ### Rotation: none are called, stub OK (or port; it's CPU-only)
@@ -324,26 +296,24 @@ Later: `createTarget(w, h)` plus a layer, and `drawFrameBuffer` = a textured qua
 
 ---
 
-## 9. Behaviours to reproduce exactly
+## 10. Behaviours to reproduce exactly
 
 **Coordinates and colour**
-- [ ] Pixel space, origin top-left, framebuffer pixels. `valo::Window::mousePosition()` is already in pixels, so drop UILO's logical-to-pixel conversion for the mouse.
-- [ ] `packColor` byte order (R,G,B,A in memory) matches VALO's ABGR32 texel format, so image and atlas bytes pass straight through
-- [ ] VALO `Color` is float 0..1: convert `uilo::Color` / 255
+- [ ] Pixel space, origin top-left, framebuffer pixels
+- [ ] `uilo::Color` (uint8) → `valo::Color` / vertex colour as `/ 255`, with no sRGB conversion anywhere
 - [ ] The scene clears to opaque black before the app's `clear()`
 
 **Input**
-- [ ] Held Backspace, Delete and arrow keys repeat in Textbox/Terminal
-- [ ] Shift, Ctrl and Cmd shortcuts work exactly as today (the `handleKeyInput` flags)
-- [ ] Text arrives as UTF-8 and is inserted at the caret; the key that produced it doesn't also trigger a command (today's key-up/timestamp suppression)
-- [ ] Shift+wheel scrolls horizontally, Ctrl/Cmd+wheel zooms, trackpad horizontal scroll works
-- [ ] Left and right presses are latched even when press and release land in the same frame (VALO's bitsets keep both)
-- [ ] Cursor shape follows the hovered element
+- [ ] Held Backspace, Delete and arrows repeat in Textbox/Terminal
+- [ ] Shift / Ctrl / Cmd shortcuts behave as today, and Ctrl+Z/C/V/A follow the keyboard layout (`symbol`)
+- [ ] Typed text (including non-ASCII and IME input) is inserted at the caret, and the key that produced it doesn't also trigger a command
+- [ ] Shift+wheel scrolls horizontally, Ctrl/Cmd+wheel zooms, trackpad horizontal scroll and momentum work
+- [ ] Double-click selects a word in Textbox (now available via `clicks`, if UILO wants it)
+- [ ] The cursor shape follows the hovered element
 
 **Clipping**
 - [ ] Clip bounds snapped to whole pixels (floor start, ceil end, clamp ≥ 0)
-- [ ] A zero-area clip skips draws
-- [ ] radius ≤ 0 means a plain rect clip
+- [ ] A zero-area clip skips draws; radius ≤ 0 means a rect (scissor) clip
 
 **Rotation**
 - [ ] Applied on the CPU to vertices around a pivot; degrees; 0 = +x, 90 = +y; cleared at `beginFrame`
@@ -361,12 +331,12 @@ Later: `createTarget(w, h)` plus a layer, and `drawFrameBuffer` = a textured qua
 
 ---
 
-## 10. Simplifications (what disappears)
+## 11. Simplifications (what disappears)
 
-- [ ] **With §0 (materials):** the offscreen scene target, blur ladder and composite pass; the six reserved views; the bypass guess and deferred-glass replay; two of the five shader programs
-- [ ] **With VALO rendering:** the depth/origin flip logic, the 16-bit index flushes, the duplicate `vs_tex` handles, the embedded-shader tables and the shaderc build step
-- [ ] **With VALO's clip stack:** the scissor and round-clip stacks, clip uniforms, `clipVersion` cache, `applyClipUniforms` dedup and `batchStateMatches`/`captureBatchState`
-- [ ] **With VALO's window:** the per-platform native-handle code in `Renderer::init` (HWND/Metal/X11/Wayland), the cursor cache, the SDL shim for the Wt build, and SDL in `build.sh`/CMake
+- [ ] **With §0 (materials):** the offscreen scene target, blur ladder and composite pass; the six reserved views; the bypass guess and deferred-glass replay; two shader programs
+- [ ] **With VALO rendering:** per-API shader builds and embedded-shader tables (replaced by one `.hpp` pair and `valo_embed_shaders`), the depth/origin flip logic, the 16-bit index flushes, the transient-buffer budgets
+- [ ] **With VALO clipping:** the round-clip stack, clip uniforms, `clipVersion` cache, `applyClipUniforms` dedup, `batchStateMatches`/`captureBatchState`, and the two-clip limit
+- [ ] **With VALO's window:** the native-handle code in `Renderer::init` (HWND/Metal/X11/Wayland), the cursor cache, the SDL shim for the Wt build, and SDL in UILO's `build.sh`/CMake
 - [ ] **One batching path** (the arena + pending command)
 - [ ] **Remove duplication:** the frame-rate limiter copy-pasted twice in `endFrame`, and the ortho matrix built several times
 - [ ] **Line AA:** give `drawLines` the same skirts as `draw(Line)`
@@ -376,46 +346,38 @@ Later: `createTarget(w, h)` plus a layer, and `drawFrameBuffer` = a textured qua
 
 ---
 
-## 11. Verification (software backend)
+## 12. Verification
 
-Run each example on the bgfx build (after §0) and the VALO build and compare.
+Run each on the bgfx build (after §0) and on VALO's **software** and **Vulkan** backends.
 
-| Example | Covers | Result |
-|---|---|:-:|
-| `containers` | rects, rounded clips, text, stats, vsync | [ ] |
-| `gradients` | gradient fans; now on `ui.pollEvents()` | [ ] |
-| `pixel_test` | pixel snapping, clip edges | [ ] |
-| `contextmenu` | overlays, right-click, menu keyboard navigation | [ ] |
-| `datepicker` | mixed shapes and text | [ ] |
-| `theme` | system light/dark detection | [ ] |
-| `render_bench` | batching: command count and frame time | [ ] |
-| `text-editor` / Textbox | text input, key repeat, shortcuts, clipboard, caret, scissor clip | [ ] |
-| `terminal` | key translation, clipboard, bold/italic | [ ] |
-| Knob, Slider, Resizer, Waveform, Icon, Image | drag timing, `drawArc`, `drawLines`, texture updates | [ ] |
+| Example | Covers | Software | Vulkan |
+|---|---|:-:|:-:|
+| `containers` | rects, rounded clips, text, stats, vsync | [ ] | [ ] |
+| `gradients` | gradient fans; now on `ui.pollEvents()` | [ ] | [ ] |
+| `pixel_test` | pixel snapping, scissor edges | [ ] | [ ] |
+| `contextmenu` | overlays, right-click, menu keyboard navigation | [ ] | [ ] |
+| `datepicker` | mixed shapes and text | [ ] | [ ] |
+| `theme` | system light/dark detection | [ ] | [ ] |
+| `render_bench` | batching: command count and frame time | [ ] | [ ] |
+| `text-editor` / Textbox | text input, repeat, shortcuts, clipboard, caret, scissor | [ ] | [ ] |
+| `terminal` | key translation, clipboard, bold/italic | [ ] | [ ] |
+| Knob, Slider, Resizer, Waveform, Icon, Image | drag timing, `drawArc`, `drawLines`, texture updates | [ ] | [ ] |
 
-- [ ] Non-QWERTY layout (AZERTY/Dvorak): Ctrl+Z/C/V/A do what the user expects (§2b #3)
-- [ ] Fast typing: no dropped or reordered characters (§2b #4)
-- [ ] Live window resize keeps redrawing (§2b #10)
-- [ ] macOS: trackpad scroll momentum and pinch zoom (§2b #11)
-- [ ] Nested rounded clips 3+ deep
-- [ ] Scrolled content inside a rounded, clipped container
+- [ ] Non-QWERTY layout (AZERTY/Dvorak): Ctrl+Z/C/V/A do what the user expects
+- [ ] **A real IME composition** (Japanese/Chinese) in a Textbox. VALO's own test couldn't exercise this.
+- [ ] **Shift+wheel horizontal scroll.** Also untested in VALO's harness.
+- [ ] Fast typing: no dropped or reordered characters
+- [ ] Live window resize keeps redrawing (Windows and macOS)
+- [ ] macOS: trackpad scroll momentum and pinch zoom through `nativeHandle()`
+- [ ] Nested rounded clips 3+ deep; scrolled content inside a rounded container
 - [ ] HiDPI window; move between monitors with different scales
-- [ ] Minimised window (0×0; VALO TODO flags zero-size targets as UB)
+- [ ] Minimised window (0×0)
 - [ ] Vsync toggle at runtime
 - [ ] Clip stack deeper than 64
-- [ ] Atlas fills up / very long text
-- [ ] ThreadSanitizer run (shaders on worker threads)
-- [ ] Wt (`UILO_WT`) build still links
-- [ ] `grep -rn "SDL_\|<SDL3" include` finds nothing outside any deliberate §2b fallback
-- [ ] Remove bgfx and SDL from `ext/`, `build.sh`, `CMakeLists.txt`, `cmake/bgfxToolUtils.cmake`, the `.sc` shaders + shaderc step, and the `uilo-new` scaffold
-
----
-
-## 12. When VALO's Vulkan backend lands
-
-UILO code shouldn't change. Re-check these:
-
-- [ ] The ui (and clip) program has its GLSL/SPIR-V twin via VALO's shader contract (VALO TODO §3)
-- [ ] Per-command uniforms fit whatever VALO maps `setUniforms` to (UI uniforms are ~16 B)
-- [ ] Re-run all of §11 on Vulkan
-- [ ] Delete the §2a workarounds once `updateTexture`, R8 and scissor are native
+- [ ] Atlas fills up / very long text; new glyphs appearing while typing on Vulkan (validation clean)
+- [ ] Vulkan with `validation = true`: zero messages across all examples
+- [ ] A built example runs from an unrelated directory with no shader files or tools beside it
+- [ ] ThreadSanitizer run (software shaders run on worker threads, so they must not touch shared state)
+- [ ] Wt (`UILO_WT`) build still builds and links
+- [ ] `grep -rn "SDL_\|<SDL3\|bgfx" include` finds nothing
+- [ ] Remove bgfx and SDL from `ext/`, `build.sh`, `CMakeLists.txt`, `cmake/bgfxToolUtils.cmake` and the `uilo-new` scaffold. Point the scaffold at VALO instead.

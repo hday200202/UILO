@@ -31,26 +31,25 @@ option(UILO_BUILD_EXAMPLES "Build example programs" ${_UILO_DEV_DEFAULT})
 option(UILO_BUILD_TOOLS    "Build the project generator and other tools" ${_UILO_DEV_DEFAULT})
 option(UILO_SHARED        "Build UILO as a shared library" OFF)
 
-# Web backend. UILO's element tree is renderer-free to construct -- bgfx and
-# SDL are only touched from update()/render(), which the web backend never
-# calls. With this ON we swap one rendering target for another: the renderer and
-# platform sources are dropped, a no-op backend takes their place, <SDL3/SDL.h>
-# resolves to the shim in include/wt/shim, and Wt is built and linked instead of
-# bgfx/SDL3. The UI code you write is identical either way.
-option(UILO_WT "Build UILO for the web (Wt) instead of bgfx/SDL3" OFF)
+# Web backend. UILO's element tree is renderer-free to construct -- VALO is only
+# touched from update()/render(), which the web backend never calls. With this
+# ON we swap one rendering target for another: the renderer and platform sources
+# are dropped, a no-op backend takes their place, and Wt is built and linked
+# instead of VALO. The UI code you write is identical either way.
+option(UILO_WT "Build UILO for the web (Wt) instead of VALO" OFF)
 
 if(UILO_WT)
     set(UILO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(UILO_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
-    message(STATUS "[UILO] UILO_WT: web build -- Wt instead of SDL3/bgfx/shaders")
+    message(STATUS "[UILO] UILO_WT: web build -- Wt instead of VALO")
 endif()
 
 if(MSVC AND NOT UILO_WT)
-    # bgfx's GENie build uses the static runtime (/MT) for Release; the whole
-    # desktop project must match or the linker reports LNK2038 runtime
-    # mismatches. The web (UILO_WT) build has no bgfx, and its Boost is built
-    # with runtime-link=shared (/MD), so it stays on the default dynamic runtime
-    # instead — forcing /MT here would mismatch Boost and the consuming app.
+    # The desktop build has always used the static runtime (/MT), and
+    # applications built against it link with the same. VALO and SDL3 build
+    # inside this project and follow it. The web (UILO_WT) build's Boost is
+    # built with runtime-link=shared (/MD), so it stays on the default dynamic
+    # runtime instead -- forcing /MT there would mismatch Boost.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
@@ -60,7 +59,7 @@ find_package(Threads REQUIRED)
 # ---------------------------------------------------------------------------
 # Wt + Boost (vendored in ext/wt and ext/boost, provisioned by `build.sh wt`)
 # ---------------------------------------------------------------------------
-# The web backend's equivalent of the SDL3/bgfx section below: same pattern,
+# The web backend's equivalent of the SDL3/VALO section below: same pattern,
 # same ext/ directory, cloned and built once by build.sh.
 if(UILO_WT)
     set(UILO_WT_DIR    "${CMAKE_CURRENT_SOURCE_DIR}/ext/wt")
@@ -70,7 +69,7 @@ if(UILO_WT)
         message(FATAL_ERROR
             "[UILO] vendored Wt/Boost not found under ${CMAKE_CURRENT_SOURCE_DIR}/ext\n"
             "Run ./build.sh wt (from Git Bash on Windows) -- it clones Wt and "
-            "clones + builds Boost the same way it does SDL3 and bgfx.")
+            "clones + builds Boost the same way it does SDL3 and VALO.")
     endif()
 
     # Boost is built statically by build.sh into ext/boost/stage/lib. Point Wt's
@@ -154,10 +153,11 @@ if(NOT UILO_SDL3_BUILT)
     add_subdirectory("${UILO_SDL3_DIR}" "${UILO_SDL3_BUILD_DIR}")
 else()
     # SDL3 already built, create a target to link against
-    add_library(SDL3-static STATIC IMPORTED)
+    add_library(SDL3-static STATIC IMPORTED GLOBAL)
     set_target_properties(SDL3-static PROPERTIES
         IMPORTED_LOCATION "${UILO_SDL3_BUILT}"
     )
+    add_library(SDL3::SDL3-static ALIAS SDL3-static)
     target_include_directories(SDL3-static INTERFACE "${UILO_SDL3_DIR}/include")
 
     # Link against required system frameworks (same as when built via add_subdirectory)
@@ -188,105 +188,24 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# bgfx (vendored: prebuilt static libs under ext/, built once by build.sh)
+# VALO (vendored in ext/VALO, cloned by build.sh; its own build.sh fetches
+# its header-only libraries and the Vulkan SDK into ext/VALO/ext)
 # ---------------------------------------------------------------------------
-# build.sh shallow-clones bx, bimg, and bgfx as SIBLING directories
-# under ext/ (bgfx's build expects ../bx and ../bimg) and run bgfx's own
-# GENie+make build exactly once, gated on the output archive existing. CMake
-# never builds bgfx; it links the prebuilt Release archives even for Debug
-# builds of UILO (you debug UILO, not bgfx -- see BX_CONFIG_DEBUG below).
-set(UILO_EXT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext")
-
-if(APPLE)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
-        set(UILO_BGFX_PLATFORM_DIR "osx-arm64")
-    else()
-        set(UILO_BGFX_PLATFORM_DIR "osx-x64")
-    endif()
-elseif(WIN32)
-    set(UILO_BGFX_PLATFORM_DIR "win64_vs2022")
-else()
-    set(UILO_BGFX_PLATFORM_DIR "linux64_gcc")
-endif()
-set(UILO_BGFX_BIN_DIR "${UILO_EXT_DIR}/bgfx/.build/${UILO_BGFX_PLATFORM_DIR}/bin")
-
-if(NOT EXISTS "${UILO_BGFX_BIN_DIR}")
+# VALO is UILO's renderer and window: Vulkan where the vendored SDK is present,
+# its software rasteriser everywhere. Added as a subproject, it builds no
+# examples or tools of its own, and it takes the SDL3 target defined above
+# rather than finding a second copy, so exactly one SDL lives in the process.
+set(UILO_EXT_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+set(UILO_VALO_DIR "${UILO_EXT_DIR}/VALO")
+if(NOT EXISTS "${UILO_VALO_DIR}/CMakeLists.txt")
     message(FATAL_ERROR
-        "[UILO] prebuilt bgfx not found at ${UILO_BGFX_BIN_DIR}\n"
-        "Run ./build.sh (from Git Bash on Windows) -- it clones bx/bimg/bgfx "
-        "into ext/ and builds them once.")
+        "[UILO] vendored VALO not found at ${UILO_VALO_DIR}\n"
+        "Run ./build.sh (from Git Bash on Windows) -- it clones VALO into "
+        "ext/VALO and fetches its dependencies.")
 endif()
 
-find_library(UILO_BGFX_LIB        NAMES bgfxRelease        PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(UILO_BIMG_DECODE_LIB NAMES bimg_decodeRelease PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(UILO_BIMG_LIB        NAMES bimgRelease        PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(UILO_BX_LIB          NAMES bxRelease          PATHS "${UILO_BGFX_BIN_DIR}" NO_DEFAULT_PATH REQUIRED)
-
-# ---------------------------------------------------------------------------
-# Shaders (compiled per-backend by bgfx-shaderc, embedded as headers)
-# ---------------------------------------------------------------------------
-# bgfx_compile_shaders comes from cmake/bgfxToolUtils.cmake (vendored from
-# bgfx.cmake). It requires the bgfx::shaderc target to exist BEFORE inclusion
-# (the whole shader section of that file is gated on it), plus
-# BGFX_SHADER_INCLUDE_PATH for shaderc's -i flag. shaderc itself is the
-# prebuilt binary from bgfx's --with-tools build.
-add_executable(bgfx::shaderc IMPORTED)
-set_target_properties(bgfx::shaderc PROPERTIES
-    IMPORTED_LOCATION "${UILO_BGFX_BIN_DIR}/shadercRelease${CMAKE_EXECUTABLE_SUFFIX}")
-set(BGFX_SHADER_INCLUDE_PATH "${UILO_EXT_DIR}/bgfx/src")
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/bgfxToolUtils.cmake")
-
-set(_SHADER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders")
-set(_SHADER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/shaders")
-file(MAKE_DIRECTORY "${_SHADER_OUT_DIR}")
-
-# Profiles: spirv (Vulkan), 120 (OpenGL), 300_es (GLES/WebGL2), metal (Apple),
-# s_5_0 (D3D11 on Windows). s_6_0 (D3D12/DXIL) is intentionally omitted: it
-# requires Microsoft's DXC compiler at build time, and bgfx defaults to the
-# Direct3D11 backend on Windows anyway (see BGFX_PLATFORM_SUPPORTS_DXIL 0 in
-# Renderer.cpp).
-# GLSL 120 pairs with the pinned bgfx in build.sh and CANNOT be changed on its
-# own. bgfx's shaderc dropped 120..150 and now offers 330 and up, while the
-# pinned shaderc's GLSL optimiser rejects anything above 1.50 -- the two ranges
-# do not overlap, so the profile and the bgfx pin move together or not at all.
-set(_UILO_SHADER_PROFILES spirv 120 300_es)
-if(APPLE)
-    list(APPEND _UILO_SHADER_PROFILES metal)
-endif()
-if(WIN32)
-    list(APPEND _UILO_SHADER_PROFILES s_5_0)
-endif()
-
-bgfx_compile_shaders(
-    TYPE VERTEX
-    SHADERS
-        "${_SHADER_SRC_DIR}/vs_solid.sc"
-        "${_SHADER_SRC_DIR}/vs_tex.sc"
-    VARYING_DEF "${_SHADER_SRC_DIR}/varying.def.sc"
-    OUTPUT_DIR  "${_SHADER_OUT_DIR}"
-    OUT_FILES_VAR UILO_VS_HEADERS
-    INCLUDE_DIRS "${_SHADER_SRC_DIR}"
-    PROFILES ${_UILO_SHADER_PROFILES}
-    AS_HEADERS
-)
-
-bgfx_compile_shaders(
-    TYPE FRAGMENT
-    SHADERS
-        "${_SHADER_SRC_DIR}/fs_solid.sc"
-        "${_SHADER_SRC_DIR}/fs_tex.sc"
-        "${_SHADER_SRC_DIR}/fs_text.sc"
-        "${_SHADER_SRC_DIR}/fs_blur.sc"
-        "${_SHADER_SRC_DIR}/fs_glass.sc"
-    VARYING_DEF "${_SHADER_SRC_DIR}/varying.def.sc"
-    OUTPUT_DIR  "${_SHADER_OUT_DIR}"
-    OUT_FILES_VAR UILO_FS_HEADERS
-    INCLUDE_DIRS "${_SHADER_SRC_DIR}"
-    PROFILES ${_UILO_SHADER_PROFILES}
-    AS_HEADERS
-)
-
-add_custom_target(uilo_shaders DEPENDS ${UILO_VS_HEADERS} ${UILO_FS_HEADERS})
+set(VALO_SHARED OFF CACHE BOOL "" FORCE)
+add_subdirectory("${UILO_VALO_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/valo")
 
 endif() # NOT UILO_WT
 
@@ -329,9 +248,6 @@ else()
     set(_UILO_LIB_TYPE STATIC)
 endif()
 add_library(uilo ${_UILO_LIB_TYPE} ${UILO_SRCS})
-if(NOT UILO_WT)
-    add_dependencies(uilo uilo_shaders)
-endif()
 
 set_target_properties(uilo PROPERTIES
     # On Windows, export every symbol from the DLL so consumers don't need
@@ -368,15 +284,15 @@ if(UILO_WT)
     # name: a desktop build would otherwise overwrite the web one (and vice
     # versa) and a consumer would silently link the wrong archive -- the build
     # directories are separate, but the output path is not.
-    #   libuilo.a     desktop (bgfx/SDL3)
+    #   libuilo.a     desktop (VALO)
     #   libuilo_wt.a  web     (Wt)
     set_target_properties(uilo PROPERTIES OUTPUT_NAME uilo_wt)
 
-    # The shim directory holds a single file, SDL3/SDL.h. Listing it here
-    # makes every `#include <SDL3/SDL.h>` in UILO's sources -- and in consumer
-    # code that includes UILO's headers -- resolve to the stand-in, so nothing
-    # else in the tree needed editing.
-    target_include_directories(uilo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/shim")
+    # UILO's input API names VALO's key, button and modifier types, which are
+    # declared header-only in render/Window.hpp. The web build needs those
+    # declarations and nothing else of VALO; the few Window members UILO calls
+    # are stubbed in wt/HeadlessBackend.cpp, so VALO itself is never built.
+    target_include_directories(uilo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ext/VALO/include")
 
     # Icon.cpp lives under include/elements/, so it is part of this build too and
     # still needs NanoSVG's headers to compile. Rasterizing is inert here (the
@@ -408,82 +324,45 @@ if(UILO_WT)
     return()
 endif()
 
-target_include_directories(uilo PUBLIC
-    "${UILO_EXT_DIR}/bgfx/include"
-    "${UILO_EXT_DIR}/bimg/include"
-    "${UILO_EXT_DIR}/bx/include"
-)
-
-# bx needs a per-toolchain compat include dir on macOS and Windows.
-if(APPLE)
-    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/osx")
-elseif(MSVC)
-    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/msvc")
-elseif(MINGW)
-    target_include_directories(uilo PUBLIC "${UILO_EXT_DIR}/bx/include/compat/mingw")
-endif()
-
-# bx headers static_assert unless every consumer TU defines this: 1 in Debug,
-# 0 otherwise. PUBLIC so anything that includes UILO headers gets it too.
-target_compile_definitions(uilo PUBLIC "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,0>")
-
 target_include_directories(uilo PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/ext/stb"
     "${CMAKE_CURRENT_SOURCE_DIR}/ext/nanosvg"
-    "${_SHADER_OUT_DIR}"
 )
 
-# Static link order matters: dependents before dependencies.
-# uilo -> SDL3 -> bgfx -> bimg_decode -> bimg -> bx (bimg_decode holds imageParse and
-# depends on bimg; bx is always last).
-target_link_libraries(uilo PUBLIC
-    SDL3-static
-    "${UILO_BGFX_LIB}"
-    "${UILO_BIMG_DECODE_LIB}"
-    "${UILO_BIMG_LIB}"
-    "${UILO_BX_LIB}"
+# VALO brings SDL3 with it (PUBLIC on its side), so an application only has to
+# link `uilo`.
+target_link_libraries(uilo PUBLIC VALO::VALO)
+
+# The one UI program, compiled to SPIR-V at build time and linked in, so a built
+# application needs no shader files or tools beside it. The software backend
+# runs the same C++ headers directly; ui.vert / ui.frag are the committed valoc
+# translations the Vulkan backend compiles.
+valo_embed_shaders(uilo SHADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders/ui.vert.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/renderer/shaders/ui.frag.hpp"
 )
 
-# Platform deps required by the static bgfx/bx archives.
+# Platform deps for UILO's own native code.
 if(APPLE)
     target_link_libraries(uilo PUBLIC
-        "-framework Metal"
-        "-framework MetalKit"
-        "-framework QuartzCore"
-        "-framework AppKit"   # also used directly by the native scroll-wheel monitor
+        "-framework AppKit"   # the native scroll-wheel monitor and live resize
         "-framework Cocoa"
-        "-framework IOKit"
         "-framework CoreFoundation"
         "-framework CoreGraphics"
-        "-framework CoreVideo"
-        "-framework CoreMedia"
-        "-framework VideoToolbox"
     )
 elseif(WIN32)
-    # DirectX headers/libs are vendored inside bgfx -- no DX SDK needed.
-    target_link_libraries(uilo PUBLIC gdi32 psapi user32)
+    target_link_libraries(uilo PUBLIC gdi32 user32)
 else()
-    target_link_libraries(uilo PUBLIC Threads::Threads ${CMAKE_DL_LIBS} GL)
+    target_link_libraries(uilo PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 endif()
 
 if(MSVC)
-    # bx's platform.h hard-errors unless MSVC reports the real C++ standard via
-    # /Zc:__cplusplus (off by default). PUBLIC so any consumer that includes the
-    # vendored bgfx/bx headers through UILO gets it too. /utf-8 keeps source and
-    # execution charsets consistent for the embedded assets.
-    target_compile_options(uilo PUBLIC /Zc:__cplusplus /Zc:preprocessor /utf-8)
+    # /utf-8 keeps source and execution charsets consistent for the embedded
+    # assets. PUBLIC because UILO's headers carry UTF-8 literals too.
+    target_compile_options(uilo PUBLIC /utf-8)
     target_compile_options(uilo PRIVATE /W3)
 else()
     target_compile_options(uilo PRIVATE -Wall -Wextra)
-endif()
-
-# Linux: link X11 (Renderer.cpp pulls in Xlib for the native window handle).
-if(UNIX AND NOT APPLE)
-    find_package(X11)
-    if(X11_FOUND)
-        target_link_libraries(uilo PUBLIC ${X11_LIBRARIES})
-        target_include_directories(uilo PRIVATE ${X11_INCLUDE_DIR})
-    endif()
 endif()
 
 

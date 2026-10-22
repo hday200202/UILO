@@ -1,7 +1,5 @@
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
-#include <SDL3/SDL.h>
-#include <bgfx/bgfx.h>
 #include <iostream>
 #include <cstdio>
 
@@ -107,11 +105,7 @@ static FpsHud buildFpsHud() {
             .setDraggable(true)
             .setFreePosition(12_px, 12_px)
             .setWidth(180_px)
-            .setHeight(96_px)
-            .setMaterial(
-                Material::Blur()
-                    .setRadius(2.f)
-            ),
+            .setHeight(96_px),
         ColumnOptions()
             .setColorRole("panelAlt")
             .setRounding(ROUNDING),
@@ -140,23 +134,23 @@ static void updateFpsHud(const FpsHud& hud, const Renderer& renderer, float fpsV
 static void installKeybinds(UILO& ui, Renderer& renderer, Column* fpsHud) {
     Keybinds& keys = ui.getKeybinds();
 
-    keys.bindAction("ui.scaleUp", { SDL_SCANCODE_EQUALS, SDL_SCANCODE_KP_PLUS },
+    keys.bindAction("ui.scaleUp", { Key::Equals, Key::KpPlus },
         [&ui] { ui.setScale(ui.getScale() + 0.1f); }, true);
 
-    keys.bindAction("ui.scaleDown", { SDL_SCANCODE_MINUS, SDL_SCANCODE_KP_MINUS },
+    keys.bindAction("ui.scaleDown", { Key::Minus, Key::KpMinus },
         [&ui] { ui.setScale(ui.getScale() - 0.1f); }, true);
 
-    keys.bindAction("ui.toggleFpsHud", SDL_SCANCODE_F10,
+    keys.bindAction("ui.toggleFpsHud", Key::F10,
         [fpsHud] {
             if (!fpsHud) return;
             Modifier& m = fpsHud->getModifier();
             m.setVisible(!m.getVisible());
         }, true);
 
-    keys.bindAction("renderer.toggleVsync", SDL_SCANCODE_V,
+    keys.bindAction("renderer.toggleVsync", Key::V,
         [&renderer] { renderer.setVsync(!renderer.getVsync()); }, true);
 
-    keys.bindAction("app.quit", SDL_SCANCODE_ESCAPE, [&ui] { ui.quit(); }, true);
+    keys.bindAction("app.quit", Key::Escape, [&ui] { ui.quit(); }, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,11 +173,6 @@ int main() {
     ui.setScale(OS::scale());
     applyTheme(ui, true);
     installKeybinds(ui, renderer, hud.root);
-
-    std::fprintf(
-        stderr, "[UILO] bgfx renderer: %s\n",
-        bgfx::getRendererName(bgfx::getCaps()->rendererType)
-    );
 
     while (ui.isRunning()) {
         ui.pollEvents();

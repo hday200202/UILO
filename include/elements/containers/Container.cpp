@@ -299,9 +299,7 @@ void Container::tickFloating(float dt) {
     const Rectf area = contentArea();
 
     if (m_dragChild) {
-        float mx = 0.f, my = 0.f;
-        const uint32_t buttons = SDL_GetMouseState(&mx, &my);
-        if (!(buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) || !m_uiloRef) {
+        if (!m_uiloRef || !m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
             m_dragChild = nullptr;
         } else {
             /* Free position is stored unscaled, so undo the scale on the way in

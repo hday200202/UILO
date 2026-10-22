@@ -46,8 +46,9 @@ constexpr const char* kEmbeddedMonoFontCacheKey = "__UILO_EMBEDDED_MONO_FONT__";
                 float pixelHeight
     - Returns:  none
     - Desc:     Sets up a font face at one pixel size: reads the vertical
-                metrics, scales them, and allocates a blank single-channel atlas
-                the glyphs are packed into on demand.
+                metrics, scales them, and allocates a blank atlas the glyphs are
+                packed into on demand. The GPU texture is created by the caller,
+                which owns the VALO instance.
 */
 void initAtlasFace(FontFace& face, stbtt_fontinfo info,
                    std::vector<uint8_t> ttf, float pixelHeight) {
@@ -66,12 +67,9 @@ void initAtlasFace(FontFace& face, stbtt_fontinfo info,
     face.penY = 1;
     face.rowH = 0;
 
-    /* Allocate R8 texture, blank. */
-    face.atlas = bgfx::createTexture2D(
-        (uint16_t)kAtlasW, (uint16_t)kAtlasH, false, 1,
-        bgfx::TextureFormat::R8,
-        BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
-        nullptr);
+    /* Blank coverage, held as RGBA8 with the coverage in every channel: VALO
+       has no single-channel format yet, and the shader reads .x either way. */
+    face.pixels.assign((size_t)kAtlasW * (size_t)kAtlasH, 0u);
 }
 } // anon
 
@@ -100,6 +98,9 @@ FontFace* Renderer::Impl::getFace(uint32_t fontId, float pixelHeight) {
     }
     FontFace face;
     initAtlasFace(face, info, rec.ttfData, (float)key);
+    /* Never sampled through mips: glyphs are drawn texel-for-pixel. */
+    face.atlas = valo.createTexture((uint32_t)face.atlasW, (uint32_t)face.atlasH,
+                                    face.pixels.data(), false, false);
     auto [insIt, ok] = rec.sizes.emplace(key, std::move(face));
     return &insIt->second;
 }
@@ -156,12 +157,24 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     stbtt_MakeCodepointBitmap(&face.info, bmp.data(), gw, gh, gw,
                               face.scale, face.scale, (int)codepoint);
 
-    /* Upload subregion */
-    const bgfx::Memory* mem = bgfx::copy(bmp.data(), (uint32_t)bmp.size());
-    bgfx::updateTexture2D(face.atlas, 0, 0,
-                          (uint16_t)face.penX, (uint16_t)face.penY,
-                          (uint16_t)gw, (uint16_t)gh,
-                          mem, (uint16_t)gw);
+    /* Into the CPU atlas, coverage replicated into every channel. The region
+       is uploaded with the rest of the frame's glyphs before the frame runs. */
+    for (int row = 0; row < gh; ++row) {
+        uint32_t* dst = face.pixels.data() + (size_t)(face.penY + row) * (size_t)face.atlasW
+                      + (size_t)face.penX;
+        const uint8_t* src = bmp.data() + (size_t)row * (size_t)gw;
+        for (int col = 0; col < gw; ++col) dst[col] = 0x01010101u * src[col];
+    }
+    if (!face.dirty) {
+        face.dirtyX0 = face.penX;      face.dirtyY0 = face.penY;
+        face.dirtyX1 = face.penX + gw; face.dirtyY1 = face.penY + gh;
+        face.dirty   = true;
+    } else {
+        face.dirtyX0 = std::min(face.dirtyX0, face.penX);
+        face.dirtyY0 = std::min(face.dirtyY0, face.penY);
+        face.dirtyX1 = std::max(face.dirtyX1, face.penX + gw);
+        face.dirtyY1 = std::max(face.dirtyY1, face.penY + gh);
+    }
 
     g.x = (uint16_t)face.penX;
     g.y = (uint16_t)face.penY;
@@ -171,6 +184,40 @@ const Glyph* Renderer::Impl::getGlyph(FontFace& face, uint32_t codepoint) {
     if (gh > face.rowH) face.rowH = gh;
 
     return &face.glyphs.emplace(codepoint, g).first->second;
+}
+
+/*
+    uploadDirtyAtlases():
+    - Params:   none
+    - Returns:  none
+    - Desc:     Sends every atlas region rasterised since the last frame to its
+                texture, one rectangle per face. Runs at endFrame, before VALO
+                executes the frame, so a glyph first drawn this frame is already
+                on the GPU when its quad is.
+*/
+void Renderer::Impl::uploadDirtyAtlases() {
+    std::vector<uint32_t> region;
+    for (auto& rec : fonts) {
+        for (auto& kv : rec.sizes) {
+            FontFace& face = kv.second;
+            if (!face.dirty || face.atlas == valo::EMPTY_TEXTURE) continue;
+            face.dirty = false;
+
+            const int w = face.dirtyX1 - face.dirtyX0;
+            const int h = face.dirtyY1 - face.dirtyY0;
+            if (w <= 0 || h <= 0) continue;
+
+            region.resize((size_t)w * (size_t)h);
+            for (int row = 0; row < h; ++row) {
+                const uint32_t* src = face.pixels.data()
+                                    + (size_t)(face.dirtyY0 + row) * (size_t)face.atlasW
+                                    + (size_t)face.dirtyX0;
+                std::memcpy(region.data() + (size_t)row * (size_t)w, src, (size_t)w * sizeof(uint32_t));
+            }
+            valo.updateTexture(face.atlas, (uint32_t)face.dirtyX0, (uint32_t)face.dirtyY0,
+                               (uint32_t)w, (uint32_t)h, region.data());
+        }
+    }
 }
 
 /*
@@ -357,39 +404,24 @@ std::vector<Vec2f> Renderer::charPositions(const std::string& utf8,
 void Renderer::drawText(const std::string& utf8, Vec2f position,
                          const Font& font, float sizePx, Color color,
                          TextStyle style) {
-    if (!font.valid() || utf8.empty()) return;
+    if (!m_initialised || !font.valid() || utf8.empty()) return;
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.textProgram) || scissorEmpty(impl)) return;
+    if (impl.scissorEmpty()) return;
 
     FontFace* face = impl.getFace(font.id, sizePx);
-    if (!face || !bgfx::isValid(face->atlas)) return;
+    if (!face || face->atlas == valo::EMPTY_TEXTURE) return;
 
     /* Synthetic styling. */
     const int   passes = style.bold ? 2 : 1;
     const float boldDx = style.bold ? std::max(1.f, sizePx * 0.04f) : 0.f;
     const float slant  = style.italic ? 0.21f : 0.f;   /* ~12 degrees */
 
-    /* Single pass: allocate transient space for the worst case (one quad per
-       UTF-8 byte, an upper bound on codepoints) and submit only the range. */
-    const uint32_t maxQuads =
-        (uint32_t)std::min<size_t>(utf8.size() * (size_t)passes, 65532u / 4u);
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.texLayout, maxQuads * 4,
-                                     &tib, maxQuads * 6))
-        return;
-
-    auto* verts = reinterpret_cast<PosColorUvVertex*>(tvb.data);
-    auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
-
-    uint32_t col = packColor(color);
     const float invW = 1.f / (float)face->atlasW;
     const float invH = 1.f / (float)face->atlasH;
 
     float penX = position.x;
     float penY = position.y + face->ascent;   /* baseline */
-    uint32_t vi = 0, ii = 0;
+    bool  open = false;
 
     const char* s = utf8.data();
     size_t left = utf8.size();
@@ -409,6 +441,12 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
         if (!g) continue;
 
         if (g->w > 0 && g->h > 0) {
+            /* Opened on the first visible glyph, so whitespace-only text never
+               breaks the batch it lands in. */
+            if (!open) {
+                if (!impl.beginShape(Impl::ModeText, face->atlas)) return;
+                open = true;
+            }
             float gx = std::floor(penX + g->xoff + 0.5f);
             float gy = std::floor(penY + g->yoff + 0.5f);
             float gw = (float)g->w;
@@ -419,10 +457,8 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
             float v1 = (g->y + g->h) * invH;
 
             for (int pass = 0; pass < passes; ++pass) {
-                if (vi + 4 > maxQuads * 4) break;
                 const float dx = (float)pass * boldDx;
 
-                uint16_t base = (uint16_t)vi;
                 float p0x = gx + dx,      p0y = gy;
                 float p1x = gx + gw + dx, p1y = gy;
                 float p2x = gx + gw + dx, p2y = gy + gh;
@@ -438,29 +474,20 @@ void Renderer::drawText(const std::string& utf8, Vec2f position,
 
                 impl.rotPt(p0x, p0y); impl.rotPt(p1x, p1y);
                 impl.rotPt(p2x, p2y); impl.rotPt(p3x, p3y);
-                verts[vi++] = {p0x, p0y, col, u0, v0};
-                verts[vi++] = {p1x, p1y, col, u1, v0};
-                verts[vi++] = {p2x, p2y, col, u1, v1};
-                verts[vi++] = {p3x, p3y, col, u0, v1};
-                idx[ii++] = base;
-                idx[ii++] = (uint16_t)(base + 1);
-                idx[ii++] = (uint16_t)(base + 2);
-                idx[ii++] = base;
-                idx[ii++] = (uint16_t)(base + 2);
-                idx[ii++] = (uint16_t)(base + 3);
+                const uint32_t base = impl.pushVertex(p0x, p0y, color, u0, v0);
+                impl.pushVertex(p1x, p1y, color, u1, v0);
+                impl.pushVertex(p2x, p2y, color, u1, v1);
+                impl.pushVertex(p3x, p3y, color, u0, v1);
+                impl.pushIndex(base);
+                impl.pushIndex(base + 1);
+                impl.pushIndex(base + 2);
+                impl.pushIndex(base);
+                impl.pushIndex(base + 2);
+                impl.pushIndex(base + 3);
             }
         }
         penX += g->xadvance;
     }
-    if (ii == 0) return;   /* whitespace-only: nothing to submit */
-
-    bgfx::setTexture(0, impl.s_texColor, face->atlas);
-    bgfx::setVertexBuffer(0, &tvb, 0, vi);
-    bgfx::setIndexBuffer(&tib, 0, ii);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.textProgram);
 }
 
 } // namespace uilo

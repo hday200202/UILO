@@ -1,20 +1,5 @@
 #include "RendererImpl.hpp"
 
-#include <SDL3/SDL.h>
-
-/* Disable embedded-shader references to backends we don't compile for. */
-#include <bx/platform.h>
-#if !defined(BX_PLATFORM_WINDOWS) || !BX_PLATFORM_WINDOWS
-#  define BGFX_PLATFORM_SUPPORTS_DXBC 0
-#endif
-/* D3D12 (DXIL) shaders need Microsoft's DXC compiler at build time, which
-   isn't shipped with a stock VS install. */
-#define BGFX_PLATFORM_SUPPORTS_DXIL 0
-#define BGFX_PLATFORM_SUPPORTS_WGSL 0
-#define BGFX_PLATFORM_SUPPORTS_PSSL 0
-#define BGFX_PLATFORM_SUPPORTS_NVN  0
-
-#include <bgfx/embedded_shader.h>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -22,471 +7,276 @@
 #include <string_view>
 #include <thread>
 
-#if defined(SDL_PLATFORM_LINUX)
-#  include <X11/Xlib.h>
-#endif
-
-/* ============================================================================
-   Embedded shaders (compiled per-backend by bgfx-shaderc at build time). */
-
-#include "spirv/vs_solid.sc.bin.h"
-#include "spirv/vs_tex.sc.bin.h"
-#include "spirv/fs_solid.sc.bin.h"
-#include "spirv/fs_tex.sc.bin.h"
-#include "spirv/fs_text.sc.bin.h"
-#include "spirv/fs_blur.sc.bin.h"
-#include "spirv/fs_glass.sc.bin.h"
-
-#include "glsl/vs_solid.sc.bin.h"
-#include "glsl/vs_tex.sc.bin.h"
-#include "glsl/fs_solid.sc.bin.h"
-#include "glsl/fs_tex.sc.bin.h"
-#include "glsl/fs_text.sc.bin.h"
-#include "glsl/fs_blur.sc.bin.h"
-#include "glsl/fs_glass.sc.bin.h"
-
-#include "essl/vs_solid.sc.bin.h"
-#include "essl/vs_tex.sc.bin.h"
-#include "essl/fs_solid.sc.bin.h"
-#include "essl/fs_tex.sc.bin.h"
-#include "essl/fs_text.sc.bin.h"
-#include "essl/fs_blur.sc.bin.h"
-#include "essl/fs_glass.sc.bin.h"
-
-#if BX_PLATFORM_OSX || BX_PLATFORM_IOS
-#  include "metal/vs_solid.sc.bin.h"
-#  include "metal/vs_tex.sc.bin.h"
-#  include "metal/fs_solid.sc.bin.h"
-#  include "metal/fs_tex.sc.bin.h"
-#  include "metal/fs_text.sc.bin.h"
-#  include "metal/fs_blur.sc.bin.h"
-#  include "metal/fs_glass.sc.bin.h"
-#endif
-
-#if BX_PLATFORM_WINDOWS
-#  include "dxbc/vs_solid.sc.bin.h"
-#  include "dxbc/vs_tex.sc.bin.h"
-#  include "dxbc/fs_solid.sc.bin.h"
-#  include "dxbc/fs_tex.sc.bin.h"
-#  include "dxbc/fs_text.sc.bin.h"
-#  include "dxbc/fs_blur.sc.bin.h"
-#  include "dxbc/fs_glass.sc.bin.h"
-#endif
+/* The UI program's SPIR-V, compiled and linked in by valo_embed_shaders(uilo)
+   in CMakeLists.txt. uilo is a static library, so the embedded shaders are
+   registered explicitly rather than left to static initialisers the linker
+   would drop. */
+VALO_DECLARE_EMBEDDED_SHADERS(uilo)
 
 namespace uilo {
 
 namespace {
-    static const bgfx::EmbeddedShader s_embeddedShaders[] = {
-        BGFX_EMBEDDED_SHADER(vs_solid),
-        BGFX_EMBEDDED_SHADER(fs_solid),
-        BGFX_EMBEDDED_SHADER(vs_tex),
-        BGFX_EMBEDDED_SHADER(fs_tex),
-        BGFX_EMBEDDED_SHADER(fs_text),
-        BGFX_EMBEDDED_SHADER(fs_blur),
-        BGFX_EMBEDDED_SHADER(fs_glass),
-        BGFX_EMBEDDED_SHADER_END(),
-    };
-}
+
+/* The program's two halves, as registered by the shader headers. Matched by
+   suffix, so this is the same key on both backends and from any build dir. */
+constexpr const char* kUiVertexShader   = "renderer/shaders/ui.vert.hpp";
+constexpr const char* kUiFragmentShader = "renderer/shaders/ui.frag.hpp";
 
 /*
-    ensureLayouts():
-    - Params:   none
-    - Returns:  none
-    - Desc:     ============================================================
-                ================ Impl ======================================
-                ======================================
+    toValoColor(Color c):
+    - Params:   Color c
+    - Returns:  valo::Color
+    - Desc:     A UILO colour as VALO's 0..1 floats, for layer clears.
 */
-void Renderer::Impl::ensureLayouts() {
-    if (layoutsInit) return;
-    solidLayout.begin()
-        .add(bgfx::Attrib::Position,  2, bgfx::AttribType::Float)
-        .add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true)
-        .end();
-    texLayout.begin()
-        .add(bgfx::Attrib::Position,  2, bgfx::AttribType::Float)
-        .add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true)
-        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
-        .end();
-    layoutsInit = true;
+valo::Color toValoColor(Color c) {
+    return valo::Color{c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f};
 }
 
 /*
-    initShaders():
+    sleepUntilNextFrame(double interval, uint64_t& nextTick):
+    - Params:   double interval -- seconds per frame; uint64_t& nextTick --
+                steady_clock ns of the next deadline, 0 to re-anchor
+    - Returns:  none
+    - Desc:     The frame-rate cap. Sleeps most of the remaining time and spins
+                the last half millisecond, so scheduler latency does not
+                overshoot the deadline; re-anchors when the loop has fallen more
+                than a whole frame behind rather than trying to catch up.
+*/
+void sleepUntilNextFrame(double interval, uint64_t& nextTick) {
+    if (interval <= 0.0) return;
+    using clock = std::chrono::steady_clock;
+    const auto nowNs = [] {
+        return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+            clock::now().time_since_epoch()).count();
+    };
+    const uint64_t now        = nowNs();
+    const uint64_t intervalNs = (uint64_t)(interval * 1e9);
+    if (nextTick == 0 || now > nextTick + intervalNs) {
+        nextTick = now + intervalNs;
+        return;
+    }
+    if (now < nextTick) {
+        const uint64_t waitNs = nextTick - now;
+        constexpr uint64_t spinMarginNs = 500'000;   /* 0.5 ms */
+        if (waitNs > spinMarginNs)
+            std::this_thread::sleep_for(std::chrono::nanoseconds(waitNs - spinMarginNs));
+        while (nowNs() < nextTick) std::this_thread::yield();
+    }
+    nextTick += intervalNs;
+}
+
+} // anon
+
+/*
+    createResources():
     - Params:   none
     - Returns:  bool
-    - Desc:     Compiles the embedded shader programs and creates the uniform
-                handles the renderer draws through. Shaders are embedded rather
-                than loaded, so a built application needs no shader files beside
-                it.
+    - Desc:     Creates what every frame draws through: the UI program and the
+                arena's vertex and index buffers. The buffers start with one
+                placeholder element because VALO creates a buffer from data;
+                the first frame replaces it.
 */
-bool Renderer::Impl::initShaders() {
-    const bgfx::RendererType::Enum type = bgfx::getRendererType();
+bool Renderer::Impl::createResources() {
+    layout = valo::VtxLayout({ valo::VtxAttrib::Vec2f,
+                               valo::VtxAttrib::Vec4f,
+                               valo::VtxAttrib::Vec2f });
 
-    bgfx::ShaderHandle vs   = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_solid");
-    bgfx::ShaderHandle fs   = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_solid");
-    bgfx::ShaderHandle vst1 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
-    bgfx::ShaderHandle vst2 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
-    bgfx::ShaderHandle vst3 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
-    bgfx::ShaderHandle vst4 = bgfx::createEmbeddedShader(s_embeddedShaders, type, "vs_tex");
-    bgfx::ShaderHandle fst  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_tex");
-    bgfx::ShaderHandle ftx  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_text");
-    bgfx::ShaderHandle fbl  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_blur");
-    bgfx::ShaderHandle fgl  = bgfx::createEmbeddedShader(s_embeddedShaders, type, "fs_glass");
-    if (!bgfx::isValid(vs)   || !bgfx::isValid(fs)   ||
-        !bgfx::isValid(vst1) || !bgfx::isValid(vst2) ||
-        !bgfx::isValid(vst3) || !bgfx::isValid(vst4) ||
-        !bgfx::isValid(fst)  || !bgfx::isValid(ftx)  ||
-        !bgfx::isValid(fbl)  || !bgfx::isValid(fgl)) {
-        std::fprintf(stderr, "[UILO] Failed to create shaders (renderer=%s)\n",
-                     bgfx::getRendererName(type));
+    const UiVertex seedVertex{};
+    const uint32_t seedIndex = 0;
+    vb = valo.createVertexBuffer(&seedVertex, 1, layout);
+    ib = valo.createIndexBuffer(&seedIndex, 1);
+
+    VALO_REGISTER_EMBEDDED_SHADERS(uilo);
+    program = valo.createProgram(kUiVertexShader, kUiFragmentShader);
+    if (program == valo::DEFAULT_PROGRAM) {
+        std::fprintf(stderr, "[UILO] failed to create the UI shader program\n");
         return false;
     }
-    solidProgram = bgfx::createProgram(vs,   fs,  true);
-    texProgram   = bgfx::createProgram(vst1, fst, true);
-    textProgram  = bgfx::createProgram(vst2, ftx, true);
-    blurProgram  = bgfx::createProgram(vst3, fbl, true);
-    glassProgram = bgfx::createProgram(vst4, fgl, true);
-    s_texColor   = bgfx::createUniform("s_texColor",   bgfx::UniformType::Sampler);
-    u_imgFlags   = bgfx::createUniform("u_imgFlags",   bgfx::UniformType::Vec4);
-    u_blurParams = bgfx::createUniform("u_blurParams", bgfx::UniformType::Vec4);
-    u_glassParams= bgfx::createUniform("u_glassParams",bgfx::UniformType::Vec4);
-    u_glassTint  = bgfx::createUniform("u_glassTint",  bgfx::UniformType::Vec4);
-    u_glassRect  = bgfx::createUniform("u_glassRect",  bgfx::UniformType::Vec4);
-    u_glassAnim  = bgfx::createUniform("u_glassAnim",  bgfx::UniformType::Vec4);
-    u_glassBase  = bgfx::createUniform("u_glassBase",  bgfx::UniformType::Vec4);
-    u_glassMouse = bgfx::createUniform("u_glassMouse", bgfx::UniformType::Vec4);
-    u_clipRect   = bgfx::createUniform("u_clipRect",   bgfx::UniformType::Vec4);
-    u_clipParams = bgfx::createUniform("u_clipParams", bgfx::UniformType::Vec4);
-    u_clipRect2  = bgfx::createUniform("u_clipRect2",  bgfx::UniformType::Vec4);
-    u_clipParams2= bgfx::createUniform("u_clipParams2",bgfx::UniformType::Vec4);
-    if (!bgfx::isValid(solidProgram) ||
-        !bgfx::isValid(texProgram)   ||
-        !bgfx::isValid(textProgram)  ||
-        !bgfx::isValid(blurProgram)  ||
-        !bgfx::isValid(glassProgram)) {
-        std::fprintf(stderr, "[UILO] Failed to create shader programs\n");
-        return false;
-    }
-    return true;
+    return vb != valo::EMPTY_BUFFER && ib != valo::EMPTY_BUFFER;
 }
+
 /*
     shutdownResources():
     - Params:   none
     - Returns:  none
-    - Desc:     Destroys every GPU resource the renderer created -- programs,
-                uniforms, framebuffers, textures and font atlases -- in an order
-                that leaves nothing referencing a destroyed handle.
+    - Desc:     Releases every GPU resource the renderer created -- textures,
+                font atlases, framebuffer layers, the program and the arena --
+                then VALO itself and the window.
 */
 void Renderer::Impl::shutdownResources() {
-    for (auto& kv : textureCache) {
-        if (kv.second.handle != UINT16_MAX) {
-            bgfx::TextureHandle h{ kv.second.handle };
-            bgfx::destroy(h);
-        }
-    }
+    for (auto& kv : textureCache)
+        if (kv.second.valid()) valo.destroyTexture(kv.second.handle);
     textureCache.clear();
 
-    for (auto& rec : fonts) {
-        for (auto& kv : rec.sizes) {
-            if (bgfx::isValid(kv.second.atlas))
-                bgfx::destroy(kv.second.atlas);
-        }
-    }
+    for (auto& rec : fonts)
+        for (auto& kv : rec.sizes)
+            if (kv.second.atlas != valo::EMPTY_TEXTURE) valo.destroyTexture(kv.second.atlas);
     fonts.clear();
     fontByPath.clear();
 
-    for (auto& kv : cursors) {
-        if (kv.second) SDL_DestroyCursor((SDL_Cursor*)kv.second);
-    }
-    cursors.clear();
+    if (program != valo::DEFAULT_PROGRAM) valo.destroyProgram(program);
+    if (vb != valo::EMPTY_BUFFER)        valo.destroyVertexBuffer(vb);
+    if (ib != valo::EMPTY_BUFFER)        valo.destroyIndexBuffer(ib);
+    program = valo::DEFAULT_PROGRAM;
+    vb = valo::EMPTY_BUFFER;
+    ib = valo::EMPTY_BUFFER;
 
-    if (bgfx::isValid(s_texColor))   bgfx::destroy(s_texColor);
-    if (bgfx::isValid(u_imgFlags))   bgfx::destroy(u_imgFlags);
-    if (bgfx::isValid(u_blurParams)) bgfx::destroy(u_blurParams);
-    if (bgfx::isValid(u_glassParams))bgfx::destroy(u_glassParams);
-    if (bgfx::isValid(u_glassTint))  bgfx::destroy(u_glassTint);
-    if (bgfx::isValid(u_glassRect))  bgfx::destroy(u_glassRect);
-    if (bgfx::isValid(u_glassAnim))  bgfx::destroy(u_glassAnim);
-    if (bgfx::isValid(u_glassBase))  bgfx::destroy(u_glassBase);
-    if (bgfx::isValid(u_glassMouse)) bgfx::destroy(u_glassMouse);
-    if (bgfx::isValid(u_clipRect))   bgfx::destroy(u_clipRect);
-    if (bgfx::isValid(u_clipParams)) bgfx::destroy(u_clipParams);
-    if (bgfx::isValid(u_clipRect2))  bgfx::destroy(u_clipRect2);
-    if (bgfx::isValid(u_clipParams2))bgfx::destroy(u_clipParams2);
-    if (bgfx::isValid(solidProgram)) bgfx::destroy(solidProgram);
-    if (bgfx::isValid(texProgram))   bgfx::destroy(texProgram);
-    if (bgfx::isValid(textProgram))  bgfx::destroy(textProgram);
-    if (bgfx::isValid(blurProgram))  bgfx::destroy(blurProgram);
-    if (bgfx::isValid(glassProgram)) bgfx::destroy(glassProgram);
-    destroySceneFramebuffers();
-    s_texColor   = BGFX_INVALID_HANDLE;
-    solidProgram = BGFX_INVALID_HANDLE;
-    texProgram   = BGFX_INVALID_HANDLE;
-    textProgram  = BGFX_INVALID_HANDLE;
-    u_imgFlags   = BGFX_INVALID_HANDLE;
-    blurProgram  = BGFX_INVALID_HANDLE;
-    glassProgram = BGFX_INVALID_HANDLE;
-    u_blurParams = BGFX_INVALID_HANDLE;
-    u_glassParams= BGFX_INVALID_HANDLE;
-    u_glassTint  = BGFX_INVALID_HANDLE;
-    u_glassRect  = BGFX_INVALID_HANDLE;
-    u_glassAnim  = BGFX_INVALID_HANDLE;
-    u_glassBase  = BGFX_INVALID_HANDLE;
-    u_glassMouse = BGFX_INVALID_HANDLE;
+    if (valoReady) valo.shutdown();
+    valoReady = false;
+    window.reset();
 }
 
 /*
-    destroySceneFramebuffers():
+    applyLayerOrder():
     - Params:   none
     - Returns:  none
-    - Desc:     ============================================================
-                ================ Offscreen scene + blur ladder (Material::Glass)
-                ==========================================
-                ==================================
+    - Desc:     Framebuffer layers run before the window's, so a framebuffer
+                drawn into the scene has already been rendered that frame.
 */
-void Renderer::Impl::destroySceneFramebuffers() {
-    if (bgfx::isValid(sceneFB))  bgfx::destroy(sceneFB);
-    if (bgfx::isValid(blurFB_A)) bgfx::destroy(blurFB_A);
-    if (bgfx::isValid(blurFB_B)) bgfx::destroy(blurFB_B);
-    sceneFB  = BGFX_INVALID_HANDLE;
-    blurFB_A = BGFX_INVALID_HANDLE;
-    blurFB_B = BGFX_INVALID_HANDLE;
-    sceneColorTex = BGFX_INVALID_HANDLE;
-    blurColorA    = BGFX_INVALID_HANDLE;
-    blurColorB    = BGFX_INVALID_HANDLE;
-    fbWidth = fbHeight = 0;
+void Renderer::Impl::applyLayerOrder() {
+    std::vector<valo::LayerID> order = fbLayers;
+    order.push_back(valo::VALO::BASE_LAYER);
+    valo.setLayerOrder(order);
 }
 
 /*
-    ensureSceneFramebuffers(uint32_t width, uint32_t height):
-    - Params:   uint32_t width, uint32_t height
+    refreshClipCache():
+    - Params:   none
     - Returns:  none
-    - Desc:     Creates or resizes the offscreen targets the scene is composited
-                through. Recreated only when the size actually changes, since
-                reallocating a framebuffer every frame would stall the GPU.
+    - Desc:     Walk the clip stack from the top down and collect the two top-
+                most rounded entries (radius > 0). The first becomes the "inner"
+                SDF (the shape being drawn, e.g. a button's own rounded body);
+                the second becomes the "outer" SDF (the enclosing rounded
+                ancestor, e.g. the parent panel). Both are applied in the
+                fragment shader, so a child element stays its own shape AND gets
+                cropped by the parent's rounded corners.
 */
-void Renderer::Impl::ensureSceneFramebuffers(uint32_t width, uint32_t height) {
-    if (width == 0 || height == 0) return;
-    if (bgfx::isValid(sceneFB) && fbWidth == width && fbHeight == height) return;
-
-    destroySceneFramebuffers();
-
-    const uint64_t fbFlags = BGFX_TEXTURE_RT
-                           | BGFX_SAMPLER_U_CLAMP
-                           | BGFX_SAMPLER_V_CLAMP;
-
-    /* Full-res scene target. */
-    sceneFB = bgfx::createFrameBuffer(
-        (uint16_t)width, (uint16_t)height,
-        bgfx::TextureFormat::BGRA8, fbFlags);
-    sceneColorTex = bgfx::getTexture(sceneFB, 0);
-
-    /* Half-res ping/pong blur targets. Min 1px to avoid 0-sized FBs. */
-    const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
-    const uint16_t halfH = (uint16_t)std::max(1u, height / 2u);
-
-    blurFB_A = bgfx::createFrameBuffer(halfW, halfH,
-                                       bgfx::TextureFormat::BGRA8, fbFlags);
-    blurFB_B = bgfx::createFrameBuffer(halfW, halfH,
-                                       bgfx::TextureFormat::BGRA8, fbFlags);
-    blurColorA = bgfx::getTexture(blurFB_A, 0);
-    blurColorB = bgfx::getTexture(blurFB_B, 0);
-
-    fbWidth  = width;
-    fbHeight = height;
-
-    /* Bind FBs to their reserved view IDs. View 0 (scene) clears, blur views
-       overwrite, composite writes backbuffer (FB = invalid). */
-    bgfx::setViewFrameBuffer(kSceneViewId,        sceneFB);
-    bgfx::setViewFrameBuffer(kBlurHViewId,        blurFB_A);
-    bgfx::setViewFrameBuffer(kBlurVViewId,        blurFB_B);
-    bgfx::setViewFrameBuffer(kGlassBgViewId,      sceneFB);
-    bgfx::setViewFrameBuffer(kGlassChildViewId,   sceneFB);
-    bgfx::setViewFrameBuffer(kCompositeViewId,    BGFX_INVALID_HANDLE);
-
-    /* Static view rects (they don't change between frames at this size). */
-    bgfx::setViewRect(kSceneViewId,      0, 0, (uint16_t)width, (uint16_t)height);
-    bgfx::setViewRect(kBlurHViewId,      0, 0, halfW, halfH);
-    bgfx::setViewRect(kBlurVViewId,      0, 0, halfW, halfH);
-    bgfx::setViewRect(kGlassBgViewId,    0, 0, (uint16_t)width, (uint16_t)height);
-    bgfx::setViewRect(kGlassChildViewId, 0, 0, (uint16_t)width, (uint16_t)height);
-    bgfx::setViewRect(kCompositeViewId,  0, 0, (uint16_t)width, (uint16_t)height);
-
-    /* Composite + blur + glass views always go straight through (no depth, no
-       clear). */
-    bgfx::setViewClear(kBlurHViewId,        BGFX_CLEAR_NONE);
-    bgfx::setViewClear(kBlurVViewId,        BGFX_CLEAR_NONE);
-    bgfx::setViewClear(kGlassBgViewId,      BGFX_CLEAR_NONE);
-    bgfx::setViewClear(kGlassChildViewId,   BGFX_CLEAR_NONE);
-    bgfx::setViewClear(kCompositeViewId,    BGFX_CLEAR_NONE);
-    bgfx::setViewMode(kBlurHViewId,         bgfx::ViewMode::Sequential);
-    bgfx::setViewMode(kBlurVViewId,         bgfx::ViewMode::Sequential);
-    bgfx::setViewMode(kGlassBgViewId,       bgfx::ViewMode::Sequential);
-    bgfx::setViewMode(kGlassChildViewId,    bgfx::ViewMode::Sequential);
-    bgfx::setViewMode(kCompositeViewId,     bgfx::ViewMode::Sequential);
-
-    /* Ortho transforms for glass views (full-window pixel space). */
-    const float W = (float)width, H = (float)height;
-    const bool  hd = bgfx::getCaps()->homogeneousDepth;
-    const float zScale = hd ? 2.f : 1.f;
-    const float zBias  = hd ? -1.f : 0.f;
-    const float ortho[16] = {
-        2.f/W, 0.f,   0.f,    0.f,
-        0.f,  -2.f/H, 0.f,    0.f,
-        0.f,   0.f,   zScale, 0.f,
-       -1.f,   1.f,   zBias,  1.f
-    };
-    bgfx::setViewTransform(kGlassBgViewId,    nullptr, ortho);
-    bgfx::setViewTransform(kGlassChildViewId, nullptr, ortho);
-}
-
-namespace {
-    /* Submit a full-screen textured quad covering [0,0]-[w,h] in pixels with
-       UVs [0,0]-[1,1]. */
-    void submitFullscreenQuad(const bgfx::VertexLayout& layout,
-                              uint16_t viewId,
-                              float dstW, float dstH,
-                              bgfx::ProgramHandle program,
-                              bool flipV,
-                              bool alphaBlend = false) {
-        bgfx::TransientVertexBuffer tvb;
-        if (bgfx::getAvailTransientVertexBuffer(6, layout) < 6) return;
-        bgfx::allocTransientVertexBuffer(&tvb, 6, layout);
-
-        struct V { float x, y; uint32_t abgr; float u, v; };
-        V* v = (V*)tvb.data;
-        const uint32_t white = 0xffffffffu;
-        const float v0 = flipV ? 1.f : 0.f;
-        const float v1 = flipV ? 0.f : 1.f;
-
-        /* Triangle 1 */
-        v[0] = { 0.f,  0.f,  white, 0.f, v0 };
-        v[1] = { dstW, 0.f,  white, 1.f, v0 };
-        v[2] = { dstW, dstH, white, 1.f, v1 };
-        /* Triangle 2 */
-        v[3] = { 0.f,  0.f,  white, 0.f, v0 };
-        v[4] = { dstW, dstH, white, 1.f, v1 };
-        v[5] = { 0.f,  dstH, white, 0.f, v1 };
-
-        bgfx::setVertexBuffer(0, &tvb);
-        uint64_t st = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A;
-        if (alphaBlend) st |= BGFX_STATE_BLEND_ALPHA;   /* overlay over the host image */
-        bgfx::setState(st);
-        bgfx::submit(viewId, program);
+void Renderer::Impl::refreshClipCache() {
+    if (curClipVersion == clipVersion) return;
+    for (int i = 0; i < 4; ++i) {
+        curClipRect[i]    = 0.f;
+        curClipParams[i]  = 0.f;
+        curClipRect2[i]   = 0.f;
+        curClipParams2[i] = 0.f;
     }
+    int picked = 0;
+    for (int i = roundClipTop - 1; i >= 0 && picked < 2; --i) {
+        const auto& c = roundClipStack[i];
+        if (c.radius <= 0.f) continue;
+        if (picked == 0) {
+            curClipRect[0] = c.cx;    curClipRect[1] = c.cy;
+            curClipRect[2] = c.halfW; curClipRect[3] = c.halfH;
+            curClipParams[0] = c.radius; curClipParams[1] = 1.f;
+        } else {
+            curClipRect2[0] = c.cx;    curClipRect2[1] = c.cy;
+            curClipRect2[2] = c.halfW; curClipRect2[3] = c.halfH;
+            curClipParams2[0] = c.radius; curClipParams2[1] = 1.f;
+        }
+        ++picked;
+    }
+    curClipVersion = clipVersion;
 }
 
 /*
-    runBlurPasses(uint32_t width, uint32_t height):
-    - Params:   uint32_t width, uint32_t height
+    beginShape(uint32_t mode, valo::TextureID tex, const float imgFlags[4]):
+    - Params:   uint32_t mode, valo::TextureID tex, const float imgFlags[4]
+    - Returns:  bool -- false when the current scissor is empty
+    - Desc:     Makes sure the batch about to receive a shape's geometry was
+                opened under exactly this shape's draw state -- target, shader
+                mode, texture, image flags, both rounded clips and the scissor.
+                Anything different submits the batch so far and starts a new
+                one, so draw order is always submission order.
+*/
+bool Renderer::Impl::beginShape(uint32_t mode, valo::TextureID tex, const float imgFlags[4]) {
+    /* A minimised window has nothing to draw into, and VALO only drains its
+       queues when a frame runs, so nothing may be queued at all. */
+    if (frameSize.x == 0 || frameSize.y == 0) return false;
+    if (scissorEmpty()) return false;
+    refreshClipCache();
+
+    UiUniforms u{};
+    u.clipRect    = valo::Vec4f{curClipRect[0],    curClipRect[1],    curClipRect[2],    curClipRect[3]};
+    u.clipParams  = valo::Vec4f{curClipParams[0],  curClipParams[1],  curClipParams[2],  curClipParams[3]};
+    u.clipRect2   = valo::Vec4f{curClipRect2[0],   curClipRect2[1],   curClipRect2[2],   curClipRect2[3]};
+    u.clipParams2 = valo::Vec4f{curClipParams2[0], curClipParams2[1], curClipParams2[2], curClipParams2[3]};
+    if (imgFlags)
+        u.imgFlags = valo::Vec4f{imgFlags[0], imgFlags[1], imgFlags[2], imgFlags[3]};
+    else
+        u.imgFlags = valo::Vec4f{0.f, 0.f, 0.f, 0.f};
+    const Vec2u target = currentTargetSize(frameSize);
+    u.viewport = valo::Vec2f{static_cast<float>(std::max(1u, target.x)),
+                             static_cast<float>(std::max(1u, target.y))};
+    u.tex  = tex;
+    u.mode = mode;
+
+    valo::Scissor sc{};
+    if (scissorTop > 0) {
+        const auto& s = scissorStack[scissorTop - 1];
+        sc = valo::Scissor{ int32_t(s.x), int32_t(s.y), uint32_t(s.w), uint32_t(s.h) };
+    }
+
+    const valo::LayerID layer = currentLayer();
+    const bool same = batch.open
+        && batch.layer == layer
+        && std::memcmp(&batch.uniforms, &u, sizeof(UiUniforms)) == 0
+        && batch.scissor.x == sc.x && batch.scissor.y == sc.y
+        && batch.scissor.width == sc.width && batch.scissor.height == sc.height;
+    if (same) return true;
+
+    flushBatch();
+    batch.open       = true;
+    batch.layer      = layer;
+    batch.firstIndex = static_cast<uint32_t>(idx.size());
+    batch.indexCount = 0;
+    batch.uniforms   = u;
+    batch.scissor    = sc;
+    return true;
+}
+
+/*
+    flushBatch():
+    - Params:   none
     - Returns:  none
-    - Desc:     Runs the separable blur used by glass materials: a horizontal
-                pass then a vertical one, at reduced resolution. Separating the
-                two turns an NxN kernel into two N-wide ones, which is what
-                makes a wide blur affordable.
+    - Desc:     Submits the open batch as one VALO command and closes it. The
+                command names a range of the arena, which is uploaded at
+                endFrame before VALO runs the frame's queue.
 */
-void Renderer::Impl::runBlurPasses(uint32_t width, uint32_t height) {
-    if (!bgfx::isValid(sceneFB) || !bgfx::isValid(blurProgram)) return;
-    const uint16_t halfW = (uint16_t)std::max(1u, width  / 2u);
-    const uint16_t halfH = (uint16_t)std::max(1u, height / 2u);
+void Renderer::Impl::flushBatch() {
+    if (!batch.open) return;
+    batch.open = false;
+    if (batch.indexCount == 0 || program == valo::DEFAULT_PROGRAM) return;
 
-    const bool flipV = bgfx::getCaps()->originBottomLeft;
-
-    /* Set ortho for blur views matching their FB sizes. */
-    auto setOrtho = [](uint16_t viewId, uint32_t w, uint32_t h) {
-        const float W = (float)w, H = (float)h;
-        const bool  hd = bgfx::getCaps()->homogeneousDepth;
-        const float zScale = hd ? 2.f : 1.f;
-        const float zBias  = hd ? -1.f : 0.f;
-        const float m[16] = {
-            2.f/W, 0.f,   0.f,   0.f,
-            0.f,  -2.f/H, 0.f,   0.f,
-            0.f,   0.f,   zScale,0.f,
-           -1.f,   1.f,   zBias, 1.f
-        };
-        bgfx::setViewTransform(viewId, nullptr, m);
-    };
-    setOrtho(kBlurHViewId, halfW, halfH);
-    setOrtho(kBlurVViewId, halfW, halfH);
-
-    /* Horizontal blur: sceneFB color -> blurFB_A */
-    {
-        const float step[4] = { 1.f / (float)halfW, 0.f, 0.f, 0.f };
-        bgfx::setUniform(u_blurParams, step);
-        bgfx::setTexture(0, s_texColor, sceneColorTex);
-        submitFullscreenQuad(texLayout, kBlurHViewId,
-                             (float)halfW, (float)halfH,
-                             blurProgram, flipV);
-    }
-    /* Vertical blur: blurFB_A -> blurFB_B */
-    {
-        const float step[4] = { 0.f, 1.f / (float)halfH, 0.f, 0.f };
-        bgfx::setUniform(u_blurParams, step);
-        bgfx::setTexture(0, s_texColor, blurColorA);
-        submitFullscreenQuad(texLayout, kBlurVViewId,
-                             (float)halfW, (float)halfH,
-                             blurProgram, false /* sampling our own RT in same orient */);
-    }
+    valo::RenderCommand cmd;
+    cmd.verts       = vb;
+    cmd.indices     = ib;
+    cmd.program     = program;
+    cmd.firstIndex  = batch.firstIndex;
+    cmd.indexCount  = batch.indexCount;
+    cmd.topology    = valo::Topology::Triangles;
+    cmd.cullmode    = valo::CullMode::None;
+    cmd.blendmode   = valo::BlendMode::Alpha;
+    cmd.depthTest   = false;
+    cmd.depthWrite  = false;
+    cmd.scissor     = batch.scissor;
+    cmd.setUniforms(batch.uniforms);
+    valo.submit(cmd, batch.layer);
+    ++submittedCommands;
 }
 
 /*
-    compositeSceneToBackbuffer(...):
-    - Params:   uint32_t width, uint32_t height, const bgfx::VertexLayout&
-                layout, bgfx::ProgramHandle program
-    - Returns:  none
-    - Desc:     Draws the finished offscreen scene onto the backbuffer as a
-                fullscreen quad, which is the last step of a frame.
-*/
-void Renderer::Impl::compositeSceneToBackbuffer(uint32_t width, uint32_t height,
-                                                const bgfx::VertexLayout& layout,
-                                                bgfx::ProgramHandle program) {
-    if (!bgfx::isValid(sceneFB)) return;
-    const bool flipV = bgfx::getCaps()->originBottomLeft;
-
-    const float W = (float)width, H = (float)height;
-    const bool  hd = bgfx::getCaps()->homogeneousDepth;
-    const float zScale = hd ? 2.f : 1.f;
-    const float zBias  = hd ? -1.f : 0.f;
-    const float ortho[16] = {
-        2.f/W, 0.f,   0.f,    0.f,
-        0.f,  -2.f/H, 0.f,    0.f,
-        0.f,   0.f,   zScale, 0.f,
-       -1.f,   1.f,   zBias,  1.f
-    };
-    bgfx::setViewTransform(kCompositeViewId, nullptr, ortho);
-
-    /* For the composite step we want the fs_tex shader path so we need to also
-       reset the u_imgFlags uniform (no ellipse clipping). */
-    const float flags[4] = { 0.f, 0.f, 0.f, 0.f };
-    bgfx::setUniform(u_imgFlags, flags);
-
-    /* The full-screen blit must not inherit a stale rounded-clip from the last
-       in-scene draw call. */
-    const float clipZero[4] = { 0.f, 0.f, 0.f, 0.f };
-    if (bgfx::isValid(u_clipRect))    bgfx::setUniform(u_clipRect,    clipZero);
-    if (bgfx::isValid(u_clipParams))  bgfx::setUniform(u_clipParams,  clipZero);
-    if (bgfx::isValid(u_clipRect2))   bgfx::setUniform(u_clipRect2,   clipZero);
-    if (bgfx::isValid(u_clipParams2)) bgfx::setUniform(u_clipParams2, clipZero);
-
-    bgfx::setTexture(0, s_texColor, sceneColorTex);
-    submitFullscreenQuad(layout, kCompositeViewId, W, H, program, flipV, embedded);
-}
-
-/*
-    Renderer() : m_impl(std::make_unique<Impl>()):
-    - Params:   ) : m_impl(std::make_unique<Impl>()
-    - Returns:  R
-    - Desc:     ============================================================
-                ================ Renderer ctor/dtor/lifecycle ==============
-                ============================================================ ==
+    Renderer():
+    - Params:   none
+    - Returns:  Renderer
+    - Desc:     Creates an uninitialised renderer; init() opens the window.
 */
 Renderer::Renderer() : m_impl(std::make_unique<Impl>()) {}
+
 /*
-    ~Renderer() { shutdown():
-    - Params:   ) { shutdown(
-    - Returns:  R
-    - Desc:     Shuts the renderer down, releasing the GPU resources and, unless
-                attached to a host's context, the window and bgfx too.
+    ~Renderer():
+    - Params:   none
+    - Returns:  n/a
+    - Desc:     Shuts the renderer down, releasing the GPU resources, VALO and
+                the window.
 */
 Renderer::~Renderer() { shutdown(); }
 
@@ -495,148 +285,96 @@ Renderer::~Renderer() { shutdown(); }
     - Params:   uint32_t width, uint32_t height, const std::string& title,
                 uint8_t msaa
     - Returns:  bool
-    - Desc:     Creates the window and brings bgfx up on it, then builds the
-                shaders and the initial framebuffers. Reports false rather than
-                throwing if any stage fails, so an application can fall back or
-                exit cleanly.
+    - Desc:     Opens the window and brings VALO up on it, then builds the
+                program and the arena. Vulkan is tried first where VALO was
+                built with it, and the software rasteriser is the fallback, so a
+                machine without a usable GPU still opens. UILO_RENDERER=vulkan |
+                software | auto forces the choice. Reports false rather than
+                throwing if every option fails.
 */
 bool Renderer::init(uint32_t width, uint32_t height,
                     const std::string& title, uint8_t msaa) {
     if (m_initialised) return true;
+    auto& impl = *m_impl;
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::fprintf(stderr, "[UILO] SDL_Init failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    uint32_t flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    m_window = SDL_CreateWindow(title.c_str(), (int)width, (int)height, flags);
-    if (!m_window) {
-        std::fprintf(stderr, "[UILO] SDL_CreateWindow failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    /* Use real backing-pixel size (HiDPI displays make this larger than the
-       logical width/height requested above). */
-    {
-        int pxW = (int)width, pxH = (int)height;
-        SDL_GetWindowSizeInPixels(m_window, &pxW, &pxH);
-        width  = (uint32_t)pxW;
-        height = (uint32_t)pxH;
-    }
-
-    bgfx::PlatformData pd{};
-#if defined(SDL_PLATFORM_WIN32)
-    SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
-    pd.nwh = SDL_GetPointerProperty(props,
-                SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-#elif defined(SDL_PLATFORM_MACOS)
-    /* Pass the CAMetalLayer, not the SDL_MetalView (an NSView): the Metal
-       backend accepts either, but bgfx's Vulkan/MoltenVK surface creation only. */
-    pd.nwh = SDL_Metal_GetLayer(SDL_Metal_CreateView(m_window));
-#elif defined(SDL_PLATFORM_LINUX)
-    SDL_PropertiesID props = SDL_GetWindowProperties(m_window);
-    void* waylandSurf = SDL_GetPointerProperty(props,
-                SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
-    Window x11WinNum  = (Window)SDL_GetNumberProperty(props,
-                SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
-    void* x11Win      = (void*)(uintptr_t)x11WinNum;
-    void* x11Display  = SDL_GetPointerProperty(props,
-                SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-    if (waylandSurf) {
-        pd.ndt  = SDL_GetPointerProperty(props,
-                     SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-        pd.nwh  = waylandSurf;
-        pd.type = bgfx::NativeWindowHandleType::Wayland;
-    } else {
-        pd.ndt = x11Display;
-        pd.nwh = x11Win;
-    }
+    bool tryVulkan   = false;
+    bool trySoftware = true;
+#if defined(VALO_HAS_VULKAN)
+    tryVulkan = true;
 #endif
-
-    bgfx::Init init;
-    init.platformData      = pd;
-    init.resolution.width  = width;
-    init.resolution.height = height;
-    /* Count = let bgfx pick the platform default (Metal / D3D / Vulkan). */
-    init.type = bgfx::RendererType::Count;
     if (const char* env = std::getenv("UILO_RENDERER")) {
         const std::string_view want{env};
-        if      (want == "vulkan") init.type = bgfx::RendererType::Vulkan;
-        else if (want == "metal")  init.type = bgfx::RendererType::Metal;
-        else if (want == "d3d11")  init.type = bgfx::RendererType::Direct3D11;
-        else if (want == "d3d12")  init.type = bgfx::RendererType::Direct3D12;
-        else if (want == "gl")     init.type = bgfx::RendererType::OpenGL;
-        else if (want == "auto")   init.type = bgfx::RendererType::Count;
-        else std::fprintf(stderr, "[UILO] unknown UILO_RENDERER '%s' (ignored)\n", env);
+        if (want == "vulkan") {
+            trySoftware = false;
+#if !defined(VALO_HAS_VULKAN)
+            std::fprintf(stderr, "[UILO] UILO_RENDERER=vulkan, but VALO was built without Vulkan\n");
+            trySoftware = true;
+#endif
+        } else if (want == "software") {
+            tryVulkan = false;
+        } else if (want != "auto") {
+            std::fprintf(stderr, "[UILO] unknown UILO_RENDERER '%s' (ignored)\n", env);
+        }
     }
 
-    /* Raise transient buffer budgets so dense UI passes (grids, markers,
-       waveform-like primitives) don't hit allocation cliffs and silently drop. */
-    constexpr uint32_t kTransientVbBytes = 32u * 1024u * 1024u;
-    constexpr uint32_t kTransientIbBytes =  8u * 1024u * 1024u;
-    init.limits.maxTransientVbSize = std::max(init.limits.maxTransientVbSize,
-                                              kTransientVbBytes);
-    init.limits.maxTransientIbSize = std::max(init.limits.maxTransientIbSize,
-                                              kTransientIbBytes);
+    const bool validation = [] {
+        const char* v = std::getenv("UILO_VALIDATION");
+        return v && std::string_view{v} != "0";
+    }();
 
-    uint32_t resetFlags = BGFX_RESET_VSYNC | BGFX_RESET_FLUSH_AFTER_RENDER;
-    if      (msaa >= 16) resetFlags |= BGFX_RESET_MSAA_X16;
-    else if (msaa >=  8) resetFlags |= BGFX_RESET_MSAA_X8;
-    else if (msaa >=  4) resetFlags |= BGFX_RESET_MSAA_X4;
-    else if (msaa >=  2) resetFlags |= BGFX_RESET_MSAA_X2;
-    init.resolution.reset = resetFlags;
-    /* Limit swapchain queued frames (Metal/DXGI) to 1 to minimise input lag. */
-    init.resolution.maxFrameLatency = 1;
-    m_resetFlags = resetFlags;
+    auto bringUp = [&](valo::Backend backend) -> bool {
+        valo::WinFlags flags = valo::WinFlags::Resize | valo::WinFlags::HiDPI;
+        if (backend == valo::Backend::Vulkan) flags |= valo::WinFlags::Vulkan;
 
-    if (!bgfx::init(init)) {
-        std::fprintf(stderr, "[UILO] bgfx::init failed\n");
+        /* respectOSScale: the size is in window points, as SDL_CreateWindow
+           takes it, so the window comes out the same size it always has. */
+        impl.window = std::make_unique<valo::Window>(title, valo::Vec2u{width, height}, flags, true);
+        if (!impl.window->isOpen()) {
+            impl.window.reset();
+            return false;
+        }
+
+        valo::RenderConfig cfg;
+        cfg.vsync          = impl.vsync;
+        cfg.backend        = backend;
+        cfg.validation     = validation;
+        cfg.framesInFlight = 2;
+        /* The window's multisampling, as bgfx's backbuffer had it: clamped to
+           what the device can do. Software ignores it. */
+        cfg.msaa           = msaa;
+        if (!impl.valo.init(*impl.window, cfg)) {
+            impl.valo.shutdown();
+            impl.window.reset();
+            return false;
+        }
+        impl.backend   = backend;
+        impl.valoReady = true;
+        return true;
+    };
+
+    bool up = false;
+    if (tryVulkan)          up = bringUp(valo::Backend::Vulkan);
+    if (!up && trySoftware) up = bringUp(valo::Backend::Software);
+    if (!up) {
+        std::fprintf(stderr, "[UILO] could not open a window on any VALO backend\n");
         return false;
     }
 
-    if (const bgfx::Caps* caps = bgfx::getCaps()) {
-        std::fprintf(stderr,
-            "[UILO] bgfx renderer=%s caps: maxDrawCalls=%u transientVB=%u KB transientIB=%u KB\n",
-            bgfx::getRendererName(bgfx::getRendererType()),
-            caps->limits.maxDrawCalls,
-            caps->limits.maxTransientVbSize / 1024u,
-            caps->limits.maxTransientIbSize / 1024u);
+    impl.applyLayerOrder();
+    if (!impl.createResources()) {
+        impl.shutdownResources();
+        return false;
     }
 
-    bgfx::setDebug(BGFX_DEBUG_NONE);
+    std::fprintf(stderr, "[UILO] renderer: VALO (%s)\n",
+                 impl.backend == valo::Backend::Vulkan ? "Vulkan" : "software");
 
-    m_impl->ensureLayouts();
-    if (!m_impl->initShaders()) return false;
-
+    const Vec2u sz = getSize();
+    m_lastWidth   = sz.x;
+    m_lastHeight  = sz.y;
     m_msaa        = msaa;
     m_initialised = true;
-    return true;
-}
-
-/*
-    attach(SDL_Window* hostWindow, uint16_t baseView):
-    - Params:   SDL_Window* hostWindow, uint16_t baseView
-    - Returns:  bool
-    - Desc:     Embedded mode: binds to a window and bgfx context a host already
-                owns. Skips creation entirely, rebases UILO's views to start
-                after the host's, and clears transparent so the UI composites
-                over the host's image rather than erasing it.
-*/
-bool Renderer::attach(SDL_Window* hostWindow, uint16_t baseView) {
-    if (m_initialised) return true;
-
-    m_window      = hostWindow;   /* borrowed; not destroyed in shutdown() */
-    m_ownsContext = false;   /* host owns SDL + bgfx + the frame loop */
-    m_impl->embedded = true;   /* composite alpha-blends over the host image */
-    m_impl->setViewBase(baseView);   /* rebase the pipeline views above the host's */
-    m_nextViewId  = baseView + 6;   /* user framebuffers above UILO's pipeline */
-
-    /* bgfx + window already exist; just build UILO's own GPU resources. */
-    m_impl->ensureLayouts();
-    if (!m_impl->initShaders()) return false;
-
-    m_initialised = true;
+    impl.stats = {};
     return true;
 }
 
@@ -644,18 +382,12 @@ bool Renderer::attach(SDL_Window* hostWindow, uint16_t baseView) {
     shutdown():
     - Params:   none
     - Returns:  none
-    - Desc:     Releases everything init() created, and the window and bgfx
-                context too unless this renderer was attached to a host's.
+    - Desc:     Releases everything init() created: GPU resources, VALO and the
+                window.
 */
 void Renderer::shutdown() {
     if (!m_initialised) return;
-    if (m_impl) m_impl->shutdownResources();   /* UILO's own FBs/shaders, both modes */
-    if (m_ownsContext) {
-        bgfx::shutdown();
-        if (m_window) SDL_DestroyWindow(m_window);
-        SDL_Quit();
-    }
-    m_window = nullptr;   /* borrowed in attach mode; just drop the reference */
+    if (m_impl) m_impl->shutdownResources();
     m_initialised = false;
 }
 
@@ -663,16 +395,22 @@ void Renderer::shutdown() {
     getSize():
     - Params:   none
     - Returns:  Vec2u
-    - Desc:     ============================================================
-                ================ Window / cursor ===========================
-                =================================================
+    - Desc:     The window's size in pixels -- the space every element's bounds
+                are expressed in.
 */
 Vec2u Renderer::getSize() const {
-    if (!m_window) return {0u, 0u};
-    int w, h;
-    SDL_GetWindowSizeInPixels(m_window, &w, &h);
-    return { (unsigned)w, (unsigned)h };
+    if (!m_impl->window) return {0u, 0u};
+    const valo::Vec2u sz = m_impl->window->getSize();
+    return { sz.x, sz.y };
 }
+
+/*
+    window():
+    - Params:   none
+    - Returns:  valo::Window*
+    - Desc:     The window UILO reads input from, null before init().
+*/
+valo::Window* Renderer::window() const { return m_impl->window.get(); }
 
 /*
     setTitle(const std::string& title):
@@ -681,50 +419,30 @@ Vec2u Renderer::getSize() const {
     - Desc:     Sets the window title.
 */
 void Renderer::setTitle(const std::string& title) {
-    if (m_window) SDL_SetWindowTitle(m_window, title.c_str());
+    if (m_impl->window) m_impl->window->setTitle(title);
 }
 
 /*
     getStats():
     - Params:   none
     - Returns:  RendererStats
-    - Desc:     Draw-call and vertex counters for the previous frame, for a HUD
-                or profiling.
+    - Desc:     Draw-command and vertex counters for the previous frame, and how
+                long VALO took to run it, for a HUD or profiling.
 */
 RendererStats Renderer::getStats() const {
-    RendererStats out;
-    const bgfx::Stats* s = bgfx::getStats();
-    if (!s) return out;
-    out.numDraw     = s->numDraw;
-    out.numVertices = 0;   /* bgfx::Stats doesn't break out vertex counts in the public struct */
-    const double toMs = 1000.0 / (double)s->cpuTimerFreq;
-    out.cpuTimeMs   = double(s->cpuTimeEnd - s->cpuTimeBegin) * toMs;
-    const double gpuToMs = s->gpuTimerFreq ? 1000.0 / (double)s->gpuTimerFreq : 0.0;
-    out.gpuTimeMs   = double(s->gpuTimeEnd - s->gpuTimeBegin) * gpuToMs;
-    return out;
+    return m_impl->stats;
 }
 
 /*
     setVsync(bool enabled):
     - Params:   bool enabled
     - Returns:  none
-    - Desc:     Turns vertical sync on or off, which takes effect on the next
-                reset.
+    - Desc:     Turns vertical sync on or off.
 */
 void Renderer::setVsync(bool enabled) {
-    uint32_t f = m_resetFlags;
-    if (enabled) f |=  BGFX_RESET_VSYNC;
-    else         f &= ~BGFX_RESET_VSYNC;
-    if (f == m_resetFlags) return;
-    m_resetFlags = f;
-    Vec2u sz = getSize();
-    /* maxFrameLatency only applies on full reset with width/height; keep 1. */
-    bgfx::reset(sz.x, sz.y, m_resetFlags);
-    m_lastWidth  = sz.x;
-    m_lastHeight = sz.y;
-    /* bgfx::reset can invalidate view->framebuffer bindings on some backends. */
-    m_impl->fbWidth  = 0;
-    m_impl->fbHeight = 0;
+    if (m_impl->vsync == enabled) return;
+    m_impl->vsync = enabled;
+    if (m_initialised) m_impl->valo.setVsync(enabled);
 }
 
 /*
@@ -734,7 +452,7 @@ void Renderer::setVsync(bool enabled) {
     - Desc:     Whether vertical sync is on.
 */
 bool Renderer::getVsync() const {
-    return (m_resetFlags & BGFX_RESET_VSYNC) != 0;
+    return m_impl->vsync;
 }
 
 /*
@@ -769,266 +487,125 @@ float Renderer::getFramerateLimit() const {
     setCursor(CursorType type):
     - Params:   CursorType type
     - Returns:  none
-    - Desc:     Applies a cursor shape to the window, creating and caching the
-                system cursor on first use.
+    - Desc:     Applies a cursor shape to the window. VALO caches the system
+                cursors.
 */
 void Renderer::setCursor(CursorType type) {
-    auto& impl = *m_impl;
-    int key = (int)type;
-    SDL_Cursor* cur = nullptr;
-    auto it = impl.cursors.find(key);
-    if (it != impl.cursors.end()) {
-        cur = (SDL_Cursor*)it->second;
-    } else {
-        SDL_SystemCursor sdlType = SDL_SYSTEM_CURSOR_DEFAULT;
-        switch (type) {
-            case CursorType::Arrow:          sdlType = SDL_SYSTEM_CURSOR_DEFAULT;   break;
-            case CursorType::Hand:           sdlType = SDL_SYSTEM_CURSOR_POINTER;   break;
-            case CursorType::SizeHorizontal: sdlType = SDL_SYSTEM_CURSOR_EW_RESIZE; break;
-            case CursorType::SizeVertical:   sdlType = SDL_SYSTEM_CURSOR_NS_RESIZE; break;
-            case CursorType::Text:           sdlType = SDL_SYSTEM_CURSOR_TEXT;      break;
-            case CursorType::Crosshair:      sdlType = SDL_SYSTEM_CURSOR_CROSSHAIR; break;
-        }
-        cur = SDL_CreateSystemCursor(sdlType);
-        if (cur) impl.cursors.emplace(key, cur);
+    if (!m_impl->window) return;
+    valo::CursorShape shape = valo::CursorShape::Arrow;
+    switch (type) {
+        case CursorType::Arrow:          shape = valo::CursorShape::Arrow;     break;
+        case CursorType::Hand:           shape = valo::CursorShape::Hand;      break;
+        case CursorType::SizeHorizontal: shape = valo::CursorShape::ResizeEW;  break;
+        case CursorType::SizeVertical:   shape = valo::CursorShape::ResizeNS;  break;
+        case CursorType::Text:           shape = valo::CursorShape::Text;      break;
+        case CursorType::Crosshair:      shape = valo::CursorShape::Crosshair; break;
     }
-    if (cur) SDL_SetCursor(cur);
+    m_impl->window->setCursor(shape);
 }
 
 /*
     beginFrame():
     - Params:   none
     - Returns:  none
-    - Desc:     ============================================================
-                ================ Frame lifecycle / projection ==============
-                ============================================================ ==
+    - Desc:     Starts a frame: picks up a window resize, and resets the arena,
+                the batch, the clip and target stacks and any rotation left set
+                by the previous frame. Nothing reaches VALO until endFrame.
 */
 void Renderer::beginFrame() {
-    Vec2u sz = getSize();
+    if (!m_initialised) return;
+    auto& impl = *m_impl;
+
+    const Vec2u sz = getSize();
     if (sz.x != m_lastWidth || sz.y != m_lastHeight) {
-        if (m_ownsContext) bgfx::reset(sz.x, sz.y, m_resetFlags);   /* host owns reset when embedded */
+        if (sz.x > 0 && sz.y > 0) impl.valo.resize();
         m_lastWidth  = sz.x;
         m_lastHeight = sz.y;
     }
-    /* Wall-clock timer for animated materials. Use real time (not dt) so
-       animation rate is independent of vsync / framerate-cap. */
-    {
-        using clock = std::chrono::steady_clock;
-        static const auto s_t0 = clock::now();
-        const auto now = clock::now();
-        m_impl->elapsed = std::chrono::duration<float>(now - s_t0).count();
-    }
-    /* (Re)create offscreen scene + blur framebuffers if the window resized. */
-    m_impl->ensureSceneFramebuffers(sz.x, sz.y);
+    impl.frameSize = sz;
 
-    /* Predict whether this frame will use glass based on what we saw last
-       frame. */
-    m_impl->bypassSceneFb     = !m_impl->hadGlassLastFrame;
-    m_impl->hadGlassThisFrame = false;
+    impl.verts.clear();
+    impl.idx.clear();
+    impl.batch = Impl::Batch{};
+    impl.submittedCommands = 0;
+    impl.clearColor = Color{0, 0, 0, 255};
 
-    /* Embedded: never bypass to the backbuffer (that would clear the host's
-       scene). Always render to sceneFB, then composite over the host image. */
-    if (!m_ownsContext) m_impl->bypassSceneFb = false;
-
-    /* Scene view → sceneFB (set every frame in case bgfx reset clobbered it). */
-    const uint16_t sceneView = m_impl->kSceneViewId;
-    if (m_impl->bypassSceneFb) {
-        bgfx::setViewFrameBuffer(sceneView, BGFX_INVALID_HANDLE);
-    } else {
-        bgfx::setViewFrameBuffer(sceneView, m_impl->sceneFB);
-    }
-    bgfx::setViewRect(sceneView, 0, 0, (uint16_t)sz.x, (uint16_t)sz.y);
-    /* Transparent clear when embedded so the UI composites over the host
-       scene. */
-    const uint32_t sceneClear = m_ownsContext ? 0x000000ff : 0x00000000;
-    bgfx::setViewClear(sceneView, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, sceneClear, 1.f, 0);
-    bgfx::setViewMode(sceneView, bgfx::ViewMode::Sequential);
-    submitOrtho(sceneView, sz);
-    bgfx::touch(sceneView);
-
-    /* Defensively clear any rotation left set by user code from the last frame
-       so internal/system draws (composite, blur, etc.) never inherit. */
+    /* Defensively clear any rotation left set by user code from the last frame. */
     clearRotation();
-    m_impl->deferredGlass.clear();
-    /* Reset clip-uniform dedup so the first draw of the frame always pushes
-       its uniforms (bgfx uniform state isn't guaranteed to persist across. */
-    m_impl->lastClipValid = false;
-    /* Defensive reset: clip stacks should be balanced each frame. */
-    m_impl->scissorTop = 0;
-    m_impl->roundClipTop = 0;
-    m_impl->scissorOverflowDepth = 0;
-    m_impl->roundClipOverflowDepth = 0;
+    /* Defensive reset: clip and target stacks should be balanced each frame. */
+    impl.scissorTop = 0;
+    impl.roundClipTop = 0;
+    impl.scissorOverflowDepth = 0;
+    impl.roundClipOverflowDepth = 0;
+    impl.targetTop = 0;
+    ++impl.clipVersion;
 }
 
 /*
     endFrame():
     - Params:   none
     - Returns:  none
-    - Desc:     Flush any rects still sitting in the solid-rect batch from the
-                last user draw call before kicking off internal passes.
+    - Desc:     Submits the last batch, uploads the arena and any glyphs packed
+                this frame, and hands the frame to VALO: the clear colour the
+                frame ended up with is applied first, then every command in
+                submission order. A minimised window renders nothing.
 */
 void Renderer::endFrame() {
-    m_impl->flushSolidBatch();
+    if (!m_initialised) return;
+    auto& impl = *m_impl;
+    impl.flushBatch();
 
-    /* Carry the per-frame glass-presence flag into the next frame's prediction. */
-    m_impl->hadGlassLastFrame = m_impl->hadGlassThisFrame;
+    using clock = std::chrono::steady_clock;
+    const auto t0 = clock::now();
 
-    if (m_impl->bypassSceneFb) {
-        /* Scene was rendered directly to backbuffer; nothing else to do. */
-        m_impl->deferredGlass.clear();
-        if (m_ownsContext) bgfx::frame();   /* host presents when embedded */
-        /* Framerate cap (unchanged from the FB path below). */
-        if (m_frameInterval > 0.0) {
-            using clock = std::chrono::steady_clock;
-            const auto now    = clock::now();
-            const auto nowNs  = (uint64_t)std::chrono::duration_cast<
-                                    std::chrono::nanoseconds>(now.time_since_epoch()).count();
-            const uint64_t intervalNs = (uint64_t)(m_frameInterval * 1e9);
-            if (m_nextFrameTick == 0 || nowNs > m_nextFrameTick + intervalNs) {
-                m_nextFrameTick = nowNs + intervalNs;
-            } else {
-                if (nowNs < m_nextFrameTick) {
-                    const uint64_t waitNs = m_nextFrameTick - nowNs;
-                    constexpr uint64_t spinMarginNs = 500'000;
-                    if (waitNs > spinMarginNs) {
-                        std::this_thread::sleep_for(
-                            std::chrono::nanoseconds(waitNs - spinMarginNs));
-                    }
-                    while ((uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
-                               clock::now().time_since_epoch()).count() < m_nextFrameTick) {
-                        std::this_thread::yield();
-                    }
-                }
-                m_nextFrameTick += intervalNs;
-            }
-        }
+    if (impl.frameSize.x == 0 || impl.frameSize.y == 0) {
+        /* Minimised: beginShape queued nothing, and there is nothing to present
+           into. Keep the loop from spinning until the window comes back. */
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
         return;
     }
 
-    /* After the scene has been submitted to sceneFB (without any glass
-       elements — those were deferred), run the blur ladder so glass samples a. */
-    Vec2u sz = getSize();
-    /* Skip the (expensive) blur ladder + glass replay entirely when no glass
-       material drew this frame. */
-    const bool anyGlass = !m_impl->deferredGlass.empty();
-    if (anyGlass) {
-        m_impl->runBlurPasses(sz.x, sz.y);
+    impl.uploadDirtyAtlases();
+    if (!impl.verts.empty()) {
+        impl.valo.updateVertexBuffer(impl.vb, impl.verts.data(), impl.verts.size());
+        impl.valo.updateIndexBuffer(impl.ib, impl.idx.data(), impl.idx.size());
     }
 
-    if (!m_impl->deferredGlass.empty()) {
-        /* kGlassBgViewId was configured in beginFrame; push it so drawGlass
-           submits there during replay. */
-        m_viewStack[m_viewStackTop++] = { m_impl->kGlassBgViewId };
-        m_impl->replayingGlass = true;
-        for (const auto& d : m_impl->deferredGlass) {
-            /* Re-establish the scissor that was active at capture time. (Push
-               then pop around each replay so they don't accumulate.) */
-            if (d.hasScissor) {
-                m_impl->scissorStack[m_impl->scissorTop++] =
-                    { d.sx, d.sy, d.sw, d.sh };
-            }
-            drawGlass(d.dst, d.mat, d.baseColor);
-            if (d.hasScissor) {
-                --m_impl->scissorTop;
-            }
-        }
-        m_impl->replayingGlass = false;
-        m_impl->deferredGlass.clear();
-        if (m_viewStackTop > 0) --m_viewStackTop;
-    }
+    impl.valo.setLayerClearColor(valo::VALO::BASE_LAYER, toValoColor(impl.clearColor));
+    impl.valo.beginFrame();
+    impl.valo.endFrame();
 
-    m_impl->compositeSceneToBackbuffer(sz.x, sz.y,
-                                       m_impl->texLayout,
-                                       m_impl->texProgram);
+    auto& stats = impl.stats;
+    stats.numDraw     = impl.submittedCommands;
+    stats.numVertices = static_cast<uint32_t>(impl.verts.size());
+    stats.cpuTimeMs   = std::chrono::duration<double, std::milli>(clock::now() - t0).count();
+    stats.gpuTimeMs   = 0.0;
 
-    if (m_ownsContext) bgfx::frame();   /* host presents when embedded */
-    if (m_frameInterval > 0.0) {
-        using clock = std::chrono::steady_clock;
-        const auto now    = clock::now();
-        const auto nowNs  = (uint64_t)std::chrono::duration_cast<
-                                std::chrono::nanoseconds>(now.time_since_epoch()).count();
-        const uint64_t intervalNs = (uint64_t)(m_frameInterval * 1e9);
-        if (m_nextFrameTick == 0 || nowNs > m_nextFrameTick + intervalNs) {
-            /* First call or we drifted way behind: re-anchor. */
-            m_nextFrameTick = nowNs + intervalNs;
-        } else {
-            if (nowNs < m_nextFrameTick) {
-                const uint64_t waitNs = m_nextFrameTick - nowNs;
-                /* Sleep most of the remaining time, leaving ~0.5 ms for a
-                   short spin so we don't overshoot due to scheduler latency. */
-                constexpr uint64_t spinMarginNs = 500'000;   /* 0.5 ms */
-                if (waitNs > spinMarginNs) {
-                    std::this_thread::sleep_for(
-                        std::chrono::nanoseconds(waitNs - spinMarginNs));
-                }
-                while ((uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           clock::now().time_since_epoch()).count() < m_nextFrameTick) {
-                    std::this_thread::yield();
-                }
-            }
-            m_nextFrameTick += intervalNs;
-        }
-    }
-}
-
-/*
-    submitOrtho(uint16_t viewId, Vec2u size):
-    - Params:   uint16_t viewId, Vec2u size
-    - Returns:  none
-    - Desc:     Sets a view's orthographic projection so one unit is one pixel
-                with the origin at the top left, which is the space every
-                element's bounds are expressed in.
-*/
-void Renderer::submitOrtho(uint16_t viewId, Vec2u size) {
-    const float W  = (float)size.x;
-    const float H  = (float)size.y;
-    const float nd = 0.f, fd = 1.f;
-    const bool  hd = bgfx::getCaps()->homogeneousDepth;
-    const float zScale = hd ? 2.f/(fd-nd)      : 1.f/(fd-nd);
-    const float zBias  = hd ? -(fd+nd)/(fd-nd) : -nd/(fd-nd);
-    const float ortho[16] = {
-        2.f/W, 0.f,   0.f,    0.f,
-        0.f,  -2.f/H, 0.f,    0.f,
-        0.f,   0.f,   zScale, 0.f,
-       -1.f,   1.f,   zBias,  1.f
-    };
-    bgfx::setViewTransform(viewId, nullptr, ortho);
-}
-
-/*
-    currentViewId():
-    - Params:   none
-    - Returns:  uint16_t
-    - Desc:     The view currently being drawn into, which is the top of the
-                framebuffer stack or the scene view when that stack is empty.
-*/
-uint16_t Renderer::currentViewId() const {
-    if (m_viewStackTop > 0) return m_viewStack[m_viewStackTop - 1].viewId;
-    return m_impl->kSceneViewId;   /* rebased scene view (was hardcoded 0) */
+    sleepUntilNextFrame(m_frameInterval, m_nextFrameTick);
 }
 
 /*
     createFrameBuffer(Vec2u size):
     - Params:   Vec2u size
     - Returns:  FrameBuffer
-    - Desc:     ============================================================
-                ================ Framebuffer ===============================
-                =============================================
+    - Desc:     A render target with its own layer. Its layer runs before the
+                window's, and it clears to transparent at the start of every
+                frame.
 */
 FrameBuffer Renderer::createFrameBuffer(Vec2u size) {
     FrameBuffer fb;
+    if (!m_initialised || size.x == 0 || size.y == 0) return fb;
+    auto& impl = *m_impl;
+
+    const valo::RenderTargetID target = impl.valo.createTarget(size.x, size.y);
+    const valo::LayerID layer = impl.valo.addLayer(target, valo::Color{0.f, 0.f, 0.f, 0.f});
+    impl.fbLayers.push_back(layer);
+    impl.applyLayerOrder();
+
+    assert(target < UINT16_MAX && layer < UINT16_MAX);
+    fb.handle = static_cast<uint16_t>(target);
+    fb.viewId = static_cast<uint16_t>(layer);
     fb.size   = size;
-    fb.viewId = m_nextViewId++;
-
-    bgfx::FrameBufferHandle h = bgfx::createFrameBuffer(
-        (uint16_t)size.x, (uint16_t)size.y,
-        bgfx::TextureFormat::BGRA8,
-        BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
-    fb.handle = h.idx;
-
-    bgfx::setViewFrameBuffer(fb.viewId, h);
-    bgfx::setViewRect(fb.viewId, 0, 0, (uint16_t)size.x, (uint16_t)size.y);
-    submitOrtho(fb.viewId, size);
     return fb;
 }
 
@@ -1036,8 +613,7 @@ FrameBuffer Renderer::createFrameBuffer(Vec2u size) {
     resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize):
     - Params:   FrameBuffer& fb, Vec2u newSize
     - Returns:  none
-    - Desc:     Resizes a framebuffer by recreating it, since a bgfx
-                framebuffer's dimensions are fixed at creation.
+    - Desc:     Resizes a framebuffer by recreating it.
 */
 void Renderer::resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize) {
     if (fb.size == newSize) return;
@@ -1049,13 +625,20 @@ void Renderer::resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize) {
     destroyFrameBuffer(FrameBuffer& fb):
     - Params:   FrameBuffer& fb
     - Returns:  none
-    - Desc:     Destroys a framebuffer and its texture.
+    - Desc:     Destroys a framebuffer's target and retires its layer.
 */
 void Renderer::destroyFrameBuffer(FrameBuffer& fb) {
-    if (!fb.valid()) return;
-    bgfx::FrameBufferHandle h{ fb.handle };
-    bgfx::destroy(h);
+    if (!fb.valid() || !m_initialised) return;
+    auto& impl = *m_impl;
+    impl.flushBatch();
+    impl.valo.destroyTarget(fb.handle);
+    impl.valo.removeLayer(fb.viewId);
+    impl.fbLayers.erase(std::remove(impl.fbLayers.begin(), impl.fbLayers.end(),
+                                    valo::LayerID(fb.viewId)),
+                        impl.fbLayers.end());
+    impl.applyLayerOrder();
     fb.handle = UINT16_MAX;
+    fb.viewId = UINT16_MAX;
 }
 
 /*
@@ -1067,11 +650,11 @@ void Renderer::destroyFrameBuffer(FrameBuffer& fb) {
                 unit.
 */
 void Renderer::pushFrameBuffer(FrameBuffer& fb) {
-    m_impl->flushSolidBatch();
-    assert(m_viewStackTop < kMaxViewStack);
-    m_viewStack[m_viewStackTop++] = { fb.viewId };
-    bgfx::setViewRect(fb.viewId, 0, 0, (uint16_t)fb.size.x, (uint16_t)fb.size.y);
-    submitOrtho(fb.viewId, fb.size);
+    auto& impl = *m_impl;
+    if (!fb.valid()) return;
+    assert(impl.targetTop < Impl::kMaxTargetStack);
+    if (impl.targetTop >= Impl::kMaxTargetStack) return;
+    impl.targetStack[impl.targetTop++] = { valo::LayerID(fb.viewId), fb.size };
 }
 
 /*
@@ -1082,59 +665,35 @@ void Renderer::pushFrameBuffer(FrameBuffer& fb) {
                 matching push.
 */
 void Renderer::popFrameBuffer() {
-    m_impl->flushSolidBatch();
-    if (m_viewStackTop > 0) --m_viewStackTop;
-}
-
-/*
-    beginGlassSubtree():
-    - Params:   none
-    - Returns:  none
-    - Desc:     Opens a glass group, so every element drawn until the matching
-                end composites into the blur the material established rather
-                than each blurring the backdrop separately.
-*/
-void Renderer::beginGlassSubtree() {
-    m_impl->flushSolidBatch();
-    assert(m_viewStackTop < kMaxViewStack);
-    m_viewStack[m_viewStackTop++] = { m_impl->kGlassChildViewId };
-}
-
-/*
-    endGlassSubtree():
-    - Params:   none
-    - Returns:  none
-    - Desc:     Closes the glass group opened by beginGlassSubtree.
-*/
-void Renderer::endGlassSubtree() {
-    m_impl->flushSolidBatch();
-    if (m_viewStackTop > 0) --m_viewStackTop;
+    if (m_impl->targetTop > 0) --m_impl->targetTop;
 }
 
 /*
     drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint):
     - Params:   const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint
     - Returns:  none
-    - Desc:     Draws a framebuffer's texture as a tinted quad, which is how an
+    - Desc:     Draws a framebuffer's contents as a tinted quad, which is how an
                 offscreen subtree is composited back into the scene.
 */
 void Renderer::drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size,
                                 Color tint) {
-    (void)fb; (void)dest; (void)size; (void)tint;
-    /* TODO: textured-quad blit of fb's color attachment */
+    if (!fb.valid()) return;
+    Texture tex;
+    tex.handle = fb.handle;
+    tex.width  = static_cast<uint16_t>(fb.size.x);
+    tex.height = static_cast<uint16_t>(fb.size.y);
+    drawImage(Rectf{dest, size}, tex, tint);
 }
 
 /*
     pushScissor(Rectf b):
     - Params:   Rectf b
     - Returns:  none
-    - Desc:     ============================================================
-                ================ Scissor ===================================
-                =========================================
+    - Desc:     Clips subsequent drawing to a rectangle, intersected with the
+                clip already in force. Draws pick the top of the stack up as
+                their command's scissor.
 */
 void Renderer::pushScissor(Rectf b) {
-    /* No batch flush here: the solid-rect batch flushes lazily on state
-       mismatch at the next draw (see draw(Rect)). */
     auto& impl = *m_impl;
     if (impl.scissorTop >= Impl::kMaxScissor) {
         ++impl.scissorOverflowDepth;
@@ -1170,12 +729,7 @@ void Renderer::pushScissor(Rectf b) {
     const uint16_t w  = (uint16_t)std::max(0.f, x1f - x0f);
     const uint16_t h  = (uint16_t)std::max(0.f, y1f - y0f);
 
-    impl.scissorStack[impl.scissorTop++] = {
-        x0,
-        y0,
-        w,
-        h
-    };
+    impl.scissorStack[impl.scissorTop++] = { x0, y0, w, h };
 }
 
 /*
@@ -1259,9 +813,9 @@ void Renderer::popRoundClip() {
     setRotation(float degrees, Vec2f pivot):
     - Params:   float degrees, Vec2f pivot
     - Returns:  none
-    - Desc:     No flush: rotation is applied CPU-side when vertices are
-                appended, so rects already queued in the batch keep the rotation
-                they were emitted under.
+    - Desc:     Rotates subsequent drawing about a pivot. Applied CPU-side as
+                vertices are emitted, so geometry already in the arena keeps the
+                rotation it was emitted under.
 */
 void Renderer::setRotation(float degrees, Vec2f pivot) {
     auto& r = m_impl->rotation;
@@ -1305,36 +859,21 @@ void Renderer::clearRotation() {
 }
 
 /*
-    setMouseState(Vec2f mousePosFbPx):
-    - Params:   Vec2f mousePosFbPx
-    - Returns:  none
-    - Desc:     Detect motion vs the previous frame so animated materials can
-                fade the ripple amplitude when the cursor sits still. Threshold
-                avoids sub-pixel noise from triggering constant "moving" state.
-*/
-void Renderer::setMouseState(Vec2f mousePosFbPx) {
-    const float dx = mousePosFbPx.x - m_mousePosPrev.x;
-    const float dy = mousePosFbPx.y - m_mousePosPrev.y;
-    if (dx * dx + dy * dy > 0.25f) {
-        m_mouseLastMoveT = m_impl->elapsed;
-    }
-    m_mousePosPrev = m_mousePos;
-    m_mousePos     = mousePosFbPx;
-}
-
-/*
     clear(Color color):
     - Params:   Color color
     - Returns:  none
-    - Desc:     Clears the scene target to a colour, which begins a frame.
+    - Desc:     Sets the colour the current target is cleared to at the start of
+                the frame. The last call in a frame wins and is applied before
+                any of the frame's draws, whenever it was made.
 */
 void Renderer::clear(Color color) {
-    m_impl->flushSolidBatch();
-    uint32_t rgba = (uint32_t(color.r) << 24) | (uint32_t(color.g) << 16) |
-                    (uint32_t(color.b) <<  8) |  uint32_t(color.a);
-    bgfx::setViewClear(currentViewId(),
-                       BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, rgba, 1.f, 0);
-    bgfx::touch(currentViewId());
+    auto& impl = *m_impl;
+    if (impl.targetTop > 0) {
+        if (m_initialised)
+            impl.valo.setLayerClearColor(impl.currentLayer(), toValoColor(color));
+        return;
+    }
+    impl.clearColor = color;
 }
 
 /* ============================================================================
@@ -1342,103 +881,27 @@ void Renderer::clear(Color color) {
 
 static constexpr float kDeg2Rad = 3.14159265f / 180.f;
 
-/*
-    refreshClipCache():
-    - Params:   none
-    - Returns:  none
-    - Desc:     Walk the clip stack from the top down and collect the two top-
-                most rounded entries (radius > 0). The first becomes the "inner"
-                SDF (the shape being drawn, e.g. a button's own rounded body);
-                the second becomes the "outer" SDF (the enclosing rounded
-                ancestor, e.g. the parent panel). Both are applied in the
-                fragment shader, so a child element stays its own shape AND gets
-                cropped by the parent's rounded corners.
-*/
-void Renderer::Impl::refreshClipCache() {
-    if (curClipVersion == clipVersion) return;
-    for (int i = 0; i < 4; ++i) {
-        curClipRect[i]    = 0.f;
-        curClipParams[i]  = 0.f;
-        curClipRect2[i]   = 0.f;
-        curClipParams2[i] = 0.f;
-    }
-    int picked = 0;
-    for (int i = roundClipTop - 1; i >= 0 && picked < 2; --i) {
-        const auto& c = roundClipStack[i];
-        if (c.radius <= 0.f) continue;
-        if (picked == 0) {
-            curClipRect[0] = c.cx;    curClipRect[1] = c.cy;
-            curClipRect[2] = c.halfW; curClipRect[3] = c.halfH;
-            curClipParams[0] = c.radius; curClipParams[1] = 1.f;
-        } else {
-            curClipRect2[0] = c.cx;    curClipRect2[1] = c.cy;
-            curClipRect2[2] = c.halfW; curClipRect2[3] = c.halfH;
-            curClipParams2[0] = c.radius; curClipParams2[1] = 1.f;
-        }
-        ++picked;
-    }
-    curClipVersion = clipVersion;
-}
-
-/*
-    batchStateMatches(uint16_t viewId):
-    - Params:   uint16_t viewId
-    - Returns:  bool
-    - Desc:     Whether a new shape can join the batch already being built.
-                Batching is only valid while the view, clip and transform are
-                unchanged, so this is what decides between appending and
-                flushing first.
-*/
-bool Renderer::Impl::batchStateMatches(uint16_t viewId) {
-    if (solidBatchView != viewId) return false;
-    const bool hasSc = scissorTop > 0;
-    if (hasSc != batchHasScissor) return false;
-    if (hasSc) {
-        const auto& sc = scissorStack[scissorTop - 1];
-        if (sc.x != batchScissor.x || sc.y != batchScissor.y ||
-            sc.w != batchScissor.w || sc.h != batchScissor.h) return false;
-    }
-    refreshClipCache();
-    return std::memcmp(curClipRect,    batchClipRect,    sizeof(curClipRect))    == 0
-        && std::memcmp(curClipParams,  batchClipParams,  sizeof(curClipParams))  == 0
-        && std::memcmp(curClipRect2,   batchClipRect2,   sizeof(curClipRect2))   == 0
-        && std::memcmp(curClipParams2, batchClipParams2, sizeof(curClipParams2)) == 0;
-}
-
-/*
-    captureBatchState(uint16_t viewId):
-    - Params:   uint16_t viewId
-    - Returns:  none
-    - Desc:     Records the view, clip and transform a batch was started under,
-                so batchStateMatches has something to compare against.
-*/
-void Renderer::Impl::captureBatchState(uint16_t viewId) {
-    solidBatchView  = viewId;
-    batchHasScissor = scissorTop > 0;
-    if (batchHasScissor) batchScissor = scissorStack[scissorTop - 1];
-    refreshClipCache();
-    std::memcpy(batchClipRect,    curClipRect,    sizeof(batchClipRect));
-    std::memcpy(batchClipParams,  curClipParams,  sizeof(batchClipParams));
-    std::memcpy(batchClipRect2,   curClipRect2,   sizeof(batchClipRect2));
-    std::memcpy(batchClipParams2, curClipParams2, sizeof(batchClipParams2));
-}
-
 namespace {
 
 /*
-    packAvgColor(Color a, Color b, Color c, Color d):
+    avgColor(Color a, Color b, Color c, Color d):
     - Params:   Color a, Color b, Color c, Color d
-    - Returns:  inline uint32_t
+    - Returns:  Color
     - Desc:     Center-vertex color for gradient quads: the average of the four
                 corners.
 */
-inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
-    return packColor(Color{
+inline Color avgColor(Color a, Color b, Color c, Color d) {
+    return Color{
         uint8_t((a.r + b.r + c.r + d.r) / 4),
         uint8_t((a.g + b.g + c.g + d.g) / 4),
         uint8_t((a.b + b.b + c.b + d.b) / 4),
-        uint8_t((a.a + b.a + c.a + d.a) / 4)});
+        uint8_t((a.a + b.a + c.a + d.a) / 4)};
 }
+
+/* Same alpha arithmetic the original vertex packing did, so skirts fade in the
+   same steps. */
+inline Color withAlpha(Color c, uint8_t a) { return Color{c.r, c.g, c.b, a}; }
+
 } // anon
 
 /*
@@ -1446,19 +909,11 @@ inline uint32_t packAvgColor(Color a, Color b, Color c, Color d) {
     - Params:   const Rect& r
     - Returns:  none
     - Desc:     Queues an axis-aligned rectangle, with an optional inside border
-                and per-corner gradient, into the solid batch.
+                and per-corner gradient, into the batch.
 */
 void Renderer::draw(const Rect& r) {
     auto& impl = *m_impl;
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
-
-    /* Lazy flush: only break the batch when this rect's pipeline state (view +
-       scissor + round-clip) differs from what the queued rects were recorded. */
-    const uint16_t view = currentViewId();
-    if (!impl.solidBatchVerts.empty() && !impl.batchStateMatches(view))
-        impl.flushSolidBatch();
-    if (impl.solidBatchVerts.empty())
-        impl.captureBatchState(view);
+    if (!m_initialised || !impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
 
     float x = r.position.x, y = r.position.y;
     float w = r.size.x,     h = r.size.y;
@@ -1471,43 +926,29 @@ void Renderer::draw(const Rect& r) {
     impl.rotPt(x2, y2); impl.rotPt(x3, y3);
 
     /* Vertex order is TL, TR, BR, BL. */
-    uint32_t c0, c1, c2, c3;
+    Color c0, c1, c2, c3;
     if (r.gradient) {
-        c0 = packColor(r.colorTL); c1 = packColor(r.colorTR);
-        c2 = packColor(r.colorBR); c3 = packColor(r.colorBL);
+        c0 = r.colorTL; c1 = r.colorTR;
+        c2 = r.colorBR; c3 = r.colorBL;
     } else {
-        c0 = c1 = c2 = c3 = packColor(r.fillColor);
+        c0 = c1 = c2 = c3 = r.fillColor;
     }
 
-    const uint16_t vertsNeeded = r.gradient ? 5 : 4;
-    const uint16_t base = (uint16_t)impl.solidBatchVerts.size();
-    /* A frame can legitimately overflow uint16_t indices (65535 / 4 = 16383
-       rects). Flush before crossing the line. */
-    if (base + vertsNeeded > 65532) {
-        impl.flushSolidBatch();
-        impl.captureBatchState(view);
-    }
-    const uint16_t b2 = (uint16_t)impl.solidBatchVerts.size();
-    impl.solidBatchVerts.push_back({x0, y0, c0});
-    impl.solidBatchVerts.push_back({x1, y1, c1});
-    impl.solidBatchVerts.push_back({x2, y2, c2});
-    impl.solidBatchVerts.push_back({x3, y3, c3});
+    const uint32_t b = impl.pushVertex(x0, y0, c0);
+    impl.pushVertex(x1, y1, c1);
+    impl.pushVertex(x2, y2, c2);
+    impl.pushVertex(x3, y3, c3);
     if (!r.gradient) {
-        impl.solidBatchIdx.push_back(b2 + 0);
-        impl.solidBatchIdx.push_back(b2 + 1);
-        impl.solidBatchIdx.push_back(b2 + 2);
-        impl.solidBatchIdx.push_back(b2 + 0);
-        impl.solidBatchIdx.push_back(b2 + 2);
-        impl.solidBatchIdx.push_back(b2 + 3);
+        impl.pushIndex(b + 0); impl.pushIndex(b + 1); impl.pushIndex(b + 2);
+        impl.pushIndex(b + 0); impl.pushIndex(b + 2); impl.pushIndex(b + 3);
     } else {
         /* Two triangles interpolate a 4-corner gradient with a visible seam
            along the shared diagonal whenever the corner colors aren't. */
         float cx = x + w * 0.5f, cy = y + h * 0.5f;
         impl.rotPt(cx, cy);
-        impl.solidBatchVerts.push_back(
-            {cx, cy, packAvgColor(r.colorTL, r.colorTR, r.colorBL, r.colorBR)});
-        static constexpr uint16_t kFan[12] = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
-        for (uint16_t i : kFan) impl.solidBatchIdx.push_back(b2 + i);
+        impl.pushVertex(cx, cy, avgColor(r.colorTL, r.colorTR, r.colorBL, r.colorBR));
+        static constexpr uint32_t kFan[12] = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
+        for (uint32_t i : kFan) impl.pushIndex(b + i);
     }
 
     if (r.outlineThickness > 0.f && r.outlineColor.a > 0) {
@@ -1521,51 +962,6 @@ void Renderer::draw(const Rect& r) {
 }
 
 /*
-    flushSolidBatch():
-    - Params:   none
-    - Returns:  none
-    - Desc:     Submits the accumulated solid geometry as one draw call and
-                empties the batch. Called whenever the state changes or a
-                textured draw has to be ordered against it.
-*/
-void Renderer::Impl::flushSolidBatch() {
-    if (solidBatchVerts.empty() || solidBatchView == UINT16_MAX) {
-        solidBatchVerts.clear();
-        solidBatchIdx.clear();
-        return;
-    }
-    if (!bgfx::isValid(solidProgram)) {
-        solidBatchVerts.clear();
-        solidBatchIdx.clear();
-        solidBatchView = UINT16_MAX;
-        return;
-    }
-    const uint32_t numV = (uint32_t)solidBatchVerts.size();
-    const uint32_t numI = (uint32_t)solidBatchIdx.size();
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (bgfx::allocTransientBuffers(&tvb, solidLayout, numV, &tib, numI)) {
-        std::memcpy(tvb.data, solidBatchVerts.data(), numV * sizeof(PosColorVertex));
-        std::memcpy(tib.data, solidBatchIdx.data(),   numI * sizeof(uint16_t));
-        bgfx::setVertexBuffer(0, &tvb);
-        bgfx::setIndexBuffer(&tib);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                       BGFX_STATE_BLEND_ALPHA);
-        /* Apply the scissor/round-clip snapshot captured when the batch
-           started. */
-        if (batchHasScissor)
-            bgfx::setScissor(batchScissor.x, batchScissor.y,
-                             batchScissor.w, batchScissor.h);
-        applyClipUniforms(*this, batchClipRect, batchClipParams,
-                          batchClipRect2, batchClipParams2);
-        bgfx::submit(solidBatchView, solidProgram);
-    }
-    solidBatchVerts.clear();
-    solidBatchIdx.clear();
-    solidBatchView = UINT16_MAX;
-}
-
-/*
     draw(const RoundedRect& rr):
     - Params:   const RoundedRect& rr
     - Returns:  none
@@ -1576,7 +972,7 @@ void Renderer::Impl::flushSolidBatch() {
 */
 void Renderer::draw(const RoundedRect& rr) {
     auto& impl = *m_impl;
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!m_initialised || impl.scissorEmpty()) return;
 
     float r = std::min(rr.radius, std::min(rr.size.x, rr.size.y) * 0.5f);
     if (r <= 0.f) {
@@ -1589,53 +985,32 @@ void Renderer::draw(const RoundedRect& rr) {
         return;
     }
 
-    /* Immediate-mode submits below: flush queued rects first so draw order is
-       preserved (push/popRoundClip no longer flush). */
-    impl.flushSolidBatch();
-
-    /* Render the outline as a slightly larger rounded rect underneath, then
-       the fill on top. */
     auto submitQuad = [&](float x, float y, float w, float h,
                           Color cTL, Color cTR, Color cBR, Color cBL,
                           bool gradient) {
+        if (!impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
         float x0 = x,     y0 = y;
         float x1 = x + w, y1 = y;
         float x2 = x + w, y2 = y + h;
         float x3 = x,     y3 = y + h;
         impl.rotPt(x0, y0); impl.rotPt(x1, y1);
         impl.rotPt(x2, y2); impl.rotPt(x3, y3);
-        PosColorVertex verts[5] = {
-            {x0, y0, packColor(cTL)},
-            {x1, y1, packColor(cTR)},
-            {x2, y2, packColor(cBR)},
-            {x3, y3, packColor(cBL)},
-            {0.f, 0.f, 0u},   /* center, used for gradients only */
-        };
-        static constexpr uint16_t idxQuad[6]  = {0,1,2, 0,2,3};
-        /* Center-vertex fan: see draw(Rect) — avoids the diagonal seam on
-           non-coplanar corner colors. */
-        static constexpr uint16_t idxFan[12]  = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
-        const uint16_t* idx  = idxQuad;
-        uint32_t        numV = 4, numI = 6;
+        const uint32_t b = impl.pushVertex(x0, y0, cTL);
+        impl.pushVertex(x1, y1, cTR);
+        impl.pushVertex(x2, y2, cBR);
+        impl.pushVertex(x3, y3, cBL);
         if (gradient) {
+            /* Center-vertex fan: see draw(Rect) — avoids the diagonal seam on
+               non-coplanar corner colors. */
             float cx = x + w * 0.5f, cy = y + h * 0.5f;
             impl.rotPt(cx, cy);
-            verts[4] = {cx, cy, packAvgColor(cTL, cTR, cBL, cBR)};
-            idx = idxFan; numV = 5; numI = 12;
+            impl.pushVertex(cx, cy, avgColor(cTL, cTR, cBL, cBR));
+            static constexpr uint32_t idxFan[12] = {0,1,4, 1,2,4, 2,3,4, 3,0,4};
+            for (uint32_t i : idxFan) impl.pushIndex(b + i);
+        } else {
+            static constexpr uint32_t idxQuad[6] = {0,1,2, 0,2,3};
+            for (uint32_t i : idxQuad) impl.pushIndex(b + i);
         }
-
-        bgfx::TransientVertexBuffer tvb;
-        bgfx::TransientIndexBuffer  tib;
-        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, numV, &tib, numI))
-            return;
-        std::memcpy(tvb.data, verts, numV * sizeof(PosColorVertex));
-        std::memcpy(tib.data, idx,   numI * sizeof(uint16_t));
-        bgfx::setVertexBuffer(0, &tvb);
-        bgfx::setIndexBuffer(&tib);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                       BGFX_STATE_BLEND_ALPHA);
-        applyScissor(impl);
-        bgfx::submit(currentViewId(), impl.solidProgram);
     };
 
     pushRoundClip({rr.position, rr.size}, r);
@@ -1683,28 +1058,21 @@ void Renderer::draw(const RoundedRect& rr) {
             draw(Rect{{x,         y + r}, {t, midH}, oc});
             draw(Rect{{x + w - t, y + r}, {t, midH}, oc});
         }
-        /* draw(Rect) queues into the solid batch; flush so the edges land with
-           the arcs rather than behind a later immediate-mode submit. */
-        impl.flushSolidBatch();
     }
-
 }
 
 /*
     draw(const Circle& c):
     - Params:   const Circle& c
     - Returns:  none
-    - Desc:     Queues a circle, tessellated to a segment count that keeps the
-                silhouette smooth at its drawn size.
+    - Desc:     Queues a circle as a rounded rect with radius == half-size, so the
+                fragment shader's SDF gives it sub-pixel antialiasing.
 */
 void Renderer::draw(const Circle& c) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!m_initialised || impl.scissorEmpty()) return;
     if (c.radius <= 0.f || c.fillColor.a == 0) return;
 
-    /* Render as a rounded-rect with radius == half-size — the fragment shader
-       SDF gives proper sub-pixel AA, matching Button/Dropdown. */
     const float r   = c.radius;
     const float pad = 1.f;
     const float x   = c.center.x - r - pad;
@@ -1714,35 +1082,20 @@ void Renderer::draw(const Circle& c) {
 
     pushRoundClip({{c.center.x - r, c.center.y - r}, {r * 2.f, r * 2.f}}, r);
 
-    uint32_t col = packColor(c.fillColor);
-    float x0 = x,     y0 = y;
-    float x1 = x + w, y1 = y;
-    float x2 = x + w, y2 = y + h;
-    float x3 = x,     y3 = y + h;
-    impl.rotPt(x0, y0); impl.rotPt(x1, y1);
-    impl.rotPt(x2, y2); impl.rotPt(x3, y3);
-    PosColorVertex verts[4] = {
-        {x0, y0, col},
-        {x1, y1, col},
-        {x2, y2, col},
-        {x3, y3, col},
-    };
-    uint16_t idx[6] = {0,1,2, 0,2,3};
-
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 4, &tib, 6)) {
-        popRoundClip();
-        return;
+    if (impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) {
+        float x0 = x,     y0 = y;
+        float x1 = x + w, y1 = y;
+        float x2 = x + w, y2 = y + h;
+        float x3 = x,     y3 = y + h;
+        impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+        impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+        const uint32_t b = impl.pushVertex(x0, y0, c.fillColor);
+        impl.pushVertex(x1, y1, c.fillColor);
+        impl.pushVertex(x2, y2, c.fillColor);
+        impl.pushVertex(x3, y3, c.fillColor);
+        static constexpr uint32_t idxQuad[6] = {0,1,2, 0,2,3};
+        for (uint32_t i : idxQuad) impl.pushIndex(b + i);
     }
-    std::memcpy(tvb.data, verts, sizeof(verts));
-    std::memcpy(tib.data, idx,   sizeof(idx));
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.solidProgram);
 
     popRoundClip();
 }
@@ -1755,52 +1108,36 @@ void Renderer::draw(const Circle& c) {
 */
 void Renderer::draw(const Triangle& t) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!m_initialised || !impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
 
-    uint32_t col = packColor(t.fillColor);
     float ax = t.a.x, ay = t.a.y;
     float bx = t.b.x, by = t.b.y;
     float cx = t.c.x, cy = t.c.y;
     impl.rotPt(ax, ay);
     impl.rotPt(bx, by);
     impl.rotPt(cx, cy);
-    PosColorVertex verts[3] = {
-        {ax, ay, col},
-        {bx, by, col},
-        {cx, cy, col},
-    };
-    uint16_t idx[3] = {0,1,2};
-
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 3, &tib, 3))
-        return;
-    std::memcpy(tvb.data, verts, sizeof(verts));
-    std::memcpy(tib.data, idx,   sizeof(idx));
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.solidProgram);
+    const uint32_t b = impl.pushVertex(ax, ay, t.fillColor);
+    impl.pushVertex(bx, by, t.fillColor);
+    impl.pushVertex(cx, cy, t.fillColor);
+    impl.pushIndex(b + 0); impl.pushIndex(b + 1); impl.pushIndex(b + 2);
 }
 
 /*
     draw(const Line& l):
     - Params:   const Line& l
     - Returns:  none
-    - Desc:     Queues a single line as a quad expanded to its thickness.
+    - Desc:     Queues a single line as a quad expanded to its thickness, with a
+                one-pixel alpha skirt either side for antialiasing.
 */
 void Renderer::draw(const Line& l) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!m_initialised || impl.scissorEmpty()) return;
 
     float dx = l.end.x - l.start.x;
     float dy = l.end.y - l.start.y;
     float len = std::sqrt(dx*dx + dy*dy);
     if (len < 0.001f) return;
+    if (!impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
 
     /* Unit normal (perp to line direction). */
     const float ux = -dy / len;
@@ -1808,14 +1145,12 @@ void Renderer::draw(const Line& l) {
     const float half = l.thickness * 0.5f;
     const float pad  = 1.f;   /* skirt width in pixels for edge AA */
 
-    /* Six vertices per line endpoint: outer skirt | edge | inner edge twice
-       simplifies to 4 rows along the normal at offsets: +half+pad (a=0), +half. */
+    /* Four rows along the normal: outer skirt, edge, edge, outer skirt. */
     const float offs[4]   = {  half + pad,  half, -half, -half - pad };
     const uint8_t alphas[4] = { 0, 255, 255, 0 };
 
     const uint8_t baseA = l.color.a;
-    float vx[8], vy[8];   /* 2 endpoints * 4 rows */
-    uint32_t vc[8];
+    uint32_t base = 0;
     for (int ep = 0; ep < 2; ++ep) {
         const float bx = (ep == 0) ? l.start.x : l.end.x;
         const float by = (ep == 0) ? l.start.y : l.end.y;
@@ -1823,40 +1158,21 @@ void Renderer::draw(const Line& l) {
             float x = bx + ux * offs[r];
             float y = by + uy * offs[r];
             impl.rotPt(x, y);
-            vx[ep*4 + r] = x;
-            vy[ep*4 + r] = y;
             uint8_t a = (uint8_t)((uint16_t)baseA * (uint16_t)alphas[r] / 255);
-            vc[ep*4 + r] = packColor(Color{l.color.r, l.color.g, l.color.b, a});
+            const uint32_t v = impl.pushVertex(x, y, withAlpha(l.color, a));
+            if (ep == 0 && r == 0) base = v;
         }
     }
 
-    PosColorVertex verts[8];
-    for (int i = 0; i < 8; ++i) verts[i] = { vx[i], vy[i], vc[i] };
-
     /* 3 quads (skirt, body, skirt) between the two endpoints. */
-    uint16_t idx[18];
-    int ii = 0;
     for (int r = 0; r < 3; ++r) {
-        const uint16_t v00 = (uint16_t)(0*4 + r);
-        const uint16_t v01 = (uint16_t)(0*4 + r + 1);
-        const uint16_t v10 = (uint16_t)(1*4 + r);
-        const uint16_t v11 = (uint16_t)(1*4 + r + 1);
-        idx[ii++] = v00; idx[ii++] = v01; idx[ii++] = v11;
-        idx[ii++] = v00; idx[ii++] = v11; idx[ii++] = v10;
+        const uint32_t v00 = base + (uint32_t)(0*4 + r);
+        const uint32_t v01 = base + (uint32_t)(0*4 + r + 1);
+        const uint32_t v10 = base + (uint32_t)(1*4 + r);
+        const uint32_t v11 = base + (uint32_t)(1*4 + r + 1);
+        impl.pushIndex(v00); impl.pushIndex(v01); impl.pushIndex(v11);
+        impl.pushIndex(v00); impl.pushIndex(v11); impl.pushIndex(v10);
     }
-
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, 8, &tib, 18))
-        return;
-    std::memcpy(tvb.data, verts, sizeof(verts));
-    std::memcpy(tib.data, idx,   sizeof(idx));
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.solidProgram);
 }
 
 /*
@@ -1869,75 +1185,30 @@ void Renderer::draw(const Line& l) {
 */
 void Renderer::drawLines(const Line* lines, size_t count) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
-    if (!lines || count == 0) return;
+    if (!m_initialised || !lines || count == 0) return;
+    if (!impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
 
-    /* Worst case all `count` lines are non-degenerate. Cap so we never exceed
-       the 16-bit index range (max 65535 indices => 10922 quads). */
-    constexpr size_t kMaxQuadsPerBatch = 65535 / 6;
-    size_t offset = 0;
-    while (offset < count) {
-        size_t chunk = std::min(count - offset, kMaxQuadsPerBatch);
-
-        /* First pass: count non-degenerate lines so we allocate tightly. */
-        size_t valid = 0;
-        for (size_t i = 0; i < chunk; ++i) {
-            const Line& l = lines[offset + i];
-            float dx = l.end.x - l.start.x;
-            float dy = l.end.y - l.start.y;
-            if (dx*dx + dy*dy >= 1e-6f) ++valid;
-        }
-        if (valid == 0) { offset += chunk; continue; }
-
-        const uint32_t nV = (uint32_t)(valid * 4);
-        const uint32_t nI = (uint32_t)(valid * 6);
-        bgfx::TransientVertexBuffer tvb;
-        bgfx::TransientIndexBuffer  tib;
-        if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nV, &tib, nI))
-            return;
-
-        auto* verts = reinterpret_cast<PosColorVertex*>(tvb.data);
-        auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
-
-        uint32_t vi = 0, ii = 0;
-        for (size_t i = 0; i < chunk; ++i) {
-            const Line& l = lines[offset + i];
-            float dx = l.end.x - l.start.x;
-            float dy = l.end.y - l.start.y;
-            float len2 = dx*dx + dy*dy;
-            if (len2 < 1e-6f) continue;
-            float len = std::sqrt(len2);
-            float nx = -dy / len * l.thickness * 0.5f;
-            float ny =  dx / len * l.thickness * 0.5f;
-            uint32_t col = packColor(l.color);
-            float x0 = l.start.x + nx, y0 = l.start.y + ny;
-            float x1 = l.start.x - nx, y1 = l.start.y - ny;
-            float x2 = l.end.x   - nx, y2 = l.end.y   - ny;
-            float x3 = l.end.x   + nx, y3 = l.end.y   + ny;
-            impl.rotPt(x0, y0); impl.rotPt(x1, y1);
-            impl.rotPt(x2, y2); impl.rotPt(x3, y3);
-            verts[vi+0] = {x0, y0, col};
-            verts[vi+1] = {x1, y1, col};
-            verts[vi+2] = {x2, y2, col};
-            verts[vi+3] = {x3, y3, col};
-            idx[ii+0] = (uint16_t)(vi+0);
-            idx[ii+1] = (uint16_t)(vi+1);
-            idx[ii+2] = (uint16_t)(vi+2);
-            idx[ii+3] = (uint16_t)(vi+0);
-            idx[ii+4] = (uint16_t)(vi+2);
-            idx[ii+5] = (uint16_t)(vi+3);
-            vi += 4; ii += 6;
-        }
-
-        bgfx::setVertexBuffer(0, &tvb);
-        bgfx::setIndexBuffer(&tib);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                       BGFX_STATE_BLEND_ALPHA);
-        applyScissor(impl);
-        bgfx::submit(currentViewId(), impl.solidProgram);
-
-        offset += chunk;
+    for (size_t i = 0; i < count; ++i) {
+        const Line& l = lines[i];
+        float dx = l.end.x - l.start.x;
+        float dy = l.end.y - l.start.y;
+        float len2 = dx*dx + dy*dy;
+        if (len2 < 1e-6f) continue;
+        float len = std::sqrt(len2);
+        float nx = -dy / len * l.thickness * 0.5f;
+        float ny =  dx / len * l.thickness * 0.5f;
+        float x0 = l.start.x + nx, y0 = l.start.y + ny;
+        float x1 = l.start.x - nx, y1 = l.start.y - ny;
+        float x2 = l.end.x   - nx, y2 = l.end.y   - ny;
+        float x3 = l.end.x   + nx, y3 = l.end.y   + ny;
+        impl.rotPt(x0, y0); impl.rotPt(x1, y1);
+        impl.rotPt(x2, y2); impl.rotPt(x3, y3);
+        const uint32_t b = impl.pushVertex(x0, y0, l.color);
+        impl.pushVertex(x1, y1, l.color);
+        impl.pushVertex(x2, y2, l.color);
+        impl.pushVertex(x3, y3, l.color);
+        impl.pushIndex(b + 0); impl.pushIndex(b + 1); impl.pushIndex(b + 2);
+        impl.pushIndex(b + 0); impl.pushIndex(b + 2); impl.pushIndex(b + 3);
     }
 }
 
@@ -1954,13 +1225,13 @@ void Renderer::drawLines(const Line* lines, size_t count) {
 void Renderer::drawArc(Vec2f center, float innerR, float outerR,
                        float startDeg, float endDeg, Color color, int segments) {
     auto& impl = *m_impl;
-    impl.flushSolidBatch();
-    if (!bgfx::isValid(impl.solidProgram) || scissorEmpty(impl)) return;
+    if (!m_initialised || impl.scissorEmpty()) return;
     if (color.a == 0) return;
 
     if (innerR > outerR) std::swap(innerR, outerR);
     if (outerR <= 0.f) return;
     if (innerR < 0.f) innerR = 0.f;
+    if (!impl.beginShape(Impl::ModeSolid, valo::EMPTY_TEXTURE)) return;
 
     int segs = std::max(1, segments);
     /* We emit (segs + 2 angular skirt) slices x 4 radial rows. */
@@ -1987,23 +1258,11 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
     const bool solidCore = innerR <= 0.f;
 
     const int sliceCount = segs + 3;   /* [-1, 0..segs, segs+1] */
-    const uint32_t nV = (uint32_t)sliceCount * 4;
     /* Quads per slice gap: 3 normally, or 2 if solidCore (skip inner-skirt
        row). */
     const int rowsPerGap = solidCore ? 2 : 3;
-    const uint32_t nI = (uint32_t)(sliceCount - 1) * rowsPerGap * 6;
-
-    bgfx::TransientVertexBuffer tvb;
-    bgfx::TransientIndexBuffer  tib;
-    if (!bgfx::allocTransientBuffers(&tvb, impl.solidLayout, nV, &tib, nI))
-        return;
-
-    auto* verts = reinterpret_cast<PosColorVertex*>(tvb.data);
-    auto* idx   = reinterpret_cast<uint16_t*>(tib.data);
 
     auto sliceAngle = [&](int s) -> float {
-        /* s = 0 -> startSk s = 1 -> startRad s = segs+1 -> endRad s = segs+2
-           -> endSk */
         if (s == 0)              return startSk;
         if (s == sliceCount - 1) return endSk;
         return startRad + step * (float)(s - 1);
@@ -2012,6 +1271,7 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
         return (s == 0 || s == sliceCount - 1) ? 0 : 255;
     };
 
+    uint32_t base = 0;
     for (int s = 0; s < sliceCount; ++s) {
         const float a   = sliceAngle(s);
         const float ca  = std::cos(a);
@@ -2026,34 +1286,23 @@ void Renderer::drawArc(Vec2f center, float innerR, float outerR,
             uint8_t ra = (solidCore && r == 3) ? 255 : alphaMul[r];
             uint16_t a16 = (uint16_t)ra * (uint16_t)am;
             uint8_t finalA = (uint8_t)((a16 + 127) / 255);
-            Color cc{color.r, color.g, color.b,
-                     (uint8_t)((uint16_t)color.a * (uint16_t)finalA / 255)};
-            verts[s*4 + r] = { px, py, packColor(cc) };
+            const Color cc{color.r, color.g, color.b,
+                           (uint8_t)((uint16_t)color.a * (uint16_t)finalA / 255)};
+            const uint32_t v = impl.pushVertex(px, py, cc);
+            if (s == 0 && r == 0) base = v;
         }
     }
 
-    uint32_t ii = 0;
     for (int s = 0; s < sliceCount - 1; ++s) {
         for (int r = 0; r < rowsPerGap; ++r) {
-            const uint16_t v00 = (uint16_t)(s*4 + r);
-            const uint16_t v01 = (uint16_t)(s*4 + r + 1);
-            const uint16_t v10 = (uint16_t)((s+1)*4 + r);
-            const uint16_t v11 = (uint16_t)((s+1)*4 + r + 1);
-            idx[ii++] = v00;
-            idx[ii++] = v01;
-            idx[ii++] = v11;
-            idx[ii++] = v00;
-            idx[ii++] = v11;
-            idx[ii++] = v10;
+            const uint32_t v00 = base + (uint32_t)(s*4 + r);
+            const uint32_t v01 = base + (uint32_t)(s*4 + r + 1);
+            const uint32_t v10 = base + (uint32_t)((s+1)*4 + r);
+            const uint32_t v11 = base + (uint32_t)((s+1)*4 + r + 1);
+            impl.pushIndex(v00); impl.pushIndex(v01); impl.pushIndex(v11);
+            impl.pushIndex(v00); impl.pushIndex(v11); impl.pushIndex(v10);
         }
     }
-
-    bgfx::setVertexBuffer(0, &tvb);
-    bgfx::setIndexBuffer(&tib);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_BLEND_ALPHA);
-    applyScissor(impl);
-    bgfx::submit(currentViewId(), impl.solidProgram);
 }
 
 } // namespace uilo

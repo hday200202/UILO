@@ -1,6 +1,5 @@
 #include "Canvas.hpp"
 
-#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -259,10 +258,8 @@ void Canvas::update(Rectf& parentBounds, float dt) {
     /* Middle-mouse drag-to-pan. Polled here because UILO has no middle-mouse
        plumbing of its own. */
     if (m_options.getMiddleMousePan()) {
-        float mx = 0.f, my = 0.f;
-        const Uint32 mask = SDL_GetMouseState(&mx, &my);
-        const bool middleNow = (mask & SDL_BUTTON_MASK(SDL_BUTTON_MIDDLE)) != 0;
-        const Vec2f mousePos{mx, my};
+        const bool middleNow = m_uiloRef && m_uiloRef->isMouseButtonDown(MouseButton::Middle);
+        const Vec2f mousePos = m_uiloRef ? m_uiloRef->queryMousePixelPosition() : Vec2f{};
         const bool insideViewport = m_bounds.contains(mousePos);
 
         if (middleNow && !m_middleDown && insideViewport) {
@@ -565,8 +562,8 @@ bool Canvas::checkScroll(
     /* Ctrl/Cmd + scroll = zoom at cursor. delta.y is treated as a signed zoom
        step. */
     if (m_options.getZoomEnabled()) {
-        const SDL_Keymod mods = SDL_GetModState();
-        const bool ctrl = (mods & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
+        const bool ctrl = m_uiloRef
+            && hasMod(m_uiloRef->getKeyModifiers(), KeyMod::Ctrl | KeyMod::Gui);
         if (ctrl && delta.y != 0.f) {
             const float factor = 1.f + delta.y * m_options.getZoomStep();
             zoomAt(mousePosition, factor);

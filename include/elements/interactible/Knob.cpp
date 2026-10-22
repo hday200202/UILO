@@ -103,14 +103,12 @@ void Knob::update(Rectf& parentBounds, float /*dt*/) {
     resize(parentBounds);
 
     if (m_dragging) {
-        float mx, my;
-        uint32_t btns = SDL_GetMouseState(&mx, &my);
-        if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+        if (!m_uiloRef || !m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
             m_dragging = false;
         } else {
             if (m_uiloRef) m_uiloRef->requestCursor(CursorType::SizeVertical, 2);
             const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-            const float curY  = m_uiloRef ? m_uiloRef->getMousePosition().y : my;
+            const float curY  = m_uiloRef->getMousePosition().y;
             const float dy    = m_dragStartY - curY;   /* up = positive */
             const float range = m_options.getMax() - m_options.getMin();
             const float pxPerRange = std::max(1.f, m_options.getDragPixelsPerRange() * scale);
@@ -262,7 +260,7 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     if ((dx*dx + dy*dy) > r * r) return false;
 
     /* Double click within the usual window restores the default. */
-    const uint64_t now = SDL_GetTicks();
+    const uint64_t now = steadyMillis();
     const bool isDouble = (now - m_lastClickMs) < 350;
     m_lastClickMs = now;
 

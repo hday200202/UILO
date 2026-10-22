@@ -5,7 +5,6 @@
 #include "../../utils/Theme.hpp"
 
 #include <functional>
-#include <SDL3/SDL.h>
 
 #include "Interactible.hpp"
 

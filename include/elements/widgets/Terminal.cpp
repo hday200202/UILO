@@ -995,9 +995,7 @@ void Terminal::update(Rectf& parentBounds, float dt) {
     /* Drag-select. The button is polled rather than waited on, the way Textbox
        does it: a release can land anywhere, including outside the widget. */
     if (m_mouseDown) {
-        float mx, my;
-        const uint32_t btns = SDL_GetMouseState(&mx, &my);
-        if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+        if (!m_uiloRef || !m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
             m_mouseDown = false;
         } else if (m_uiloRef) {
             const Vec2f mp   = m_uiloRef->getMousePosition();
@@ -1462,7 +1460,7 @@ void Terminal::selectRange(long fromLine, int fromCol, long toLine, int toCol) {
 */
 void Terminal::copySelection() const {
     const std::string sel = selectedText();
-    if (!sel.empty()) SDL_SetClipboardText(sel.c_str());
+    if (!sel.empty() && m_uiloRef) m_uiloRef->setClipboardText(sel);
 }
 
 
@@ -1480,10 +1478,8 @@ void Terminal::copySelection() const {
 void Terminal::pasteClipboard() {
     if (!m_pty.isOpen()) return;
 
-    const char* raw = SDL_GetClipboardText();
-    if (!raw) return;
-    std::string text(raw);
-    SDL_free(const_cast<char*>(raw));
+    if (!m_uiloRef) return;
+    const std::string text = m_uiloRef->getClipboardText();
     if (text.empty()) return;
 
     std::string clean;
@@ -1602,8 +1598,8 @@ void Terminal::handleTextInput(char32_t unicode) {
 
 
 /*
-    sendKey(SDL_Keycode key, bool shift, bool ctrl):
-    - Params:   SDL_Keycode key, bool shift, bool ctrl
+    sendKey(Key key, char32_t symbol, bool shift, bool ctrl):
+    - Params:   Key key, char32_t symbol, bool shift, bool ctrl
     - Returns:  void
     - Desc:     Encodes a non-printing key the way a terminal is expected to.
                 Arrows and Home/End switch between the normal CSI forms and the
@@ -1613,30 +1609,33 @@ void Terminal::handleTextInput(char32_t unicode) {
                 matching control character, which is how interrupt and
                 end-of-file reach the shell at all.
 */
-void Terminal::sendKey(SDL_Keycode key, bool shift, bool ctrl) {
+void Terminal::sendKey(Key key, char32_t symbol, bool shift, bool ctrl) {
     const char* seq = nullptr;
     std::string tmp;
 
     const bool app = m_appCursorKeys;
     switch (key) {
-        case SDLK_RETURN: case SDLK_KP_ENTER: seq = "\r";   break;
-        case SDLK_BACKSPACE:                  seq = "\x7f"; break;
-        case SDLK_TAB:                        seq = shift ? "\x1b[Z" : "\t"; break;
-        case SDLK_ESCAPE:                     seq = "\x1b"; break;
-        case SDLK_UP:    seq = app ? "\x1bOA" : "\x1b[A"; break;
-        case SDLK_DOWN:  seq = app ? "\x1bOB" : "\x1b[B"; break;
-        case SDLK_RIGHT: seq = app ? "\x1bOC" : "\x1b[C"; break;
-        case SDLK_LEFT:  seq = app ? "\x1bOD" : "\x1b[D"; break;
-        case SDLK_HOME:  seq = app ? "\x1bOH" : "\x1b[H"; break;
-        case SDLK_END:   seq = app ? "\x1bOF" : "\x1b[F"; break;
-        case SDLK_DELETE:   seq = "\x1b[3~"; break;
-        case SDLK_PAGEUP:   seq = "\x1b[5~"; break;
-        case SDLK_PAGEDOWN: seq = "\x1b[6~"; break;
+        case Key::Return: case Key::KpEnter: seq = "\r";   break;
+        case Key::Backspace:                 seq = "\x7f"; break;
+        case Key::Tab:                       seq = shift ? "\x1b[Z" : "\t"; break;
+        case Key::Escape:                    seq = "\x1b"; break;
+        case Key::Up:    seq = app ? "\x1bOA" : "\x1b[A"; break;
+        case Key::Down:  seq = app ? "\x1bOB" : "\x1b[B"; break;
+        case Key::Right: seq = app ? "\x1bOC" : "\x1b[C"; break;
+        case Key::Left:  seq = app ? "\x1bOD" : "\x1b[D"; break;
+        case Key::Home:  seq = app ? "\x1bOH" : "\x1b[H"; break;
+        case Key::End:   seq = app ? "\x1bOF" : "\x1b[F"; break;
+        case Key::Delete:   seq = "\x1b[3~"; break;
+        case Key::PageUp:   seq = "\x1b[5~"; break;
+        case Key::PageDown: seq = "\x1b[6~"; break;
         default: break;
     }
 
-    if (!seq && ctrl && key >= SDLK_A && key <= SDLK_Z) {
-        tmp = std::string(1, static_cast<char>(key - SDLK_A + 1));
+    /* Ctrl with a letter is the matching control character, by the letter the
+       layout puts on the key. */
+    const char32_t letter = shortcutLetter(symbol);
+    if (!seq && ctrl && letter != 0) {
+        tmp = std::string(1, static_cast<char>(letter - U'a' + 1));
         seq = tmp.c_str();
     }
     if (seq) m_pty.write(seq, std::strlen(seq));
@@ -1644,25 +1643,25 @@ void Terminal::sendKey(SDL_Keycode key, bool shift, bool ctrl) {
 
 
 /*
-    handleKeyInput(SDL_Keycode key, bool shift, bool ctrl):
-    - Params:   SDL_Keycode key, bool shift, bool ctrl
+    handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui):
+    - Params:   Key key, char32_t symbol, bool shift, bool ctrl, bool gui
     - Returns:  void
     - Desc:     Routes a key to the shell, and snaps the view back to the bottom
                 first -- typing while scrolled back should show what is being
                 typed. Printable characters arrive through handleTextInput
                 instead, so only the keys that need encoding are handled here.
 */
-void Terminal::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
+void Terminal::handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui) {
     if (!m_focused || !m_pty.isOpen()) return;
 
     /* A modifier on its own is the first half of a shortcut, not input. It must
        not reach the shell and must not clear the selection -- otherwise the
        Command in Command+C would wipe what the C was about to copy. */
     switch (key) {
-        case SDLK_LCTRL:  case SDLK_RCTRL:
-        case SDLK_LSHIFT: case SDLK_RSHIFT:
-        case SDLK_LALT:   case SDLK_RALT:
-        case SDLK_LGUI:   case SDLK_RGUI:
+        case Key::LCtrl:  case Key::RCtrl:
+        case Key::LShift: case Key::RShift:
+        case Key::LAlt:   case Key::RAlt:
+        case Key::LGui:   case Key::RGui:
             return;
         default: break;
     }
@@ -1673,14 +1672,14 @@ void Terminal::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) 
        which is the one place UILO does not treat the two as interchangeable. */
     const bool clip = gui || (ctrl && shift);
     if (clip) {
-        switch (key) {
-            case SDLK_C:
+        switch (shortcutLetter(symbol)) {
+            case U'c':
                 /* Copy only when there is something to copy; otherwise fall
                    through so Ctrl+Shift+C still reaches the shell. */
                 if (m_hasSelection) { copySelection(); m_dirty = true; return; }
                 break;
-            case SDLK_V: pasteClipboard(); m_dirty = true; return;
-            case SDLK_A: selectAll();      return;
+            case U'v': pasteClipboard(); m_dirty = true; return;
+            case U'a': selectAll();      return;
             default: break;
         }
     }
@@ -1689,7 +1688,7 @@ void Terminal::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) 
     m_blinkOn    = true;
     m_blinkTimer = 0.f;
     clearSelection();
-    sendKey(key, shift, ctrl);
+    sendKey(key, symbol, shift, ctrl);
     m_dirty = true;
 }
 

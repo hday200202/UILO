@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     */
     uilo.setOnLiveResize(frame);
     Keybinds& kb = uilo.getKeybinds();
-    kb.bindAction("zoom_in", {SDL_SCANCODE_LCTRL, SDL_SCANCODE_EQUALS}, [&](){ uilo.setScale(uilo.getScale() + 0.25f); }, true);
+    kb.bindAction("zoom_in", {Key::LCtrl, Key::Equals}, [&](){ uilo.setScale(uilo.getScale() + 0.25f); }, true);
 
     while (uilo.isRunning()) {
         uilo.pollEvents();

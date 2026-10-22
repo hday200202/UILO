@@ -35,7 +35,7 @@ using GradientStop = GradientColor;
 /*
     Gradient:
     - Desc:     A per-corner background fill, built once and shared across
-                elements the same way a Material is. Each of the four corners is
+                elements. Each of the four corners is
                 a GradientColor -- a literal Color or a palette role, freely
                 mixable, and since GradientColor converts implicitly from both
                 you never name the type at a call site. Colors are interpolated

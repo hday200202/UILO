@@ -89,23 +89,30 @@ public:
     void update();
     void render();
 
-    // Drains the SDL queue, forwarding everything to handleEvent() and closing
-    // the app on SDL_EVENT_QUIT. Convenience for the common loop:
+    // Reads the window's input for this frame and dispatches it -- keys and
+    // text to the focused interactible, wheel and trackpad scrolling, presses
+    // -- and stops the app when the window is closed. Call once per frame:
     //     while (ui.isRunning()) { ui.pollEvents(); ui.update(); /* draw */ }
-    // Applications that own their own event loop can keep calling handleEvent()
-    // per event instead and never touch this.
     void pollEvents();
     bool isRunning() const { return m_running; }
     void quit()            { m_running = false; }
 
-    void handleEvent(const SDL_Event& event);
     void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
     void dispatchZoom(const Vec2f& pos, float magnification);
     bool wantsScrollMomentum(const Vec2f& pos) const;
-    // Cursor position in render pixels, read live from SDL rather than from the
-    // once-per-frame cache, so event callbacks that fire mid-frame see where the
-    // pointer actually is.
+    // Cursor position in render pixels, read live from the window rather than
+    // from the once-per-frame cache, so event callbacks that fire mid-frame see
+    // where the pointer actually is.
     Vec2f queryMousePixelPosition() const;
+
+    // Live input state, for widgets that poll while a drag is in progress
+    // rather than waiting for the release event.
+    bool   isMouseButtonDown(MouseButton button) const;
+    KeyMod getKeyModifiers() const;
+
+    // The system clipboard, as UTF-8.
+    std::string getClipboardText() const;
+    void        setClipboardText(const std::string& text);
 
     void setRenderer(Renderer& renderer);
     void addPage(Page* page);
@@ -279,8 +286,12 @@ private:
     bool  m_pendingRightPress = false;
     Vec2f m_pendingPressPos   = {};
 
-    /* Window points to render pixels, which differ by the backing scale. */
-    Vec2f toPixels(float x, float y) const;
+    /* One input event out of the window's per-frame list, in the order they
+       arrived. */
+    void handleWindowEvent(const valo::WindowEvent& event);
+    /* Whether any key is physically down right now. */
+    bool anyKeyDown() const;
+    valo::Window* window() const { return m_renderer ? m_renderer->window() : nullptr; }
 
     Theme m_theme;
 
@@ -296,7 +307,7 @@ private:
     Interactible* m_currInteractible             = nullptr;
     bool          m_interactibleActivatedThisFrame = false;
 
-    Uint64 m_lastKeyUpNs = 0;
+    uint64_t m_lastKeyUpNs = 0;
 
     friend class Element;
     friend class Interactible;
@@ -307,13 +318,14 @@ private:
     setRenderer(Renderer& renderer):
     - Params:   Renderer& renderer
     - Returns:  void
-    - Desc:     Attaches the renderer this UILO draws through, and hands its SDL
-                window to the mouse bindings so they can resolve positions
-                against it.
+    - Desc:     Attaches the renderer this UILO draws through, and hands its
+                window to the key and mouse bindings so they can read input
+                from it.
 */
 inline void UILO::setRenderer(Renderer& renderer) {
     m_renderer = &renderer;
-    m_mousebinds.setWindow(renderer.sdlWindow());
+    m_keybinds.setWindow(renderer.window());
+    m_mousebinds.setWindow(renderer.window());
 }
 
 

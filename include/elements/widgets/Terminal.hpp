@@ -307,7 +307,7 @@ public:
     void onDeactivate() override;
 
     void handleTextInput(char32_t unicode) override;
-    void handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) override;
+    void handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui) override;
     bool wantsTextInput() const override { return true; }
 
     // Scrolling a terminal moves the view back through scrollback, so a flick
@@ -389,7 +389,7 @@ private:
     Color indexedColor(int n) const;
 
     // ---- input --------------------------------------------------------
-    void sendKey(SDL_Keycode key, bool shift, bool ctrl);
+    void sendKey(Key key, char32_t symbol, bool shift, bool ctrl);
 
     // ---- geometry -----------------------------------------------------
     // Deliberately shadows Element::contentArea(): a terminal insets by its

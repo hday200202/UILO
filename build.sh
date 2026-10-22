@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # Cross-platform build wrapper for UILO (Linux / macOS / WSL / Git-Bash).
 # Vendors all third-party dependencies under ext/:
-#   - SDL3: cloned at a pinned release tag, built via CMake
-#   - bgfx/bimg/bx: cloned at HEAD, built once with bgfx's GENie+make
+#   - SDL3: cloned at a pinned release tag, built via CMake as part of UILO
+#   - VALO: UILO's renderer and window, cloned into ext/VALO and built as part
+#     of UILO; its own `build.sh deps` fetches the header-only libraries it
+#     needs and the Vulkan SDK (loader, validation layers, glslc) into
+#     ext/VALO/ext
 #   - stb: headers copied from third_party (for backwards compatibility)
-# CMake links the prebuilt static libs and builds SDL3 as part of UILO.
 #
 # The `wt` argument selects the web backend instead: UILO renders through Wt
-# rather than bgfx/SDL3, so it vendors Wt and Boost in their place and none of
-# the GPU dependencies are cloned or built at all.
+# rather than VALO, so it vendors Wt and Boost in their place. VALO is still
+# cloned there, for the key and button types UILO's input headers name, but
+# none of its dependencies are fetched or built.
 #
 # Usage:
-#   ./build.sh                              # Release static (desktop, bgfx/SDL3)
+#   ./build.sh                              # Release static (desktop, VALO)
 #   ./build.sh wt                           # Release static (web, Wt)
 #   ./build.sh deps                         # only fetch/build ext/, don't build UILO
 #   ./build.sh wt deps                      # the same for the web backend
@@ -57,11 +60,12 @@ else
     LINK_TAG="static"
 fi
 
-# Pinned versions. bgfx publishes no tags, so those three are commit SHAs; see
-# the note above the clone calls for why leaving them floating breaks the build.
-BX_REF="efdef94b9486509e85b906170020f4c883d3eed5"    # 2026-07-03
-BIMG_REF="3b3dc2b7081fc687bce3a73699b0b8db470f1afc"  # 2026-06-23
-BGFX_REF="aa176c7763e9dcf90c8ac2345f1b984a12fbefbe"  # 2026-07-04
+# Pinned versions.
+SDL_TAG="release-3.2.10"
+# VALO tracks main: UILO and VALO are developed together, so UILO always
+# builds against the latest VALO. Set VALO_REF to build against another ref.
+VALO_REPO="https://github.com/hday200202/VALO.git"
+VALO_REF="${VALO_REF:-main}"
 
 # Pinned versions for the web backend's dependencies.
 WT_TAG="4.14.0"                 # https://github.com/emweb/wt tags
@@ -81,7 +85,7 @@ else
     BUILD_DIR="build/${MODE}-${LINK_TAG}"
 fi
 if [[ $DO_CLEAN -eq 1 ]]; then
-    # Deliberately never touches ext/ -- the one-time bgfx build survives cleans.
+    # Deliberately never touches ext/ -- vendored dependencies survive cleans.
     echo "[UILO] cleaning $BUILD_DIR"
     rm -rf "$BUILD_DIR"
 fi
@@ -95,7 +99,7 @@ mkdir -p "$EXT"
 UILO_CLEAN_EXT="${UILO_CLEAN_EXT:-0}"
 if [[ $UILO_CLEAN_EXT -eq 1 ]]; then
     echo "[UILO] cleaning ext/ (UILO_CLEAN_EXT=1)"
-    rm -rf "$EXT"/{SDL3,bgfx,bimg,bx,wt,boost}
+    rm -rf "$EXT"/{SDL3,VALO,wt,boost}
     mkdir -p "$EXT"
 fi
 
@@ -124,12 +128,14 @@ clone_if_missing() {
 }
 
 # ---------------------------------------------------------------------------
-# Web backend: Wt + Boost instead of SDL3 + bgfx
+# Web backend: Wt + Boost instead of SDL3 + VALO
 # ---------------------------------------------------------------------------
 # UILO_WT swaps the rendering target, so it needs a different set of vendored
 # dependencies -- and none of the GPU ones. Provision those and skip the rest.
 if [[ $WT_MODE -eq 1 ]]; then
     clone_if_missing wt "https://github.com/emweb/wt.git" "$WT_TAG"
+    # Header-only use: UILO's input headers name VALO's key and button types.
+    clone_if_missing VALO "$VALO_REPO" "$VALO_REF"
 
     # Only the compiled Boost libraries Wt links against, built static so the
     # final executable needs no Boost runtime beside it. The staged name differs
@@ -256,64 +262,37 @@ BAT
 fi
 
 # SDL3: pinned release tag for reproducible builds
-clone_if_missing SDL3 "https://github.com/libsdl-org/SDL.git" "release-3.2.10"
+clone_if_missing SDL3 "https://github.com/libsdl-org/SDL.git" "$SDL_TAG"
 
-# bgfx: bx/bimg/bgfx MUST be sibling dirs (bgfx's build references ../bx and ../bimg)
-#
-# Pinned, and they have to stay pinned. bgfx has no release tags and its shaderc
-# drops shader profiles over time -- the GLSL profile this project asks for
-# (120, see _UILO_SHADER_PROFILES in CMakeLists.txt) was removed upstream, so a
-# clone at HEAD fails every shader with "Unknown profile: 120" while an older
-# checkout builds. Bumping these three is a deliberate step that means checking
-# the profile list still matches.
-clone_if_missing bx   "https://github.com/bkaradzic/bx.git"   "$BX_REF"
-clone_if_missing bimg "https://github.com/bkaradzic/bimg.git" "$BIMG_REF"
-clone_if_missing bgfx "https://github.com/bkaradzic/bgfx.git" "$BGFX_REF"
+# VALO, then its dependencies: the header-only libraries and the Vulkan SDK,
+# fetched into ext/VALO/ext once. SDL3 is UILO's own (above), so VALO's deps
+# step skips it. Without curl or network access the Vulkan SDK cannot be
+# fetched, and VALO then builds its software renderer only.
+clone_if_missing VALO "$VALO_REPO" "$VALO_REF"
+echo "[UILO] fetching VALO's dependencies"
+bash "$EXT/VALO/build.sh" deps
+
+# A host project that add_subdirectory()s UILO needs ext/ provisioned -- SDL3
+# and VALO cloned, VALO's dependencies fetched -- but not UILO itself built
+# here, since it is about to be built inside the host's own tree. Same contract
+# as the web path.
+if [[ $DEPS_ONLY -eq 1 ]]; then
+    echo "[UILO] desktop dependencies ready (ext/SDL3, ext/VALO)"
+    exit 0
+fi
 
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        # -------- Windows desktop: GENie + MSBuild for bgfx, VS gen for UILO --
-        # Same single-entrypoint story as Linux/macOS -- no .bat/.ps1 to run by
-        # hand. bgfx has no Unix-make target on Windows, so it's built from its
-        # generated VS solution; the Visual Studio CMake generator then drives
-        # MSVC for UILO itself (it finds the compiler on its own, no vcvars).
-        VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
-        [[ -f "$VSWHERE" ]] || { echo "[UILO] error: vswhere not found; install Visual Studio with the C++ workload" >&2; exit 1; }
-        VS_WIN="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>/dev/null || true)"
-        [[ -n "$VS_WIN" ]] || { echo "[UILO] error: no VS C++ x64 toolset found (install 'Desktop development with C++')" >&2; exit 1; }
-        VS_DIR="$(cygpath -u "$VS_WIN")"
-        VCVARS="$VS_WIN\\VC\\Auxiliary\\Build\\vcvars64.bat"
-
+        # -------- Windows desktop: Visual Studio generator --------------------
+        # The Visual Studio CMake generator drives MSVC directly (it finds the
+        # compiler on its own, no vcvars), so the same ./build.sh works from Git
+        # Bash with no .bat/.ps1.
         CMAKE="cmake"
-        command -v cmake >/dev/null 2>&1 || CMAKE="$VS_DIR/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
-
-        # Retarget bgfx's vs2022/v143 projects onto whatever MSVC toolset +
-        # Windows SDK this machine actually has (e.g. v145), so a machine without
-        # the exact vs2022 toolset still builds bgfx.
-        TOOLSET="$(ls -d "$VS_DIR"/MSBuild/Microsoft/VC/*/Platforms/x64/PlatformToolsets/v* 2>/dev/null | sed 's#.*/##' | grep -E '^v[0-9]+$' | sort -V | tail -1 || true)"
-        [[ -n "$TOOLSET" ]] || { echo "[UILO] error: no MSVC platform toolset found" >&2; exit 1; }
-        WINSDK="$(ls -d "/c/Program Files (x86)/Windows Kits/10/bin/10."* 2>/dev/null | sed 's#.*/##' | sort -V | tail -1 || true)"
-        WINSDK_ARG=""
-        [[ -n "$WINSDK" ]] && WINSDK_ARG="/p:WindowsTargetPlatformVersion=$WINSDK"
-        echo "[UILO] toolset=$TOOLSET winsdk=${WINSDK:-<default>}"
-
-        # One-time bgfx build (Release x64, +tools for shaderc), gated on the
-        # output lib. Driven through a generated .bat run via PowerShell -> cmd
-        # so genie/msbuild get a proper vcvars environment (same MSYS/cmd quirk
-        # handling as the Boost build).
-        if [[ ! -f "$EXT/bgfx/.build/win64_vs2022/bin/bgfxRelease.lib" ]]; then
-            echo "[UILO] building bgfx (win64_vs2022, Release) -- one time only"
-            BGFX_ABS_BS="$(cd "$EXT/bgfx" && pwd -W | sed 's#/#\\#g')"
-            cat > "$EXT/bgfx/_build_bgfx.bat" <<BAT
-@echo off
-set "NoDefaultCurrentDirectoryInExePath="
-call "$VCVARS" || exit /b 1
-cd /d "$BGFX_ABS_BS" || exit /b 1
-..\bx\tools\bin\windows\genie.exe --with-tools --file=scripts\genie.lua vs2022 || exit /b 1
-msbuild .build\projects\vs2022\bgfx.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=$TOOLSET $WINSDK_ARG /m || exit /b 1
-BAT
-            sed -i 's/$/\r/' "$EXT/bgfx/_build_bgfx.bat"
-            powershell -NoProfile -Command "cmd /c '${BGFX_ABS_BS}\\_build_bgfx.bat'"
+        if ! command -v cmake >/dev/null 2>&1; then
+            VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            VS_WIN="$("$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>/dev/null || true)"
+            [[ -n "$VS_WIN" ]] || { echo "[UILO] error: cmake not on PATH and no Visual Studio found" >&2; exit 1; }
+            CMAKE="$(cygpath -u "$VS_WIN")/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
         fi
 
         echo "[UILO] configure ($MODE, $LINK_TAG, desktop, Visual Studio)"
@@ -330,18 +309,7 @@ BAT
         echo "[UILO] done -> $BUILD_DIR"
         exit 0
         ;;
-    Darwin)
-        if [[ "$(uname -m)" == "arm64" ]]; then
-            BGFX_TARGET="osx-arm64-release"
-            BGFX_PLATFORM_DIR="osx-arm64"
-        else
-            BGFX_TARGET="osx-x64-release"
-            BGFX_PLATFORM_DIR="osx-x64"
-        fi
-        ;;
-    Linux)
-        BGFX_TARGET="linux-gcc-release64"
-        BGFX_PLATFORM_DIR="linux64_gcc"
+    Darwin|Linux)
         ;;
     *)
         echo "[UILO] unsupported platform: $(uname -s)" >&2
@@ -349,30 +317,7 @@ BAT
         ;;
 esac
 
-# ---- Linux/macOS: make for bgfx, Ninja/Unix Makefiles for UILO ------------
-BGFX_BIN_DIR="$EXT/bgfx/.build/$BGFX_PLATFORM_DIR/bin"
-
-# One-time build (release libs + shaderc via --with-tools), gated on the
-# output archive. Always Release, even for Debug UILO builds -- you debug
-# UILO, not bgfx.
-if [[ ! -f "$BGFX_BIN_DIR/libbgfxRelease.a" ]]; then
-    echo "[UILO] building bgfx ($BGFX_TARGET) -- one time only"
-    make -C "$EXT/bgfx" "$BGFX_TARGET"
-fi
-# Ensure shaderc is available (needed for shader compilation)
-if [[ ! -f "$BGFX_BIN_DIR/shadercRelease" ]]; then
-    echo "[UILO] building bgfx tools -- one time only"
-    make -C "$EXT/bgfx" "$BGFX_TARGET" TOOLS=1 2>/dev/null || true
-fi
-
-# A host project that add_subdirectory()s UILO needs ext/ provisioned -- SDL3
-# cloned, bgfx and shaderc built -- but not UILO itself built here, since it is
-# about to be built inside the host's own tree. Same contract as the web path.
-if [[ $DEPS_ONLY -eq 1 ]]; then
-    echo "[UILO] desktop dependencies ready (ext/SDL3, ext/bgfx)"
-    exit 0
-fi
-
+# ---- Linux/macOS: Ninja or Unix Makefiles ---------------------------------
 GENERATOR="Unix Makefiles"
 if command -v ninja >/dev/null 2>&1; then
     GENERATOR="Ninja"
