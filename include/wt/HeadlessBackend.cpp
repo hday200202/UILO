@@ -3,15 +3,18 @@
     - Desc: The whole GPU and OS-input surface, stubbed out, for the UILO_WT
             build. The Wt bridge builds a UILO element tree and reads it but
             never ticks or draws it, so every one of these entry points can
-            collapse to a no-op and bgfx and SDL are then neither compiled nor
-            linked. Renderer.hpp only forward-declares those types, so the header
+            collapse to a no-op and VALO is then neither compiled nor linked.
+            Renderer.hpp only forward-declares VALO's window, so the header
             stays usable unchanged.
-    - Four groups live here: the entire Renderer class, the SDL functions
-      declared by wt/shim/SDL3/SDL.h, the macOS trackpad and live-resize shims
-      UILO.cpp calls -- UILO's own MacStubs.cpp is guarded on !__APPLE__, so a
-      headless macOS build would otherwise be missing them -- and Pty, which
-      Terminal links against but which cannot exist on the web at all.
-    - Nothing here is on a path the web app reaches. A headless program that does
+    - Four groups live here: the entire Renderer class, the valo::Window
+      members UILO's input code names (its key and button types come from
+      VALO's header-only render/Window.hpp, but the members need definitions to
+      link), the macOS trackpad and live-resize shims UILO.cpp calls -- UILO's
+      own MacStubs.cpp is guarded on !__APPLE__, so a headless macOS build would
+      otherwise be missing them -- and Pty, which Terminal links against but
+      which cannot exist on the web at all.
+    - Nothing here is on a path the web app reaches. Renderer::window() is null
+      here, and every caller checks for that, so a headless program that does
       call update() or render() draws nothing rather than crashing.
 */
 
@@ -20,311 +23,47 @@
 #include "../platform/MacWindow.hpp"
 #include "../platform/Pty.hpp"
 
-#include <SDL3/SDL.h>
+#include <render/Window.hpp>
 
 /*
-    SDL_GetMouseState(float* x, float* y):
-    - Params:   float* x, float* y
-    - Returns:  SDL_MouseButtonFlags
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
+    valo::Window:
+    - Desc: Link-only stand-ins. No Window is ever constructed in the web build
+            -- Renderer::window() returns null and every caller checks -- so none
+            of these runs; they exist because UILO's input code names them.
 */
-SDL_MouseButtonFlags SDL_GetMouseState(float* x, float* y) {
-    if (x) *x = 0.f;
-    if (y) *y = 0.f;
-    return 0;
-}
+namespace valo {
 
-/*
-    SDL_GetTicks():
-    - Params:   none
-    - Returns:  Uint64
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-Uint64      SDL_GetTicks()                  { return 0; }
-/*
-    SDL_GetModState():
-    - Params:   none
-    - Returns:  SDL_Keymod
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-SDL_Keymod  SDL_GetModState()               { return SDL_KMOD_NONE; }
+bool  Window::pollEvents()                          { return false; }
+bool  Window::isKeyDown(const Key) const            { return false; }
+bool  Window::isMouseDown(const MouseButton) const  { return false; }
+Vec2f Window::mousePosition() const                 { return {0.f, 0.f}; }
+KeyMod Window::modState() const                     { return KeyMod::None; }
+void  Window::grabMouse()                           {}
+void  Window::releaseMouse()                        {}
+bool  Window::isMouseGrabbed() const                { return false; }
+float Window::getPixelDensity() const               { return 1.f; }
+float Window::getDisplayScale() const               { return 1.f; }
+void  Window::startTextInput()                      {}
+void  Window::stopTextInput()                       {}
+bool  Window::isTextInputActive() const             { return false; }
+std::string Window::getClipboardText() const        { return {}; }
+void  Window::setClipboardText(const std::string&)  {}
+void  Window::setResizeCallback(std::function<void()>) {}
+void* Window::nativeHandle() const                  { return nullptr; }
 
-/*
-    SDL_GetKeyboardState(int* numkeys):
-    - Params:   int* numkeys
-    - Returns:  const bool*
-    - Desc:     A full always-up scancode table. UILO scans [0, numkeys) looking
-                for any key held down, and uilo::Keybinds indexes this directly
-                by scancode, so the table has to span the whole range rather
-                than a single entry.
-*/
-const bool* SDL_GetKeyboardState(int* numkeys) {
-    static constexpr int kScancodeCount = 512;   /* SDL_SCANCODE_COUNT */
-    static const bool kNoKeysDown[kScancodeCount] = { false };
-    if (numkeys) *numkeys = kScancodeCount;
-    return kNoKeysDown;
-}
+bool        Window::isVideoReady()                  { return false; }
+float       Window::primaryDisplayContentScale()    { return 1.f; }
+Vec2u       Window::primaryDisplayBounds()          { return {0, 0}; }
+float       Window::primaryDisplayPixelDensity()    { return 1.f; }
+float       Window::primaryDisplayRefreshRate()     { return 0.f; }
+int         Window::displayCount()                  { return 0; }
+int         Window::cpuCount()                      { return 0; }
+int         Window::systemRamMB()                   { return 0; }
+SystemTheme Window::getSystemTheme()                { return SystemTheme::Unknown; }
+std::string Window::basePath()                      { return {}; }
+std::string Window::prefPath(const std::string&, const std::string&) { return {}; }
 
-/*
-    SDL_GetClipboardText():
-    - Params:   none
-    - Returns:  char*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-char* SDL_GetClipboardText()            { return nullptr; }
-/*
-    SDL_SetClipboardText(const char*):
-    - Params:   const char*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool  SDL_SetClipboardText(const char*) { return true; }
-/*
-    SDL_free(void*):
-    - Params:   void*
-    - Returns:  none
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-void  SDL_free(void*)                   {}
-
-/*
-    SDL_StartTextInput(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_StartTextInput(SDL_Window*)  { return true; }
-/*
-    SDL_StopTextInput(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_StopTextInput(SDL_Window*)   { return true; }
-/*
-    SDL_TextInputActive(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_TextInputActive(SDL_Window*) { return false; }
-
-/*
-    SDL_AddEventWatch(SDL_EventFilter, void*):
-    - Params:   SDL_EventFilter, void*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_AddEventWatch(SDL_EventFilter, void*) { return true; }
-
-/*
-    SDL_PollEvent(SDL_Event*):
-    - Params:   SDL_Event*
-    - Returns:  bool
-    - Desc:     The browser is the input device on this backend, so the queue is
-                always empty and there is no cursor to capture or warp.
-*/
-bool SDL_PollEvent(SDL_Event*) { return false; }
-
-/*
-    SDL_SetWindowRelativeMouseMode(SDL_Window*, bool):
-    - Params:   SDL_Window*, bool
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_SetWindowRelativeMouseMode(SDL_Window*, bool) { return true; }
-/*
-    SDL_GetWindowRelativeMouseMode(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_GetWindowRelativeMouseMode(SDL_Window*)       { return false; }
-
-/*
-    SDL_GetRelativeMouseState(float* x, float* y):
-    - Params:   float* x, float* y
-    - Returns:  none
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-void SDL_GetRelativeMouseState(float* x, float* y) {
-    if (x) *x = 0.f;
-    if (y) *y = 0.f;
-}
-
-/*
-    SDL_GetWindowDisplayScale(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  float
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-float SDL_GetWindowDisplayScale(SDL_Window*) { return 1.f; }
-
-/*
-    SDL_GetError():
-    - Params:   none
-    - Returns:  const char*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-const char* SDL_GetError() { return ""; }
-
-/*
-    SDL_WasInit(SDL_InitFlags):
-    - Params:   SDL_InitFlags
-    - Returns:  SDL_InitFlags
-    - Desc:     uilo::OS queries. There is no local display on this backend, so
-                every one reports "not initialised / unknown" and OS returns its
-                documented fallbacks (scale 1.0, zero sizes) rather than
-                inventing values.
-*/
-SDL_InitFlags SDL_WasInit(SDL_InitFlags)                  { return 0; }
-/*
-    SDL_GetPrimaryDisplay():
-    - Params:   none
-    - Returns:  SDL_DisplayID
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-SDL_DisplayID SDL_GetPrimaryDisplay()                     { return 0; }
-/*
-    SDL_GetDisplayContentScale(SDL_DisplayID):
-    - Params:   SDL_DisplayID
-    - Returns:  float
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-float         SDL_GetDisplayContentScale(SDL_DisplayID)   { return 1.f; }
-/*
-    SDL_GetDisplayBounds(SDL_DisplayID, SDL_Rect* rect):
-    - Params:   SDL_DisplayID, SDL_Rect* rect
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool          SDL_GetDisplayBounds(SDL_DisplayID, SDL_Rect* rect) {
-    if (rect) *rect = SDL_Rect{0, 0, 0, 0};
-    return false;
-}
-/*
-    SDL_GetCurrentDisplayMode(SDL_DisplayID):
-    - Params:   SDL_DisplayID
-    - Returns:  const SDL_DisplayMode*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-const SDL_DisplayMode* SDL_GetCurrentDisplayMode(SDL_DisplayID) { return nullptr; }
-/*
-    SDL_GetDisplays(int* count):
-    - Params:   int* count
-    - Returns:  SDL_DisplayID*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-SDL_DisplayID* SDL_GetDisplays(int* count) {
-    if (count) *count = 0;
-    return nullptr;
-}
-/*
-    SDL_GetSystemTheme():
-    - Params:   none
-    - Returns:  SDL_SystemTheme
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-SDL_SystemTheme SDL_GetSystemTheme()      { return SDL_SYSTEM_THEME_UNKNOWN; }
-/*
-    SDL_GetNumLogicalCPUCores():
-    - Params:   none
-    - Returns:  int
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-int SDL_GetNumLogicalCPUCores()           { return 0; }
-/*
-    SDL_GetSystemRAM():
-    - Params:   none
-    - Returns:  int
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-int SDL_GetSystemRAM()                    { return 0; }
-/*
-    SDL_GetBasePath():
-    - Params:   none
-    - Returns:  const char*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-const char* SDL_GetBasePath()             { return ""; }
-/*
-    SDL_GetPrefPath(const char*, const char*):
-    - Params:   const char*, const char*
-    - Returns:  char*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-char* SDL_GetPrefPath(const char*, const char*) { return nullptr; }
-
-/*
-    SDL_GetWindowSize(SDL_Window*, int* w, int* h):
-    - Params:   SDL_Window*, int* w, int* h
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_GetWindowSize(SDL_Window*, int* w, int* h) {
-    if (w) *w = 0;
-    if (h) *h = 0;
-    return true;
-}
-
-/*
-    SDL_GetWindowSizeInPixels(SDL_Window*, int* w, int* h):
-    - Params:   SDL_Window*, int* w, int* h
-    - Returns:  bool
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-bool SDL_GetWindowSizeInPixels(SDL_Window*, int* w, int* h) {
-    if (w) *w = 0;
-    if (h) *h = 0;
-    return true;
-}
-
-/*
-    SDL_GetWindowProperties(SDL_Window*):
-    - Params:   SDL_Window*
-    - Returns:  SDL_PropertiesID
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-SDL_PropertiesID SDL_GetWindowProperties(SDL_Window*) { return 0; }
-
-/*
-    SDL_GetPointerProperty(SDL_PropertiesID, const char*, void* default_value):
-    - Params:   SDL_PropertiesID, const char*, void* default_value
-    - Returns:  void*
-    - Desc:     Stub for the shim's declaration of this SDL entry point, which
-                the web build never reaches.
-*/
-void* SDL_GetPointerProperty(SDL_PropertiesID, const char*, void* default_value) {
-    return default_value;
-}
+} // namespace valo
 
 namespace uilo {
 
@@ -405,16 +144,12 @@ bool Renderer::init(uint32_t width, uint32_t height, const std::string&, uint8_t
 }
 
 /*
-    attach(SDL_Window*, uint16_t):
-    - Params:   SDL_Window*, uint16_t
-    - Returns:  bool
-    - Desc:     No-op in the headless build, which never draws.
+    window():
+    - Params:   none
+    - Returns:  valo::Window*
+    - Desc:     Always null: there is no window in the web build.
 */
-bool Renderer::attach(SDL_Window*, uint16_t) {
-    m_ownsContext = false;
-    m_initialised = true;
-    return true;
-}
+valo::Window* Renderer::window() const { return nullptr; }
 
 /*
     shutdown():
@@ -599,21 +334,6 @@ void    Renderer::updateTexture(const Texture&, const uint8_t*) {}
 void Renderer::drawImage(const Rectf&, const Texture&, Color, Rectf, bool, bool, bool) {}
 
 /*
-    drawGlass(const Rectf&, const Material&, Color):
-    - Params:   const Rectf&, const Material&, Color
-    - Returns:  none
-    - Desc:     No-op in the headless build, which never draws.
-*/
-void Renderer::drawGlass(const Rectf&, const Material&, Color) {}
-/*
-    setMouseState(Vec2f pos):
-    - Params:   Vec2f pos
-    - Returns:  none
-    - Desc:     No-op in the headless build, which never draws.
-*/
-void Renderer::setMouseState(Vec2f pos) { m_mousePos = pos; }
-
-/*
     loadFont(const std::string&):
     - Params:   const std::string&
     - Returns:  Font
@@ -734,21 +454,6 @@ void Renderer::pushRoundClip(Rectf, float) {}
 void Renderer::popRoundClip()              {}
 
 /*
-    beginGlassSubtree():
-    - Params:   none
-    - Returns:  none
-    - Desc:     No-op in the headless build, which never draws.
-*/
-void Renderer::beginGlassSubtree() {}
-/*
-    endGlassSubtree():
-    - Params:   none
-    - Returns:  none
-    - Desc:     No-op in the headless build, which never draws.
-*/
-void Renderer::endGlassSubtree()   {}
-
-/*
     setRotation(float, Vec2f):
     - Params:   float, Vec2f
     - Returns:  none
@@ -769,21 +474,6 @@ void Renderer::rotate(float)             {}
     - Desc:     No-op in the headless build, which never draws.
 */
 void Renderer::clearRotation()           {}
-
-/*
-    currentViewId():
-    - Params:   none
-    - Returns:  uint16_t
-    - Desc:     No-op in the headless build, which never draws.
-*/
-uint16_t Renderer::currentViewId() const { return 0; }
-/*
-    submitOrtho(uint16_t, Vec2u):
-    - Params:   uint16_t, Vec2u
-    - Returns:  none
-    - Desc:     No-op in the headless build, which never draws.
-*/
-void     Renderer::submitOrtho(uint16_t, Vec2u) {}
 
 
 /*

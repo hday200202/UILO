@@ -10,7 +10,6 @@
 
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
-#include <SDL3/SDL.h>
 #include <cstdio>
 
 using namespace uilo;

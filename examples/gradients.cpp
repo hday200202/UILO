@@ -2,7 +2,6 @@
 // gradients, rounded corners, and live mutation from a hover callback.
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
-#include <SDL3/SDL.h>
 #include <cstdio>
 
 using namespace uilo;
@@ -104,11 +103,8 @@ int main() {
 
     bool running = true;
     while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) running = false;
-            ui.handleEvent(event);
-        }
+        ui.pollEvents();
+        if (!ui.isRunning()) running = false;
         ui.update();
 
         renderer.beginFrame();

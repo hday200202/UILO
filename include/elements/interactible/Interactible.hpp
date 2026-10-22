@@ -1,7 +1,10 @@
 #pragma once
 
-#include <SDL3/SDL.h>
 #include "../Element.hpp"
+#include "../../input/Input.hpp"
+
+#include <chrono>
+#include <cstdint>
 
 namespace uilo {
 
@@ -41,6 +44,35 @@ inline bool isShortcutModifier(bool ctrl, bool gui) {
 }
 
 
+/*
+    shortcutLetter(char32_t symbol):
+    - Params:   char32_t symbol -- the layout's character for a key
+    - Returns:  char32_t -- the lower-case letter, or 0 when it is not one
+    - Desc:     The letter a shortcut key means. Shortcuts are matched on the
+                layout's character rather than the physical key, so Ctrl+Z is
+                the key labelled Z on AZERTY and Dvorak too -- and on the shifted
+                form, so Ctrl+Shift+Z is still a Z.
+*/
+inline char32_t shortcutLetter(char32_t symbol) {
+    if (symbol >= U'A' && symbol <= U'Z') return symbol - U'A' + U'a';
+    if (symbol >= U'a' && symbol <= U'z') return symbol;
+    return 0;
+}
+
+
+/*
+    steadyMillis():
+    - Params:   none
+    - Returns:  uint64_t
+    - Desc:     A monotonic millisecond clock, for double-click windows and the
+                like. Only differences between two readings mean anything.
+*/
+inline uint64_t steadyMillis() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+
 class Interactible : public Element {
 public:
     Interactible() = default;
@@ -55,18 +87,22 @@ public:
     // Called by UILO's event routing while this is the active interactible.
     // Override in anything that takes typing.
     virtual void handleTextInput(char32_t /* unicode */) {}
-    // `gui` is Command on macOS and Super elsewhere. It is reported separately
-    // from `ctrl` rather than folded into it because a terminal needs to tell
-    // them apart: Ctrl+C is an interrupt there, and only Cmd+C is a copy.
+    // `key` is the physical key; `symbol` is the character the keyboard layout
+    // puts on it (0 for keys with none, such as arrows), which is what letter
+    // shortcuts should match -- see shortcutLetter(). `gui` is Command on macOS
+    // and Super elsewhere. It is reported separately from `ctrl` rather than
+    // folded into it because a terminal needs to tell them apart: Ctrl+C is an
+    // interrupt there, and only Cmd+C is a copy.
     virtual void handleKeyInput(
-        SDL_Keycode /* key */,
+        Key /* key */,
+        char32_t /* symbol */,
         bool /* shift */,
         bool /* ctrl */,
         bool /* gui */
     ) {}
 
     // Return true from anything that consumes IME or text-input events. UILO
-    // uses this to toggle SDL_StartTextInput as focus moves.
+    // uses this to start and stop the window's text input as focus moves.
     virtual bool wantsTextInput() const { return false; }
 
     // A scroll over most interactibles moves a value, not a view -- a slider or

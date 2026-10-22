@@ -321,8 +321,7 @@ void Dropdown::closePopup() {
     - Returns:  void
     - Desc:     Resolves the dropdown's bounds, ticks the header with them, and
                 ticks the popup against its computed bounds while it is open.
-                The Modifier's material is mirrored onto both, so a glass
-                dropdown looks the same collapsed and open. Also handles
+                Also handles
                 dismissal: a click outside closes the popup, and the just-
                 dismissed flag stops that same click from immediately reopening
                 it through the header.
@@ -330,12 +329,6 @@ void Dropdown::closePopup() {
 void Dropdown::update(Rectf& parentBounds, float dt) {
     m_justDismissed = false;
     resize(parentBounds);
-
-    /* Mirror the material onto both, so a glass dropdown looks the same
-       collapsed and open. */
-    const Material& mat = m_modifier.getMaterial();
-    m_header->getModifier().setMaterial(mat);
-    m_popup->getModifier().setMaterial(mat);
 
     m_header->tick(m_bounds, dt);
 
@@ -378,7 +371,6 @@ void Dropdown::update(Rectf& parentBounds, float dt) {
 */
 void Dropdown::render() {
     if (!m_modifier.getVisible()) { m_dirty = false; return; }
-    /* The material was mirrored onto the header and popup in update(). */
     m_header->render();
     m_dirty = false;
 }

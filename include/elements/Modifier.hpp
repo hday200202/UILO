@@ -5,7 +5,6 @@
 #include <utility>
 #include "../../include/utils/Math.hpp"
 #include "../utils/Utils.hpp"
-#include "../utils/Material.hpp"
 #include "../utils/Theme.hpp"
 #include "../utils/Themed.hpp"
 #include "../utils/Cursor.hpp"
@@ -118,8 +117,8 @@ inline ScrollFuncPtr makeScrollCb(F&& f) {
     Modifier:
     - Desc:     The layout and event half of an element, kept separate from the
                 per-widget Options that describe how it is drawn. Carries size,
-                alignment, outer padding, visibility, free position, material,
-                and the callback set: clicks, edge-triggered hover, scroll, and
+                alignment, outer padding, visibility, free position, and the
+                callback set: clicks, edge-triggered hover, scroll, and
                 the two per-frame lifecycle hooks. Every setter returns *this so
                 a modifier reads as one declaration at the call site.
     - There is deliberately no continuous "is hovered" callback: handlers react
@@ -162,7 +161,6 @@ public:
     // unless setFloating.
     Modifier& setFreePosition(Dimension x, Dimension y);
     Modifier& setFreePosition(const Vec2f& freePos);
-    Modifier& setMaterial(const Material& m);
     Modifier& setCursor(CursorType cursor);
     Modifier& clearCursor();
 
@@ -182,7 +180,6 @@ public:
     bool                 isDraggable()       const;
     Dimension            getFreeX()          const;
     Dimension            getFreeY()          const;
-    const Material&      getMaterial()       const;
     CursorType           getCursor()         const;
     bool                 hasCursor()         const;
 
@@ -246,7 +243,6 @@ private:
     bool                 m_draggable    = false;
     Dimension            m_freeX        = 0_px;
     Dimension            m_freeY        = 0_px;
-    Material             m_material;
     std::optional<CursorType> m_cursor;
     ContextMenuBuilder   m_contextMenu;
 

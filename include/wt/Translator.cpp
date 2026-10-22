@@ -99,18 +99,6 @@ std::string rgba(Color c) {
     return "rgba(" + num(c.r) + "," + num(c.g) + "," + num(c.b) + "," + num(c.a / 255.f) + ")";
 }
 
-/*
-    rgbaWith(Color c, float alpha):
-    - Params:   Color c, float alpha
-    - Returns:  std::string
-    - Desc:     Same colour, explicit alpha. Materials need this: the shader's
-                body opacity is separate from the tint's own alpha.
-*/
-std::string rgbaWith(Color c, float alpha) {
-    return "rgba(" + num(c.r) + "," + num(c.g) + "," + num(c.b) + ","
-         + num(std::clamp(alpha, 0.f, 1.f)) + ")";
-}
-
 /* Alignment */
 
 /*
@@ -253,7 +241,7 @@ struct Background {
     - Params:   Element* el, Background& out
     - Returns:  bool
     - Desc:     Reads whichever background an element carries -- flat colour,
-                gradient or material -- into one struct, so the CSS is emitted
+                or gradient -- into one struct, so the CSS is emitted
                 from a single shape instead of branching per element type.
 */
 bool backgroundOf(Element* el, Background& out) {
@@ -507,52 +495,6 @@ std::string gradientCss(const Color c[4]) {
     if (tl == bl && tr == br)
         return "linear-gradient(to right," + rgba(tl) + "," + rgba(tr) + ")";
     return "linear-gradient(135deg," + rgba(tl) + "," + rgba(br) + ")";
-}
-
-/*
-    appendMaterial(std::string& css, const Material& mat, Color elementColor):
-    - Params:   std::string& css, const Material& mat, Color elementColor
-    - Returns:  none
-    - Desc:     Materials are shader effects natively. The browser's nearest
-                equivalent is a backdrop-filter, which covers the frosted- pane
-                look the static kinds are after. The animated kinds (Shimmer,
-                Aurora, Holographic, Liquid) keep their tint and blur but lose
-                the animation.
-*/
-void appendMaterial(std::string& css, const Material& mat, Color elementColor) {
-    Color tint = mat.tint;
-    float alpha = tint.a / 255.f;
-
-    switch (mat.kind) {
-        /* These four take their colour from the element rather than the tint,
-           exactly as the renderer does. */
-        case Material::Kind::Tinted:
-        case Material::Kind::Ripple:
-        case Material::Kind::Hover:
-        case Material::Kind::Blur:
-            tint  = elementColor;
-            alpha = mat.opacity;
-            break;
-        default:
-            break;
-    }
-
-    const float blur = mat.kind == Material::Kind::Blur ? mat.blurRadius
-                     : mat.kind == Material::Kind::Frosted ? 24.f
-                     : 16.f;
-
-    const std::string filter = "blur(" + px(blur) + ") saturate(" + num(mat.saturation)
-                             + ") brightness(" + num(mat.brightness) + ")";
-
-    css += "backdrop-filter:" + filter + ";";
-    css += "-webkit-backdrop-filter:" + filter + ";";
-    css += "background-color:" + rgbaWith(tint, alpha) + ";";
-    css += "border-radius:" + px(mat.cornerRadius) + ";";
-
-    /* The 1px specular rim the glass shader draws around the panel. */
-    if (mat.edgeHighlight > 0.f)
-        css += "box-shadow:inset 0 0 0 1px rgba(255,255,255,"
-             + num(std::clamp(mat.edgeHighlight * 0.18f, 0.f, 1.f)) + ");";
 }
 
 } // namespace
@@ -1169,12 +1111,7 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
         }
     }
 
-    const Material& mat = mod.getMaterial();
-    if (mat.kind != Material::Kind::None) {
-        /* The material owns the background when present -- the renderer skips
-           the solid fill entirely in that case. */
-        appendMaterial(css, mat, resolved);
-    } else if (hasBg) {
+    if (hasBg) {
         Color corners[4];
         if (el->resolveGradient(bg.gradient, bg.gradientRole, corners))
             css += "background-image:" + gradientCss(corners) + ";";

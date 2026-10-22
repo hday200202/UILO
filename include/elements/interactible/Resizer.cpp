@@ -1,6 +1,5 @@
 #include "Resizer.hpp"
 #include "../../UILO.hpp"
-#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
 
@@ -47,9 +46,7 @@ void Resizer::update(Rectf& parentBounds, float dt) {
 
     if (!m_uiloRef || !m_target || !m_dragging) return;
 
-    float mx, my;
-    uint32_t btns = SDL_GetMouseState(&mx, &my);
-    if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+    if (!m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
         m_dragging = false;
         return;
     }
@@ -192,7 +189,7 @@ bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
        without that guard the first click within the double-click window of
        startup reads as a double click and snaps the target to its original
        size instead of beginning a drag. */
-    const uint64_t nowMs = SDL_GetTicks();
+    const uint64_t nowMs = steadyMillis();
     constexpr uint64_t doubleClickMs = 350;
     const bool isDoubleClick = m_lastClickMs != 0
                             && (nowMs - m_lastClickMs) <= doubleClickMs;

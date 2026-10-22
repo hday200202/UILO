@@ -119,17 +119,6 @@ Modifier& Modifier::setFloating(bool floating) { m_floating = floating; return *
 Modifier& Modifier::setDraggable(bool draggable) { m_draggable = draggable; return *this; }
 
 
-/*
-    setMaterial(const Material& m):
-    - Params:   const Material& m
-    - Returns:  Modifier&
-    - Desc:     Gives the element a material background -- glass and the like. A
-                material owns the background: it draws its own rounded rect,
-                tint and effect, so the element's flat fill is skipped rather
-                than drawn underneath it.
-*/
-Modifier& Modifier::setMaterial(const Material& m) { m_material = m; return *this; }
-
 
 /*
     setCursor(CursorType cursor):
@@ -364,14 +353,6 @@ bool Modifier::isFloating() const { return m_floating; }
 bool Modifier::isDraggable() const { return m_draggable; }
 
 
-/*
-    getMaterial():
-    - Params:   none
-    - Returns:  const Material&
-    - Desc:     The element's material. Kind None means it has none, and the
-                ordinary background is drawn instead.
-*/
-const Material& Modifier::getMaterial() const { return m_material; }
 
 
 /*

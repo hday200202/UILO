@@ -3,7 +3,6 @@
 #include "../../UILO.hpp"
 #include "../../renderer/Renderer.hpp"
 
-#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -877,9 +876,7 @@ void Textbox::update(Rectf& parentBounds, float dt) {
 
     /* Drag-select */
     if (m_mouseDown) {
-        float mx, my;
-        uint32_t btns = SDL_GetMouseState(&mx, &my);
-        if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+        if (!m_uiloRef || !m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
             m_mouseDown = false;
             m_dragging  = false;
         } else if (m_uiloRef) {
@@ -1159,7 +1156,8 @@ bool Textbox::checkLeftClick(const Vec2f& mousePos) {
     m_dragging      = false;
     m_mouseDownPos  = mousePos;
     resetBlink();
-    const bool shiftHeld = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+    const bool shiftHeld = m_uiloRef
+        && hasMod(m_uiloRef->getKeyModifiers(), KeyMod::Shift);
     const size_t idx = hitTestChar(mousePos);
     m_cursorPos = idx;
     if (!shiftHeld) m_anchorPos = idx;
@@ -1298,8 +1296,8 @@ void Textbox::insertTab() {
 }
 
 /*
-    handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui):
-    - Params:   SDL_Keycode key, bool shift, bool ctrl, bool gui
+    handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui):
+    - Params:   Key key, char32_t symbol, bool shift, bool ctrl, bool gui
     - Returns:  void
     - Desc:     Handles every key that is not plain typing: cursor movement with
                 the arrows, Home and End, word jumps with ctrl, deletion, Tab,
@@ -1309,7 +1307,7 @@ void Textbox::insertTab() {
     - Word jumps stay on Control alone. Only the clipboard and select-all
       shortcuts accept Command as well, which is what a Mac user expects.
 */
-void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
+void Textbox::handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui) {
     if (!m_focused) return;
 
     const bool   shortcut = isShortcutModifier(ctrl, gui);
@@ -1322,37 +1320,37 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
     };
 
     switch (key) {
-        case SDLK_LEFT:
+        case Key::Left:
             if (!shift && hasSelection()) moveCursor(std::min(m_cursorPos, m_anchorPos));
             else if (m_cursorPos > 0) moveCursor(ctrl ? wordLeft(m_cursorPos) : m_cursorPos - 1);
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_RIGHT:
+        case Key::Right:
             if (!shift && hasSelection()) moveCursor(std::max(m_cursorPos, m_anchorPos));
             else if (m_cursorPos < n) moveCursor(ctrl ? wordRight(m_cursorPos) : m_cursorPos + 1);
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_UP:
+        case Key::Up:
             if (m_options.getMultiline()) {
                 Vec2f cp = charScreenPos(m_cursorPos);
                 moveCursor(hitTestChar({ m_preferredX, cp.y - lineHeight() * 0.5f }));
             }
             break;
-        case SDLK_DOWN:
+        case Key::Down:
             if (m_options.getMultiline()) {
                 Vec2f cp = charScreenPos(m_cursorPos);
                 moveCursor(hitTestChar({ m_preferredX, cp.y + lineHeight() * 1.5f }));
             }
             break;
-        case SDLK_HOME:
+        case Key::Home:
             moveCursor(ctrl ? 0 : lineStart(m_cursorPos));
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_END:
+        case Key::End:
             moveCursor(ctrl ? n : lineEnd(m_cursorPos));
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_BACKSPACE:
+        case Key::Backspace:
             if (hasSelection()) deleteSelection();
             else if (m_cursorPos > 0) {
                 size_t newPos = ctrl ? wordLeft(m_cursorPos) : m_cursorPos - 1;
@@ -1363,7 +1361,7 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
             resetBlink();
             if (m_options.getOnStringChanged()) m_options.getOnStringChanged()(getString());
             break;
-        case SDLK_DELETE:
+        case Key::Delete:
             if (hasSelection()) deleteSelection();
             else if (m_cursorPos < n) {
                 size_t end = ctrl ? wordRight(m_cursorPos) : m_cursorPos + 1;
@@ -1373,12 +1371,12 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
             resetBlink();
             if (m_options.getOnStringChanged()) m_options.getOnStringChanged()(getString());
             break;
-        case SDLK_TAB:
+        case Key::Tab:
             insertTab();
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_RETURN:
-        case SDLK_KP_ENTER:
+        case Key::Return:
+        case Key::KpEnter:
             if (m_options.getMultiline()) {
                 if (hasSelection()) deleteSelection();
                 const int maxLen = m_options.getMaxLength();
@@ -1395,34 +1393,40 @@ void Textbox::handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) {
             resetBlink();
             m_preferredX = charScreenPos(m_cursorPos).x;
             break;
-        case SDLK_ESCAPE:
+        case Key::Escape:
             if (m_uiloRef) m_uiloRef->setCurrInteractible(nullptr);
             return;
-        case SDLK_A:
+        default:
+            break;
+    }
+
+    /* Letter shortcuts follow the keyboard layout's character, not the
+       physical key, so they land on the key labelled with the letter. */
+    switch (shortcutLetter(symbol)) {
+        case U'a':
             if (shortcut) { m_anchorPos = 0; m_cursorPos = n; resetBlink(); }
             break;
-        case SDLK_C:
-            if (shortcut && hasSelection()) {
+        case U'c':
+            if (shortcut && hasSelection() && m_uiloRef) {
                 const size_t lo = std::min(m_cursorPos, m_anchorPos);
                 const size_t hi = std::max(m_cursorPos, m_anchorPos);
-                SDL_SetClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)).c_str());
+                m_uiloRef->setClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)));
             }
             break;
-        case SDLK_X:
-            if (shortcut && hasSelection()) {
+        case U'x':
+            if (shortcut && hasSelection() && m_uiloRef) {
                 const size_t lo = std::min(m_cursorPos, m_anchorPos);
                 const size_t hi = std::max(m_cursorPos, m_anchorPos);
-                SDL_SetClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)).c_str());
+                m_uiloRef->setClipboardText(u32ToUtf8(m_text.substr(lo, hi - lo)));
                 deleteSelection();
                 if (m_options.getOnStringChanged()) m_options.getOnStringChanged()(getString());
             }
             break;
-        case SDLK_V:
-            if (shortcut) {
-                const char* raw = SDL_GetClipboardText();
-                if (raw && *raw) {
+        case U'v':
+            if (shortcut && m_uiloRef) {
+                const std::string raw = m_uiloRef->getClipboardText();
+                if (!raw.empty()) {
                     std::u32string pasted = utf8ToU32(raw);
-                    SDL_free(const_cast<char*>(raw));
                     if (!pasted.empty()) {
                         if (hasSelection()) deleteSelection();
                         const int maxLen = m_options.getMaxLength();

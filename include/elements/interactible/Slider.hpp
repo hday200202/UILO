@@ -3,7 +3,6 @@
 #include <optional>
 
 #include <functional>
-#include <SDL3/SDL.h>
 
 #include "Interactible.hpp"
 #include "../../utils/Theme.hpp"

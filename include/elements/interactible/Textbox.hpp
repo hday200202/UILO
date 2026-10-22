@@ -368,7 +368,7 @@ public:
 
     // Routed here by UILO while this is the active interactible.
     void handleTextInput(char32_t unicode) override;
-    void handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui) override;
+    void handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui) override;
     bool wantsTextInput() const override { return true; }
 
     // A multiline box scrolls a view, so a flick over one should coast the way

@@ -16,8 +16,7 @@ namespace uilo {
                 grid and zoom. Colors come as a literal plus a role, where the
                 role wins when it resolves against the active Palette and the
                 literal is the fallback. A gradient takes precedence over a flat
-                fill when active, and a Material on the Modifier takes
-                precedence over both. Sizes are unscaled content pixels; UILO
+                fill when active. Sizes are unscaled content pixels; UILO
                 multiplies by its scale at layout time.
 */
 class ColumnOptions {

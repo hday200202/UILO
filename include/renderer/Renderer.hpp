@@ -8,24 +8,22 @@
 #include "../utils/Math.hpp"
 #include "../utils/Color.hpp"
 #include "../utils/Alignment.hpp"
-#include "../utils/Material.hpp"
 /* CursorType lives in its own header so Modifier can carry one without pulling
    in the renderer. */
 #include "../utils/Cursor.hpp"
 #include "Shapes.hpp"
 
-/* Forward-declare SDL and bgfx types so elements never need to include those
-   headers directly. The Renderer owns all BGFX/SDL state. */
-struct SDL_Window;
-namespace bgfx { struct FrameBufferHandle; }
+/* Forward-declared so elements never need VALO's rendering headers. The
+   Renderer owns the window and every GPU resource; VALO does the rest. */
+namespace valo { class Window; }
 
 namespace uilo {
 
 /* Opaque GPU resource handles. */
-/* Elements hold these but never touch bgfx directly. */
+/* Elements hold these but never touch VALO directly. */
 
 struct Texture {
-    uint16_t handle = UINT16_MAX;   /* bgfx::TextureHandle.idx */
+    uint16_t handle = UINT16_MAX;   /* VALO TextureID */
     uint16_t width  = 0;
     uint16_t height = 0;
     bool valid() const { return handle != UINT16_MAX; }
@@ -66,8 +64,8 @@ struct TextStyle {
     bool none() const { return !bold && !italic; }
 };
 
-/* Snapshot of bgfx renderer counters for the previous frame. Useful for HUD
-   overlays and perf instrumentation. */
+/* Renderer counters for the previous frame. Useful for HUD overlays and perf
+   instrumentation. */
 struct RendererStats {
     uint32_t numDraw     = 0;
     uint32_t numVertices = 0;
@@ -75,10 +73,10 @@ struct RendererStats {
     double   gpuTimeMs   = 0.0;
 };
 
-/* Framebuffer handle (opaque wrapper around bgfx framebuffer) */
+/* Framebuffer handle (opaque wrapper around a VALO render target) */
 struct FrameBuffer {
-    uint16_t handle  = UINT16_MAX;
-    uint16_t viewId  = UINT16_MAX;
+    uint16_t handle  = UINT16_MAX;   /* VALO RenderTargetID */
+    uint16_t viewId  = UINT16_MAX;   /* VALO layer the framebuffer draws through */
     Vec2u    size    = {0u, 0u};
     bool     valid() const { return handle != UINT16_MAX; }
 };
@@ -93,13 +91,13 @@ public:
     Renderer& operator=(const Renderer&) = delete;
 
     /* Lifecycle */
+    /* Opens the window and brings VALO up on it. The backend is Vulkan where
+       it is available and the software rasteriser otherwise; UILO_RENDERER=
+       vulkan | software in the environment forces one. */
     bool init(uint32_t width, uint32_t height,
               const std::string& title = "UILO",
               uint8_t msaa = 4);
-    /* Embedded mode: attach to a host that already owns the SDL window + bgfx
-       context. */
-    bool attach(SDL_Window* hostWindow, uint16_t baseView);
-    bool ownsContext() const { return m_ownsContext; } // false in attach mode
+    bool ownsContext() const { return true; }
     void shutdown();
 
     void beginFrame();
@@ -114,10 +112,11 @@ public:
        With vsync also on, the effective rate is min(vsync, this limit). */
     void   setFramerateLimit(float fps);
     float  getFramerateLimit() const;
-    SDL_Window* sdlWindow() const { return m_window; }
+    /* The window UILO reads its input from. Null before init(). */
+    valo::Window* window() const;
 
-    /* Returns counters from bgfx::getStats() for the most recently submitted
-       frame. Cheap; safe to call once per frame. */
+    /* Counters for the most recently submitted frame. Cheap; safe to call once
+       per frame. */
     RendererStats getStats() const;
 
     /* Cursor */
@@ -130,8 +129,7 @@ public:
     void draw(const Triangle&    triangle);
     void draw(const Line&        line);
 
-    /* Batched line draw: emits all `count` lines in a single transient vertex
-       buffer / submit. */
+    /* Batched line draw: emits all `count` lines in a single draw. */
     void drawLines(const Line* lines, size_t count);
 
     /* Filled annular arc (gap-free triangle strip between innerR/outerR). */
@@ -161,15 +159,6 @@ public:
                    Rectf uv   = {{0.f, 0.f}, {1.f, 1.f}},
                    bool flipH = false, bool flipV = false,
                    bool clipEllipse = false);
-
-    /* Material effects. */
-    /* Render an Apple-style "glass" panel of the given size at `dst`. */
-    void drawGlass(const Rectf& dst, const Material& mat,
-                   Color baseColor = Color::Transparent);
-
-    /* Mouse state for interactive materials. */
-    /* UILO calls this each frame after sampling the cursor. */
-    void setMouseState(Vec2f mousePosFbPx);
 
     /* Text. */
     /* Load a TTF font file. Cached by path. Returns invalid Font on failure. */
@@ -217,11 +206,6 @@ public:
     void pushRoundClip(Rectf bounds, float radius);
     void popRoundClip();
 
-    /* Glass subtree routing. */
-    /* Elements rendered with Material::Kind != None call drawGlass which. */
-    void beginGlassSubtree();
-    void endGlassSubtree();
-
     /* Rotation. */
     /* Degrees, standard cartesian convention: 0 = +x, 90 = +y, 180 = -x, 270
        =. */
@@ -230,33 +214,12 @@ public:
     void clearRotation();
 
 private:
-    SDL_Window* m_window      = nullptr;
     uint32_t    m_lastWidth   = 0;
     uint32_t    m_lastHeight  = 0;
     uint8_t     m_msaa        = 4;
-    uint32_t    m_resetFlags  = 0;
     bool        m_initialised = false;
     double      m_frameInterval = 0.0;   /* seconds per frame; 0 = unlimited */
     uint64_t    m_nextFrameTick = 0;   /* steady_clock ns of next frame deadline */
-
-    /* Mouse state plumbed through by UILO each frame so interactive materials
-       (Ripple / Hover) can sample a global cursor. */
-    Vec2f       m_mousePos      = { -1.f, -1.f };
-    Vec2f       m_mousePosPrev  = { -1.f, -1.f };
-    float       m_mouseLastMoveT = 0.f;   /* value of impl.elapsed at last move */
-
-    /* Views 0..3 are reserved for the scene FB + blur ladder + composite (see
-       RendererImpl.hpp::Impl). User framebuffers start at 4. */
-    uint16_t m_nextViewId = 6;
-    bool     m_ownsContext = true;   /* false in attach() mode: host owns bgfx/window/frame */
-
-    struct ViewEntry { uint16_t viewId; };
-    static constexpr int kMaxViewStack = 16;
-    ViewEntry m_viewStack[kMaxViewStack] = {};
-    int       m_viewStackTop = 0;
-
-    uint16_t currentViewId() const;
-    void     submitOrtho(uint16_t viewId, Vec2u size);
 
 public:
     /* PIMPL is public so TU-local helpers (in renderer .cpp files that include
@@ -267,4 +230,3 @@ private:
 };
 
 } // namespace uilo
-

@@ -2,7 +2,7 @@
 
 #include "../platform/MacWindow.hpp"
 
-#include <SDL3/SDL.h>
+#include <render/Window.hpp>
 
 namespace uilo {
 
@@ -18,7 +18,7 @@ namespace {
                 returning nonsense.
 */
 bool videoReady() {
-    return SDL_WasInit(SDL_INIT_VIDEO) != 0;
+    return valo::Window::isVideoReady();
 }
 
 } // namespace
@@ -32,7 +32,7 @@ bool videoReady() {
                 pixels, so the useful scale is "how many real panel pixels does
                 one virtual pixel cover" -- native panel resolution divided by
                 the virtual desktop size. This is NOT
-                SDL_GetDisplayContentScale, which reports 1.0 on macOS however
+                the display's content scale, which reports 1.0 on macOS however
                 the desktop is scaled, and NOT the backing-store ratio either:
                 at a 1470x956 desktop macOS renders 2940x1912 and scans it out
                 to a 2560x1664 panel, so the backing ratio says 2.0 while the
@@ -48,33 +48,25 @@ float OS::scale() {
     /* No panel information (non-macOS, or queried before the video subsystem
        is up): fall back to the platform's own content scale, which is what. */
     if (!videoReady()) return 1.f;
-    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0) return 1.f;
-
-    const float s = SDL_GetDisplayContentScale(display);
-    /* SDL reports 0 on failure; a zero scale would collapse the whole UI. */
-    return s > 0.f ? s : 1.f;
+    /* 1 on failure: a zero scale would collapse the whole UI. */
+    return valo::Window::primaryDisplayContentScale();
 }
 
 /*
     displaySize():
     - Params:   none
     - Returns:  Vec2u
-    - Desc:     Prefer the platform's own answer; SDL's bounds agree with it on
-                macOS but this keeps the two halves of the scale ratio coming
-                from one source.
+    - Desc:     Prefer the platform's own answer; the window system's bounds
+                agree with it on macOS but this keeps the two halves of the
+                scale ratio coming from one source.
 */
 Vec2u OS::displaySize() {
     uint32_t w = 0, h = 0;
     if (getVirtualDisplaySize(w, h)) return Vec2u{w, h};
 
     if (!videoReady()) return Vec2u{0u, 0u};
-    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0) return Vec2u{0u, 0u};
-
-    SDL_Rect bounds{0, 0, 0, 0};
-    if (!SDL_GetDisplayBounds(display, &bounds)) return Vec2u{0u, 0u};
-    return Vec2u{ static_cast<uint32_t>(bounds.w), static_cast<uint32_t>(bounds.h) };
+    const valo::Vec2u bounds = valo::Window::primaryDisplayBounds();
+    return Vec2u{ bounds.x, bounds.y };
 }
 
 /*
@@ -112,12 +104,7 @@ Vec2u OS::physicalDisplaySize() {
 */
 float OS::pixelDensity() {
     if (!videoReady()) return 1.f;
-    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0) return 1.f;
-
-    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
-    if (!mode || mode->pixel_density <= 0.f) return 1.f;
-    return mode->pixel_density;
+    return valo::Window::primaryDisplayPixelDensity();
 }
 
 /*
@@ -129,11 +116,7 @@ float OS::pixelDensity() {
 */
 float OS::refreshRate() {
     if (!videoReady()) return 0.f;
-    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0) return 0.f;
-
-    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
-    return mode ? mode->refresh_rate : 0.f;
+    return valo::Window::primaryDisplayRefreshRate();
 }
 
 /*
@@ -145,11 +128,7 @@ float OS::refreshRate() {
 */
 int OS::displayCount() {
     if (!videoReady()) return 0;
-    int count = 0;
-    SDL_DisplayID* displays = SDL_GetDisplays(&count);
-    if (!displays) return 0;
-    SDL_free(displays);
-    return count;
+    return valo::Window::displayCount();
 }
 
 /*
@@ -161,10 +140,10 @@ int OS::displayCount() {
 */
 OSTheme OS::theme() {
     if (!videoReady()) return OSTheme::Unknown;
-    switch (SDL_GetSystemTheme()) {
-        case SDL_SYSTEM_THEME_LIGHT: return OSTheme::Light;
-        case SDL_SYSTEM_THEME_DARK:  return OSTheme::Dark;
-        default:                     return OSTheme::Unknown;
+    switch (valo::Window::getSystemTheme()) {
+        case valo::SystemTheme::Light: return OSTheme::Light;
+        case valo::SystemTheme::Dark:  return OSTheme::Dark;
+        default:                       return OSTheme::Unknown;
     }
 }
 
@@ -175,8 +154,7 @@ OSTheme OS::theme() {
     - Desc:     Number of logical CPUs, for sizing a worker pool.
 */
 int OS::cpuCount() {
-    const int n = SDL_GetNumLogicalCPUCores();
-    return n > 0 ? n : 0;
+    return valo::Window::cpuCount();
 }
 
 /*
@@ -186,19 +164,18 @@ int OS::cpuCount() {
     - Desc:     Installed system memory in megabytes.
 */
 int OS::systemRamMB() {
-    const int mb = SDL_GetSystemRAM();
-    return mb > 0 ? mb : 0;
+    return valo::Window::systemRamMB();
 }
 
 /*
     executableDirectory():
     - Params:   none
     - Returns:  std::string
-    - Desc:     Owned by SDL and valid for the process lifetime -- do not free.
+    - Desc:     The directory the running executable lives in, with a trailing
+                separator.
 */
 std::string OS::executableDirectory() {
-    const char* base = SDL_GetBasePath();
-    return base ? std::string(base) : std::string{};
+    return valo::Window::basePath();
 }
 
 /*
@@ -212,11 +189,7 @@ std::string OS::executableDirectory() {
 */
 std::string OS::preferencesDirectory(const std::string& organization,
                                      const std::string& application) {
-    char* path = SDL_GetPrefPath(organization.c_str(), application.c_str());
-    if (!path) return {};
-    std::string result(path);
-    SDL_free(path);   /* this one is a fresh allocation, unlike SDL_GetBasePath */
-    return result;
+    return valo::Window::prefPath(organization, application);
 }
 
 } // namespace uilo

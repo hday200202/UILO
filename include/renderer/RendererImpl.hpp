@@ -1,12 +1,12 @@
 /* Internal header — included only by Renderer*.cpp translation units. Pulls in
-   bgfx + stb_truetype + all caches. */
+   VALO, the UI shader and stb_truetype. */
 #pragma once
 
 #include "Renderer.hpp"
 
-#include <bgfx/bgfx.h>
-/* NOTE: no <bgfx/platform.h> -- upstream bgfx merged it into bgfx.h; the old
-   header only exists in stale system installs and pulls in mismatched decls. */
+#include <VALO.hpp>
+#include <render/SpirvRegistry.hpp>
+#include "shaders/ui.frag.hpp"
 
 #include <string>
 #include <unordered_map>
@@ -23,27 +23,6 @@
 
 namespace uilo {
 
-/*
-    PosColorVertex:
-    - Desc:     Vertex layout for untextured geometry: a screen-space position
-                and a packed colour. Used by every solid shape.
-*/
-struct PosColorVertex {
-    float    x, y;
-    uint32_t abgr;
-};
-
-/*
-    PosColorUvVertex:
-    - Desc:     Vertex layout for textured geometry, adding texture coordinates.
-                Used by images, glyphs and framebuffer composites.
-*/
-struct PosColorUvVertex {
-    float    x, y;
-    uint32_t abgr;
-    float    u, v;
-};
-
 /* Cached glyph in a font atlas */
 struct Glyph {
     uint16_t x, y, w, h;   /* pixel rect inside atlas */
@@ -51,7 +30,14 @@ struct Glyph {
     float    xadvance;   /* horizontal advance */
 };
 
-/* A baked font at a specific pixel size. */
+/*
+    FontFace:
+    - Desc:     A font baked at one pixel size. The atlas lives twice: as RGBA8
+                pixels on the CPU, where glyphs are rasterised as they are first
+                needed, and as a VALO texture the draws sample. Newly packed
+                glyphs mark a dirty rectangle, and the renderer uploads that
+                rectangle once per frame, before the frame's draws run.
+*/
 struct FontFace {
     std::vector<uint8_t>             ttfData;   /* owning copy of TTF bytes */
     stbtt_fontinfo                   info{};
@@ -65,120 +51,125 @@ struct FontFace {
     int                              penX        = 0;
     int                              penY        = 0;
     int                              rowH        = 0;
-    bgfx::TextureHandle              atlas       = BGFX_INVALID_HANDLE;
+    valo::TextureID                  atlas       = valo::EMPTY_TEXTURE;
+    std::vector<uint32_t>            pixels;   /* coverage replicated into every channel */
+    int                              dirtyX0 = 0, dirtyY0 = 0, dirtyX1 = 0, dirtyY1 = 0;
+    bool                             dirty   = false;
     std::unordered_map<uint32_t, Glyph> glyphs;
 };
 
 /*
-    Renderer:
+    Renderer::Impl:
     - Desc:     The renderer's private state, kept out of the public header so
-                bgfx and SDL types never leak into anything that includes
-                Renderer.hpp. Holds the shader programs and uniforms, the
-                offscreen targets and blur ladder, the clip and rotation stacks,
-                the solid-geometry batch, and the texture and font caches.
+                VALO's headers never leak into anything that includes
+                Renderer.hpp. Holds the window and the VALO instance, the one UI
+                program, the per-frame vertex arena and the batch being built in
+                it, the clip and rotation stacks, and the texture and font
+                caches.
+    - Every shape is tessellated into the arena on the CPU and joins the pending
+      batch when its draw state -- target, mode, texture, clips and scissor --
+      matches; otherwise the batch is submitted and a new one starts. The arena
+      is uploaded once, just before VALO runs the frame, so every command reads
+      the frame's final contents.
 */
 struct Renderer::Impl {
-    /* bgfx shader programs */
-    bgfx::VertexLayout              solidLayout;
-    bgfx::VertexLayout              texLayout;
-    bgfx::ProgramHandle             solidProgram = BGFX_INVALID_HANDLE;
-    bgfx::ProgramHandle             texProgram   = BGFX_INVALID_HANDLE;
-    bgfx::ProgramHandle             textProgram  = BGFX_INVALID_HANDLE;
-    bgfx::ProgramHandle             blurProgram  = BGFX_INVALID_HANDLE;
-    bgfx::ProgramHandle             glassProgram = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             s_texColor   = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_imgFlags   = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_blurParams = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassParams= BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassTint  = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassRect  = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassAnim  = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassBase  = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_glassMouse = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_clipRect   = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_clipParams = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_clipRect2  = BGFX_INVALID_HANDLE;
-    bgfx::UniformHandle             u_clipParams2= BGFX_INVALID_HANDLE;
-    bool                            layoutsInit  = false;
+    std::unique_ptr<valo::Window> window;
+    valo::VALO                    valo;
+    valo::Backend                 backend      = valo::Backend::Software;
+    bool                          vsync        = true;
+    bool                          valoReady    = false;
 
-    /* Wall-clock elapsed seconds since renderer init, fed into animated
-       materials (Holographic / Liquid / Shimmer / Aurora) via u_glassAnim.y. */
-    float                           elapsed      = 0.f;
+    valo::ProgramID               program      = valo::DEFAULT_PROGRAM;
+    valo::VtxLayout               layout;
+    valo::VertexBufferID          vb           = valo::EMPTY_BUFFER;
+    valo::IndexBufferID           ib           = valo::EMPTY_BUFFER;
 
-    /* Offscreen scene + blur ladder (for Material::Glass). */
-    /* Layout per frame (bgfx executes views in ascending viewId order): View
-       0: app draws. */
-    bgfx::FrameBufferHandle         sceneFB       = BGFX_INVALID_HANDLE;
-    bgfx::FrameBufferHandle         blurFB_A      = BGFX_INVALID_HANDLE;
-    bgfx::FrameBufferHandle         blurFB_B      = BGFX_INVALID_HANDLE;
-    bgfx::TextureHandle             sceneColorTex = BGFX_INVALID_HANDLE;
-    bgfx::TextureHandle             blurColorA    = BGFX_INVALID_HANDLE;
-    bgfx::TextureHandle             blurColorB    = BGFX_INVALID_HANDLE;
-    uint32_t                        fbWidth       = 0;
-    uint32_t                        fbHeight      = 0;
-    /* Pipeline view ids. */
-    uint16_t       kSceneViewId        = 0;
-    uint16_t       kBlurHViewId        = 1;
-    uint16_t       kBlurVViewId        = 2;
-    uint16_t       kGlassBgViewId      = 3;
-    uint16_t       kGlassChildViewId   = 4;
-    uint16_t       kCompositeViewId    = 5;
-    void setViewBase(uint16_t base) {
-        kSceneViewId      = base + 0;
-        kBlurHViewId      = base + 1;
-        kBlurVViewId      = base + 2;
-        kGlassBgViewId    = base + 3;
-        kGlassChildViewId = base + 4;
-        kCompositeViewId  = base + 5;
+    /* The frame's geometry: window pixels, uploaded once at endFrame. */
+    std::vector<UiVertex>         verts;
+    std::vector<uint32_t>         idx;
+
+    /* The clear colour the frame starts from. clear() sets it; the last call
+       in a frame wins, and it is applied before any of the frame's draws. */
+    Color                         clearColor   = Color{0, 0, 0, 255};
+
+    /* ---- draw targets ---------------------------------------------------- */
+    /* Where draws go: the base layer (the window), or a framebuffer's layer
+       while one is pushed. */
+    struct TargetEntry { valo::LayerID layer; Vec2u size; };
+    static constexpr int            kMaxTargetStack = 16;
+    TargetEntry                     targetStack[kMaxTargetStack]{};
+    int                             targetTop = 0;
+    std::vector<valo::LayerID>      fbLayers;   /* framebuffer layers, drawn before the base */
+    std::vector<valo::LayerID>      freeLayers;
+
+    valo::LayerID currentLayer() const {
+        return targetTop > 0 ? targetStack[targetTop - 1].layer : valo::VALO::BASE_LAYER;
     }
-    /* Embedded (attach) mode: composite alpha-blends over the host's image
-       instead of an opaque blit. Set by Renderer::attach(). */
-    bool embedded = false;
+    Vec2u currentTargetSize(Vec2u windowSize) const {
+        return targetTop > 0 ? targetStack[targetTop - 1].size : windowSize;
+    }
+    void applyLayerOrder();
 
-    /* Deferred Material::Kind::* ("glass") draws. */
-    /* drawGlass() captures here during the main render pass instead of. */
-    struct DeferredGlass {
-        Rectf       dst;
-        Material    mat;
-        Color       baseColor;
-        bool        hasScissor = false;
-        uint16_t    sx = 0, sy = 0, sw = 0, sh = 0;
+    /* ---- batching -------------------------------------------------------- */
+    enum Mode : uint32_t { ModeSolid = 0, ModeImage = 1, ModeText = 2 };
+
+    struct Batch {
+        bool            open       = false;
+        valo::LayerID   layer      = 0;
+        uint32_t        firstIndex = 0;
+        uint32_t        indexCount = 0;
+        UiUniforms      uniforms{};
+        valo::Scissor   scissor{};
     };
-    std::vector<DeferredGlass> deferredGlass;
-    bool                       replayingGlass = false;
+    Batch                           batch;
+    Vec2u                           frameSize   = {1u, 1u};
 
-    /* Glass-pipeline bypass. */
-    /* The full glass pipeline (render scene to sceneFB → blur ladder →
-       composite. */
-    bool hadGlassLastFrame = false;
-    bool hadGlassThisFrame = false;
-    bool bypassSceneFb     = false;
+    /* Starts or extends the batch for a draw in `mode` sampling `tex`, under
+       the current scissor and rounded clips. Returns false when the draw is
+       fully scissored away. */
+    bool beginShape(uint32_t mode, valo::TextureID tex,
+                    const float imgFlags[4] = nullptr);
+    void flushBatch();
+    uint32_t submittedCommands = 0;
+    RendererStats stats;   /* the previous frame's counters */
 
-    /* Scissor stack */
+    /* Appends geometry to the arena under the batch beginShape() opened. */
+    uint32_t pushVertex(float x, float y, Color c, float u = 0.f, float v = 0.f) {
+        verts.push_back(UiVertex{
+            valo::Vec2f{x, y},
+            valo::Vec4f{c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f},
+            valo::Vec2f{u, v}
+        });
+        return static_cast<uint32_t>(verts.size() - 1);
+    }
+    void pushIndex(uint32_t i) {
+        idx.push_back(i);
+        ++batch.indexCount;
+    }
+
+    /* ---- scissor stack --------------------------------------------------- */
     struct ScissorEntry { uint16_t x, y, w, h; };
     static constexpr int            kMaxScissor = 64;
     ScissorEntry                    scissorStack[kMaxScissor]{};
     int                             scissorTop = 0;
     int                             scissorOverflowDepth = 0;
 
-    /* Rounded-rect clip stack (SDF in fragment shaders) */
+    bool scissorEmpty() const {
+        if (scissorTop == 0) return false;
+        const auto& sc = scissorStack[scissorTop - 1];
+        return sc.w == 0 || sc.h == 0;
+    }
+
+    /* ---- rounded-rect clip stack (SDF in the fragment shader) ------------- */
     struct RoundClipEntry { float cx, cy, halfW, halfH, radius; };
     static constexpr int            kMaxRoundClip = 64;
     RoundClipEntry                  roundClipStack[kMaxRoundClip]{};
     int                             roundClipTop = 0;
     int                             roundClipOverflowDepth = 0;
 
-    /* Last clip uniform values actually pushed to bgfx. Used to dedup
-       setUniform calls when consecutive draws share the same clip state. */
-    float lastClipRect[4]    = { 1e30f, 0.f, 0.f, 0.f };
-    float lastClipParams[4]  = { 1e30f, 0.f, 0.f, 0.f };
-    float lastClipRect2[4]   = { 1e30f, 0.f, 0.f, 0.f };
-    float lastClipParams2[4] = { 1e30f, 0.f, 0.f, 0.f };
-    bool  lastClipValid      = false;
-
-    /* Effective round-clip uniform cache. */
-    /* The four vec4s the fragment-shader clip needs for the CURRENT round-
-       clip. */
+    /* The two vec4 pairs the fragment shader tests for the CURRENT stack:
+       the inner-most and the next rounded entry. Rebuilt only when the stack
+       has changed since it was last read. */
     float    curClipRect[4]    = {0.f, 0.f, 0.f, 0.f};
     float    curClipParams[4]  = {0.f, 0.f, 0.f, 0.f};
     float    curClipRect2[4]   = {0.f, 0.f, 0.f, 0.f};
@@ -187,24 +178,7 @@ struct Renderer::Impl {
     uint32_t curClipVersion = 0;
     void refreshClipCache();
 
-    /* Solid-rect batch. */
-    /* All `draw(Rect&)` calls sharing the same view + scissor + round-clip
-       state. */
-    std::vector<PosColorVertex> solidBatchVerts;
-    std::vector<uint16_t>       solidBatchIdx;
-    uint16_t                    solidBatchView = UINT16_MAX;
-
-    /* Scissor + round-clip snapshot the queued rects were recorded under. */
-    ScissorEntry batchScissor{};
-    bool         batchHasScissor    = false;
-    float        batchClipRect[4]    = {0.f, 0.f, 0.f, 0.f};
-    float        batchClipParams[4]  = {0.f, 0.f, 0.f, 0.f};
-    float        batchClipRect2[4]   = {0.f, 0.f, 0.f, 0.f};
-    float        batchClipParams2[4] = {0.f, 0.f, 0.f, 0.f};
-    bool batchStateMatches(uint16_t viewId);
-    void captureBatchState(uint16_t viewId);
-
-    /* Affine rotation (applied CPU-side to draw vertices). */
+    /* ---- rotation (applied CPU-side to draw vertices) --------------------- */
     /* Convention: degrees, +x at 0, +y at 90 (matches a (cos t, sin t). */
     struct RotState {
         float pivotX  = 0.f;
@@ -225,11 +199,11 @@ struct Renderer::Impl {
         y = rotation.pivotY + dx * rotation.sinA + dy * rotation.cosA;
     }
 
-    /* Texture cache. */
+    /* ---- texture cache --------------------------------------------------- */
     /* path -> Texture */
     std::unordered_map<std::string, Texture> textureCache;
 
-    /* Font cache. */
+    /* ---- font cache ------------------------------------------------------ */
     /* path -> font index; faces stored sparsely per requested pixel size */
     struct FontRecord {
         std::vector<uint8_t> ttfData;
@@ -239,86 +213,15 @@ struct Renderer::Impl {
     std::vector<FontRecord>                 fonts;
     std::unordered_map<std::string, uint32_t> fontByPath;
 
-    /* Cursor cache (kept alive for lifetime of Renderer) */
-    std::unordered_map<int, void*>          cursors;   /* CursorType -> SDL_Cursor* */
-
-    /* Shader & layout setup */
-    bool initShaders();
-    void ensureLayouts();
-    void shutdownResources();
-
-    /* Offscreen FB management for glass effect. */
-    /* Recreates sceneFB / blurFB_A / blurFB_B if (width,height) changed. */
-    void ensureSceneFramebuffers(uint32_t width, uint32_t height);
-    void destroySceneFramebuffers();
-    /* Submits views kBlurHViewId and kBlurVViewId; assumes sceneFB has been
-       rendered into during this or the previous frame. */
-    void runBlurPasses(uint32_t width, uint32_t height);
-    /* Submits view kCompositeViewId: full-screen blit of sceneFB to
-       backbuffer. */
-    void compositeSceneToBackbuffer(uint32_t width, uint32_t height,
-                                    const bgfx::VertexLayout& layout,
-                                    bgfx::ProgramHandle program);
-
-    /* Helpers */
     FontFace* getFace(uint32_t fontId, float pixelHeight);
     const Glyph* getGlyph(FontFace& face, uint32_t codepoint);
+    /* Uploads every atlas region rasterised since the last frame. */
+    void uploadDirtyAtlases();
 
-    /* Flushes any queued solid-rect batch as a single transient-buffer submit. */
-    void flushSolidBatch();
+    /* ---- lifecycle helpers ---------------------------------------------- */
+    bool createResources();
+    void shutdownResources();
 };
-
-/* Shared draw-path helpers. */
-/* (One definition here instead of a copy per Renderer*.cpp TU.) */
-
-/* Push the four clip vec4s unless they're already bound (dedup vs lastClip*). */
-inline void applyClipUniforms(Renderer::Impl& impl,
-                              const float rect[4],  const float params[4],
-                              const float rect2[4], const float params2[4]) {
-    const bool same = impl.lastClipValid
-        && std::memcmp(rect,    impl.lastClipRect,    sizeof(impl.lastClipRect))    == 0
-        && std::memcmp(params,  impl.lastClipParams,  sizeof(impl.lastClipParams))  == 0
-        && std::memcmp(rect2,   impl.lastClipRect2,   sizeof(impl.lastClipRect2))   == 0
-        && std::memcmp(params2, impl.lastClipParams2, sizeof(impl.lastClipParams2)) == 0;
-    if (same) return;
-    if (bgfx::isValid(impl.u_clipRect))    bgfx::setUniform(impl.u_clipRect,    rect);
-    if (bgfx::isValid(impl.u_clipParams))  bgfx::setUniform(impl.u_clipParams,  params);
-    if (bgfx::isValid(impl.u_clipRect2))   bgfx::setUniform(impl.u_clipRect2,   rect2);
-    if (bgfx::isValid(impl.u_clipParams2)) bgfx::setUniform(impl.u_clipParams2, params2);
-    std::memcpy(impl.lastClipRect,    rect,    sizeof(impl.lastClipRect));
-    std::memcpy(impl.lastClipParams,  params,  sizeof(impl.lastClipParams));
-    std::memcpy(impl.lastClipRect2,   rect2,   sizeof(impl.lastClipRect2));
-    std::memcpy(impl.lastClipParams2, params2, sizeof(impl.lastClipParams2));
-    impl.lastClipValid = true;
-}
-
-/* Bind the round-clip uniforms for the current round-clip stack. */
-inline void applyRoundClipInner(Renderer::Impl& impl) {
-    impl.refreshClipCache();
-    applyClipUniforms(impl, impl.curClipRect, impl.curClipParams,
-                      impl.curClipRect2, impl.curClipParams2);
-}
-
-/* Bind scissor + round-clip for an immediate (non-batched) submit. */
-inline void applyScissor(Renderer::Impl& impl) {
-    if (impl.scissorTop > 0) {
-        const auto& sc = impl.scissorStack[impl.scissorTop - 1];
-        bgfx::setScissor(sc.x, sc.y, sc.w, sc.h);
-    }
-    applyRoundClipInner(impl);
-}
-
-inline bool scissorEmpty(const Renderer::Impl& impl) {
-    if (impl.scissorTop == 0) return false;
-    const auto& sc = impl.scissorStack[impl.scissorTop - 1];
-    return sc.w == 0 || sc.h == 0;
-}
-
-/* Vertex packing helpers */
-inline uint32_t packColor(Color c) {
-    return (uint32_t(c.a) << 24) | (uint32_t(c.b) << 16) |
-           (uint32_t(c.g) <<  8) |  uint32_t(c.r);
-}
 
 /* Decode one UTF-8 codepoint; returns advance (number of bytes consumed) and
    writes codepoint to *out. Returns 0 on end-of-string. */

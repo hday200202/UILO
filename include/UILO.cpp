@@ -2,7 +2,6 @@
 #include "elements/interactible/Interactible.hpp"
 #include "platform/MacScroll.hpp"
 #include "platform/MacWindow.hpp"
-#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
 
@@ -16,7 +15,7 @@ namespace uilo {
                 active page
 */
 UILO::UILO(Renderer& renderer, Page* page) {
-    m_renderer = &renderer;
+    setRenderer(renderer);
     addPage(page);
     setPage(page->m_name);
 }
@@ -126,8 +125,8 @@ void UILO::setActivePage(Page* page) {
     - Params:   Interactible* i
     - Returns:  void
     - Desc:     Sets the focused interactible, deactivating the previous one,
-                and starts or stops SDL text input depending on whether the new
-                interactible wants keyboard text.
+                and starts or stops the window's text input depending on whether
+                the new interactible wants keyboard text.
 */
 void UILO::setCurrInteractible(Interactible* i) {
     m_interactibleActivatedThisFrame = true;
@@ -135,12 +134,11 @@ void UILO::setCurrInteractible(Interactible* i) {
     if (m_currInteractible) m_currInteractible->onDeactivate();
     m_currInteractible = i;
 
-    if (m_renderer && m_renderer->sdlWindow()) {
-        SDL_Window* w = m_renderer->sdlWindow();
+    if (valo::Window* w = window()) {
         if (i && i->wantsTextInput()) {
-            if (!SDL_TextInputActive(w)) SDL_StartTextInput(w);
+            if (!w->isTextInputActive()) w->startTextInput();
         } else {
-            if (SDL_TextInputActive(w))  SDL_StopTextInput(w);
+            if (w->isTextInputActive())  w->stopTextInput();
         }
     }
 }
@@ -366,8 +364,8 @@ void UILO::setOnLiveResize(std::function<void()> cb) {
     - Desc:     Advances the UI by one frame. On the first frame -- and only
                 when UILO owns its window, never when embedded in a host -- it
                 installs the macOS native scroll and zoom monitors and the live-
-                resize configuration. Each frame it converts the SDL mouse
-                position from logical points to backing pixels, updates layout
+                resize configuration. Each frame it reads the mouse position
+                in backing pixels, updates layout
                 for the active page and every floating element, culls elements
                 marked for deletion, then dispatches hover, left-click, and
                 right-click input. Floating elements are opaque to input: the
@@ -379,23 +377,16 @@ void UILO::update() {
     static bool s_macInstalled = false;
     if (!s_macInstalled && m_renderer && m_renderer->ownsContext()) {
         s_macInstalled = true;
-        if (m_renderer) {
-            if (SDL_Window* w = m_renderer->sdlWindow()) {
-                void* ns = SDL_GetPointerProperty(
-                    SDL_GetWindowProperties(w),
-                    SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
-                configureMacWindowForLiveResize(ns);
-            }
+        if (valo::Window* w = window()) {
+            /* The NSWindow on macOS; the call is a no-op everywhere else. */
+            configureMacWindowForLiveResize(w->nativeHandle());
+
+            /* Runs inside the OS's modal resize loop too, where the main loop is
+               blocked, so the host can redraw at every intermediate size. */
+            w->setResizeCallback([this] {
+                if (m_onLiveResize) m_onLiveResize();
+            });
         }
-        SDL_AddEventWatch(+[](void* userdata, SDL_Event* ev) -> bool {
-            auto* self = static_cast<UILO*>(userdata);
-            if (!self->m_onLiveResize) return true;
-            if (ev->type == SDL_EVENT_WINDOW_RESIZED ||
-                ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-                self->m_onLiveResize();
-            }
-            return true;
-        }, this);
         installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
             /* A coast belongs to whatever the gesture was flicked on, so
                momentum ticks replay at the position the gesture started from. */
@@ -493,10 +484,8 @@ void UILO::update() {
     m_mousePos = queryMousePixelPosition();
     const Vec2f mouse = m_mousePos;
 
-    if (m_renderer) m_renderer->setMouseState(mouse);
-
-    const bool leftHeld  = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))  != 0;
-    const bool rightHeld = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
+    const bool leftHeld  = isMouseButtonDown(MouseButton::Left);
+    const bool rightHeld = isMouseButtonDown(MouseButton::Right);
 
     /* A press counts when the polled state rises OR when one was latched out of
        the event stream. The latch is what catches a tap that was already over by
@@ -637,34 +626,78 @@ void UILO::render() {
     queryMousePixelPosition():
     - Params:   none
     - Returns:  Vec2f
-    - Desc:     The cursor in render pixels. SDL reports it in window points, so
-                the ratio between the window's point and pixel size converts it;
-                on a retina display those differ by the backing scale.
+    - Desc:     The cursor in render pixels, read live from the window. On a
+                retina display that is the window-point position times the
+                backing scale, which the window has already applied.
 */
 Vec2f UILO::queryMousePixelPosition() const {
-    float mx = 0.f, my = 0.f;
-    SDL_GetMouseState(&mx, &my);
-    return toPixels(mx, my);
+    if (valo::Window* w = window()) {
+        const valo::Vec2f p = w->mousePosition();
+        return { p.x, p.y };
+    }
+    return m_mousePos;
 }
 
 
 /*
-    toPixels(float x, float y):
-    - Params:   float x, float y -- a position in window points
-    - Returns:  Vec2f -- the same position in render pixels
-    - Desc:     SDL reports both the cursor and mouse-button events in window
-                points; UILO lays out in render pixels, and on a retina display
-                those differ by the backing scale.
+    isMouseButtonDown(MouseButton button):
+    - Params:   MouseButton button
+    - Returns:  bool
+    - Desc:     Whether a mouse button is physically held right now.
 */
-Vec2f UILO::toPixels(float x, float y) const {
-    if (m_renderer) if (SDL_Window* w = m_renderer->sdlWindow()) {
-        int lw = 1, lh = 1, pw = 1, ph = 1;
-        SDL_GetWindowSize(w, &lw, &lh);
-        SDL_GetWindowSizeInPixels(w, &pw, &ph);
-        if (lw > 0) x *= (float)pw / (float)lw;
-        if (lh > 0) y *= (float)ph / (float)lh;
-    }
-    return { x, y };
+bool UILO::isMouseButtonDown(MouseButton button) const {
+    valo::Window* w = window();
+    return w && w->isMouseDown(button);
+}
+
+
+/*
+    getKeyModifiers():
+    - Params:   none
+    - Returns:  KeyMod
+    - Desc:     The modifier keys held as of the last event read.
+*/
+KeyMod UILO::getKeyModifiers() const {
+    valo::Window* w = window();
+    return w ? w->modState() : KeyMod::None;
+}
+
+
+/*
+    getClipboardText():
+    - Params:   none
+    - Returns:  std::string
+    - Desc:     The system clipboard as UTF-8, empty when it holds no text.
+*/
+std::string UILO::getClipboardText() const {
+    valo::Window* w = window();
+    return w ? w->getClipboardText() : std::string{};
+}
+
+
+/*
+    setClipboardText(const std::string& text):
+    - Params:   const std::string& text
+    - Returns:  void
+    - Desc:     Puts UTF-8 text on the system clipboard.
+*/
+void UILO::setClipboardText(const std::string& text) {
+    if (valo::Window* w = window()) w->setClipboardText(text);
+}
+
+
+/*
+    anyKeyDown():
+    - Params:   none
+    - Returns:  bool
+    - Desc:     Whether any key is physically down right now.
+*/
+bool UILO::anyKeyDown() const {
+    valo::Window* w = window();
+    if (!w) return false;
+    for (size_t k = 0; k < size_t(Key::Count); ++k)
+        if (w->isKeyDown(Key(k))) return true;
+    return false;
 }
 
 
@@ -720,7 +753,7 @@ void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
                 macOS monitor uses this both to decide whether to start a coast
                 at the end of a gesture and to stop one that has drifted onto
                 something that does not want it.
-    - Nothing here routes events to SDL: the monitor consumes every precise
+    - Nothing here routes events to the window: the monitor consumes every precise
       scroll it sees, and a mouse wheel never reaches it in the first place.
 */
 bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
@@ -755,53 +788,56 @@ bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
 
 
 /*
-    handleEvent(const SDL_Event& event):
-    - Params:   const SDL_Event& event
+    pollEvents():
+    - Params:   none
     - Returns:  void
-    - Desc:     Processes one SDL event. Mouse-wheel events map to zoom when
-                Ctrl/Cmd is held, horizontal scroll when Shift is held, or
-                normal scroll otherwise. Text input and key input route to the
-                focused interactible, with a filter that drops the stale key-
-                repeat events Wayland can deliver after a key is released. UTF-8
-                text is decoded one codepoint at a time so batched or IME input
-                is not dropped.
+    - Desc:     Reads the window's input for the frame and dispatches every event
+                in the order it arrived. Closing the window stops the app.
 */
 void UILO::pollEvents() {
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_EVENT_QUIT) m_running = false;
-        handleEvent(event);
+    valo::Window* w = window();
+    if (!w) return;
+    if (!w->pollEvents()) m_running = false;
+    for (const valo::WindowEvent& event : w->events()) {
+        if (event.type == valo::WindowEventType::CloseRequested) m_running = false;
+        handleWindowEvent(event);
     }
 }
 
 /*
-    handleEvent(const SDL_Event& event):
-    - Params:   const SDL_Event& event
+    handleWindowEvent(const valo::WindowEvent& event):
+    - Params:   const valo::WindowEvent& event
     - Returns:  void
-    - Desc:     Turns one SDL event into UILO's own dispatch. Scroll and zoom
+    - Desc:     Turns one window event into UILO's own dispatch. Scroll and zoom
                 gestures are separated here -- a wheel with a modifier held is a
                 zoom, not a scroll -- and keyboard events are routed to the
                 active interactible, except for the zoom shortcuts and the
                 navigation keys, which drive scrolling when nothing has focus. A
                 key repeat arriving after every key has physically come up is
                 dropped, which is what stops a held key from continuing to fire
-                once the window has lost and regained focus.
+                once the window has lost and regained focus. UTF-8 text is
+                decoded one codepoint at a time so batched or IME input is not
+                dropped.
 */
-void UILO::handleEvent(const SDL_Event& event) {
+void UILO::handleWindowEvent(const valo::WindowEvent& event) {
+    using Type = valo::WindowEventType;
     if (!m_activePage) return;
 
-    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+    const KeyMod mods  = event.mods;
+    const bool   shift = hasMod(mods, KeyMod::Shift);
+    const bool   ctrl  = hasMod(mods, KeyMod::Ctrl);
+    const bool   gui   = hasMod(mods, KeyMod::Gui);
+
+    if (event.type == Type::Wheel) {
         const float dy = event.wheel.y;
         const float dx = event.wheel.x;
-        const SDL_Keymod mods = SDL_GetModState();
-        const bool shiftHeld = (mods & SDL_KMOD_SHIFT) != 0;
-        const bool zoomShortcut = (mods & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
+        const bool zoomShortcut = ctrl || gui;
         if (zoomShortcut && dy != 0.f) {
             const float mag = dy * 0.1f;
             dispatchZoom(m_mousePos, mag);
             return;
         }
-        if (shiftHeld && dx == 0.f && dy != 0.f) {
+        if (shift && dx == 0.f && dy != 0.f) {
             const bool precise = std::fabs(dy - std::round(dy)) > 1e-4f
                               || (dy != 0.f && std::fabs(dy) < 1.f);
             dispatchScroll(m_mousePos, Vec2f{dy, 0.f}, precise);
@@ -817,29 +853,21 @@ void UILO::handleEvent(const SDL_Event& event) {
        update() polls, the button reads as up and the press is lost. Its position
        comes from the event too, so it lands where the click was even if the
        pointer has moved on since. */
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        if (event.button.button == SDL_BUTTON_LEFT)  m_pendingLeftPress  = true;
-        if (event.button.button == SDL_BUTTON_RIGHT) m_pendingRightPress = true;
-        m_pendingPressPos = toPixels(event.button.x, event.button.y);
+    if (event.type == Type::MouseDown) {
+        if (event.button == MouseButton::Left)  m_pendingLeftPress  = true;
+        if (event.button == MouseButton::Right) m_pendingRightPress = true;
+        m_pendingPressPos = { event.mouse.x, event.mouse.y };
     }
 
-    if (event.type == SDL_EVENT_KEY_UP) {
-        m_lastKeyUpNs = event.common.timestamp;
+    if (event.type == Type::KeyUp) {
+        m_lastKeyUpNs = event.timestamp;
     }
 
-    if (event.type == SDL_EVENT_TEXT_INPUT)
+    if (event.type == Type::Text)
         if (m_currInteractible) {
-            if (event.common.timestamp > m_lastKeyUpNs) {
-                int nKeys = 0;
-                const bool* state = SDL_GetKeyboardState(&nKeys);
-                bool anyDown = false;
-                for (int i = 0; i < nKeys; ++i) {
-                    if (state[i]) { anyDown = true; break; }
-                }
-                if (!anyDown) return;
-            }
+            if (event.timestamp > m_lastKeyUpNs && !anyKeyDown()) return;
 
-            const unsigned char* s = reinterpret_cast<const unsigned char*>(event.text.text);
+            const unsigned char* s = reinterpret_cast<const unsigned char*>(event.text);
             while (*s) {
                 uint32_t cp = 0;
                 int n = 1;
@@ -855,48 +883,47 @@ void UILO::handleEvent(const SDL_Event& event) {
 
     /* An open menu owns the keyboard: it is modal by nature, and letting a
        shortcut through while it is up would act on the UI behind it. */
-    if (event.type == SDL_EVENT_KEY_DOWN && isContextMenuOpen()) {
-        switch (event.key.key) {
-            case SDLK_DOWN:   m_contextMenu->moveHighlight(+1);         return;
-            case SDLK_UP:     m_contextMenu->moveHighlight(-1);         return;
-            case SDLK_RIGHT:  m_contextMenu->deepestOpen()->openHighlightedSubmenu(); return;
-            case SDLK_LEFT:   if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
-            case SDLK_RETURN:
-            case SDLK_KP_ENTER: m_contextMenu->activateHighlighted();   return;
-            case SDLK_ESCAPE: if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
+    if (event.type == Type::KeyDown && isContextMenuOpen()) {
+        switch (event.key) {
+            case Key::Down:   m_contextMenu->moveHighlight(+1);         return;
+            case Key::Up:     m_contextMenu->moveHighlight(-1);         return;
+            case Key::Right:  m_contextMenu->deepestOpen()->openHighlightedSubmenu(); return;
+            case Key::Left:   if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
+            case Key::Return:
+            case Key::KpEnter: m_contextMenu->activateHighlighted();   return;
+            case Key::Escape: if (!m_contextMenu->closeSubmenu()) closeContextMenu(); return;
             default: break;
         }
     }
 
-    if (event.type == SDL_EVENT_KEY_DOWN) {
-        const SDL_Keymod mods = SDL_GetModState();
-        const bool zoomShortcut = (mods & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
+    if (event.type == Type::KeyDown) {
+        const Key key = event.key;
+        const bool zoomShortcut = ctrl || gui;
         if (zoomShortcut) {
-            if (event.key.key == SDLK_EQUALS || event.key.key == SDLK_KP_PLUS) {
+            if (event.symbol == U'=' || key == Key::KpPlus) {
                 dispatchZoom(m_mousePos, 0.1f);
                 return;
             }
-            if (event.key.key == SDLK_MINUS || event.key.key == SDLK_KP_MINUS) {
+            if (event.symbol == U'-' || key == Key::KpMinus) {
                 dispatchZoom(m_mousePos, -0.1f);
                 return;
             }
         }
 
-        if ((event.key.key == SDLK_UP || event.key.key == SDLK_DOWN ||
-             event.key.key == SDLK_PAGEUP || event.key.key == SDLK_PAGEDOWN ||
-             event.key.key == SDLK_HOME || event.key.key == SDLK_END) &&
+        if ((key == Key::Up || key == Key::Down ||
+             key == Key::PageUp || key == Key::PageDown ||
+             key == Key::Home || key == Key::End) &&
             !m_currInteractible) {
-            const bool shiftHeld = (mods & SDL_KMOD_SHIFT) != 0;
             float vertical = 0.f;
             float horizontal = 0.f;
-            if (event.key.key == SDLK_UP) vertical = -1.f;
-            else if (event.key.key == SDLK_DOWN) vertical = 1.f;
-            else if (event.key.key == SDLK_PAGEUP) vertical = -3.f;
-            else if (event.key.key == SDLK_PAGEDOWN) vertical = 3.f;
-            else if (event.key.key == SDLK_HOME) vertical = -1000.f;
-            else if (event.key.key == SDLK_END) vertical = 1000.f;
+            if (key == Key::Up) vertical = -1.f;
+            else if (key == Key::Down) vertical = 1.f;
+            else if (key == Key::PageUp) vertical = -3.f;
+            else if (key == Key::PageDown) vertical = 3.f;
+            else if (key == Key::Home) vertical = -1000.f;
+            else if (key == Key::End) vertical = 1000.f;
 
-            if (shiftHeld) {
+            if (shift) {
                 horizontal = vertical;
                 vertical = 0.f;
             }
@@ -909,20 +936,9 @@ void UILO::handleEvent(const SDL_Event& event) {
 
         if (!m_currInteractible) return;
 
-        if (event.key.repeat && event.common.timestamp > m_lastKeyUpNs) {
-            int nKeys = 0;
-            const bool* state = SDL_GetKeyboardState(&nKeys);
-            bool anyDown = false;
-            for (int i = 0; i < nKeys; ++i) {
-                if (state[i]) { anyDown = true; break; }
-            }
-            if (!anyDown) return;
-        }
+        if (event.repeat && event.timestamp > m_lastKeyUpNs && !anyKeyDown()) return;
 
-        bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
-        bool ctrl  = (event.key.mod & SDL_KMOD_CTRL)  != 0;
-        bool gui   = (event.key.mod & SDL_KMOD_GUI)   != 0;
-        m_currInteractible->handleKeyInput(event.key.key, shift, ctrl, gui);
+        m_currInteractible->handleKeyInput(key, event.symbol, shift, ctrl, gui);
     }
 }
 

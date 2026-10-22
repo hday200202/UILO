@@ -3,7 +3,6 @@
 // frames so the copy-on-write texture upload path (syncPixels) executes.
 #include "../include/UILO.hpp"
 #include "../include/renderer/Renderer.hpp"
-#include <SDL3/SDL.h>
 #include <cstdio>
 #include <cstdlib>
 
@@ -60,8 +59,7 @@ int main(int argc, char** argv) {
     // Run a few frames so syncPixels creates the private texture and
     // uploads the writes.
     for (int frame = 0; frame < 30; ++frame) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) ui.handleEvent(event);
+        ui.pollEvents();
         ui.update();
         renderer.beginFrame();
         renderer.clear(Color{20, 20, 20, 255});
@@ -77,8 +75,7 @@ int main(int argc, char** argv) {
     // Pass any second argument to keep the window up (visual inspection).
     const int tailFrames = argc > 2 ? 100000 : 5;
     for (int frame = 0; frame < tailFrames; ++frame) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) ui.handleEvent(event);
+        ui.pollEvents();
         ui.update();
         renderer.beginFrame();
         renderer.clear(Color{20, 20, 20, 255});

@@ -584,9 +584,7 @@ void Row::tickHiddenChildren(float dt) {
     - Returns:  void
     - Desc:     Draws the row: background, then the subdivision grid, then its
                 children. The grid goes between the two so it sits behind every
-                child. A Material on the Modifier makes the whole subtree one
-                glass group, so the children composite into the blur the
-                background established rather than each blurring separately.
+                child.
 */
 void Row::render() {
     if (!m_modifier.getVisible()) return;
@@ -597,12 +595,7 @@ void Row::render() {
     renderBackground(scale);
     renderSubdivisions(scale);
 
-    const bool glassSubtree = m_uiloRef
-        && m_modifier.getMaterial().kind != Material::Kind::None;
-
-    if (glassSubtree) m_uiloRef->getRenderer().beginGlassSubtree();
     renderChildren();
-    if (glassSubtree) m_uiloRef->getRenderer().endGlassSubtree();
 
     m_dirty = false;
 }
@@ -612,12 +605,9 @@ void Row::render() {
     renderBackground(float scale):
     - Params:   float scale
     - Returns:  void
-    - Desc:     Draws the row's background. A Material takes precedence and owns
-                the background outright -- it draws its own rounded rect, tint
-                and effect, so the flat fill is skipped rather than drawn
-                underneath it. Otherwise an active gradient wins over the flat
-                colour, and either is drawn with whatever outline the options
-                ask for. Nothing is drawn at all when the fill is transparent
+    - Desc:     Draws the row's background. An active gradient wins over the
+                flat colour, and either is drawn with whatever outline the
+                options ask for. Nothing is drawn at all when the fill is transparent
                 and there is no outline.
 */
 void Row::renderBackground(float scale) {
@@ -625,12 +615,6 @@ void Row::renderBackground(float scale) {
 
     const Color bg = m_uiloRef->getPalette().resolve(
         m_options.getColorRole(), m_options.getColor());
-
-    const Material& mat = m_modifier.getMaterial();
-    if (mat.kind != Material::Kind::None) {
-        m_uiloRef->getRenderer().drawGlass(m_bounds, mat, bg);
-        return;
-    }
 
     float r = m_options.getRounding() * scale;
     const Color ol = m_uiloRef->getPalette().resolve(

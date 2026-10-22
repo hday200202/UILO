@@ -41,9 +41,9 @@ enum class OSTheme { Unknown, Light, Dark };
       it depends on the display the app opened on and can change when the window
       moves between monitors.
     - Identity queries (family, name, architecture) need nothing initialised.
-      Everything under "display" and "system" reads through SDL and is only
-      meaningful once the renderer is up; before that they return the documented
-      fallbacks rather than failing.
+      Everything under "display" and "system" reads through the window system
+      and is only meaningful once the renderer is up; before that they return
+      the documented fallbacks rather than failing.
 */
 class OS {
 public:

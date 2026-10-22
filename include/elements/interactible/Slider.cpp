@@ -42,9 +42,7 @@ void Slider::update(Rectf& parentBounds, float /*dt*/) {
     resize(parentBounds);
 
     if (m_dragging) {
-        float mx, my;
-        uint32_t btns = SDL_GetMouseState(&mx, &my);
-        if (!(btns & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+        if (!m_uiloRef || !m_uiloRef->isMouseButtonDown(MouseButton::Left)) {
             m_dragging = false;
         } else {
             const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
@@ -178,7 +176,7 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     if (!m_bounds.contains(mousePosition)) return false;
 
     /* Double click within the usual window restores the default. */
-    const uint64_t now = SDL_GetTicks();
+    const uint64_t now = steadyMillis();
     const bool isDouble = (now - m_lastClickMs) < 350;
     m_lastClickMs = now;
 
