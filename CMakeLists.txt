@@ -174,6 +174,7 @@ else()
             "-framework GameController"
             "-framework AVFoundation"
             "-framework MetalKit"
+            "-framework Metal"
             "-framework Carbon"
             "-framework CoreHaptics"
             "-framework ForceFeedback"
@@ -349,6 +350,7 @@ if(APPLE)
         "-framework Cocoa"
         "-framework CoreFoundation"
         "-framework CoreGraphics"
+        "-framework QuartzCore" # CAMetalLayer used by MacWindow.mm
     )
 elseif(WIN32)
     target_link_libraries(uilo PUBLIC gdi32 user32)
