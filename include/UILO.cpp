@@ -163,6 +163,8 @@ void UILO::setScale(float scale) { if (scale > 0.f) m_scale = scale; }
 void UILO::registerOverlay(Element* e, std::function<void()> onDismiss) {
     for (auto& ov : m_overlays)
         if (ov.element == e) return;
+    if (m_currInteractible && m_currInteractible->getType() == ElementType::Resizer)
+        setCurrInteractible(nullptr);
     m_overlays.push_back({e, std::move(onDismiss)});
 }
 
@@ -253,6 +255,8 @@ bool UILO::isContextMenuOpen() const {
 */
 Element* UILO::addPopupBackdrop(Element* e) {
     if (!e) return nullptr;
+    if (m_currInteractible && m_currInteractible->getType() == ElementType::Resizer)
+        setCurrInteractible(nullptr);
     e->setUILO(*this);
     m_backdrops.push_back(e);
     return e;
@@ -426,7 +430,7 @@ void UILO::update() {
        pages, or hides an element is reflected in this frame's tree walk. */
     const bool keyboardOwnedByWidget =
         m_currInteractible && m_currInteractible->wantsTextInput();
-    m_keybinds.update(!keyboardOwnedByWidget);
+    m_keybinds.update(!keyboardOwnedByWidget && m_overlays.empty() && m_backdrops.empty());
     m_mousebinds.update();
 
     if (!m_activePage) return;
@@ -510,7 +514,13 @@ void UILO::update() {
         if ((*it)->getBounds().contains(mouse)) { hoveredBackdrop = *it; break; }
     }
 
-    const bool backdropConsumedClick = hoveredBackdrop != nullptr;
+    Element* hoveredOverlay = nullptr;
+    for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+        if (it->element->getModifier().getVisible() && it->element->getBounds().contains(mouse)) {
+            hoveredOverlay = it->element;
+            break;
+        }
+    const bool popupOpen = !m_overlays.empty() || hoveredBackdrop != nullptr;
 
     /* A resizer drag owns the pointer. Everything else is told the cursor is
        nowhere, so an element under it neither lights up nor keeps a hover it
@@ -522,7 +532,7 @@ void UILO::update() {
 
     static constexpr Vec2f kNowhere{-1e9f, -1e9f};
 
-    if (draggingResizer) {
+    if (draggingResizer && !popupOpen) {
         for (auto* r : m_resizers)
             if (r != draggingResizer) r->checkHover(kNowhere);
         draggingResizer->checkHover(mouse);
@@ -530,13 +540,7 @@ void UILO::update() {
         for (Element* backdrop : m_backdrops) backdrop->checkHover(kNowhere);
         root->checkHover(kNowhere);
     } else {
-        for (auto* r : m_resizers) r->checkHover(mouse);
-
-        /* Topmost overlay under the pointer: later registrations draw over
-           earlier ones, so the search runs backwards. */
-        Element* hoveredOverlay = nullptr;
-        for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
-            if (it->element->getBounds().contains(mouse)) { hoveredOverlay = it->element; break; }
+        for (auto* r : m_resizers) r->checkHover(popupOpen ? kNowhere : mouse);
 
         /* Every layer is visited, and each one the pointer is not on is told it
            is nowhere. Skipping them instead would leave a widget the pointer has
@@ -548,7 +552,7 @@ void UILO::update() {
         for (Element* backdrop : m_backdrops)
             backdrop->checkHover(!covered && backdrop == hoveredBackdrop ? mouse : kNowhere);
 
-        root->checkHover(covered || hoveredBackdrop ? kNowhere : mouse);
+        root->checkHover(popupOpen ? kNowhere : mouse);
     }
 
     if (m_pendingCursor != m_activeCursor) {
@@ -556,45 +560,59 @@ void UILO::update() {
         m_activeCursor = m_pendingCursor;
     }
 
-    if (leftPressed && !backdropConsumedClick) {
+    // Popup layers own a press before page-level handles, matching draw order.
+    auto overlayAt = [&](const Vec2f& pos) -> Element* {
+        for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
+            if (it->element->getModifier().getVisible() && it->element->getBounds().contains(pos))
+                return it->element;
+        return nullptr;
+    };
+    auto backdropAt = [&](const Vec2f& pos) -> Element* {
+        for (auto it = m_backdrops.rbegin(); it != m_backdrops.rend(); ++it)
+            if ((*it)->getModifier().getVisible() && (*it)->getBounds().contains(pos)) return *it;
+        return nullptr;
+    };
+    auto dismissOverlays = [&] {
+        auto copy = m_overlays;
+        m_overlays.clear();
+        for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
+    };
+
+    if (leftPressed) {
         m_interactibleActivatedThisFrame = false;
-
-        bool resizerClicked = false;
-        for (auto* r : m_resizers) {
-            if (r->getBounds().contains(pressPos)) {
-                r->checkLeftClick(pressPos);
-                resizerClicked = true;
-                break;
+        if (Element* overlay = overlayAt(pressPos)) {
+            overlay->checkLeftClick(pressPos);
+        } else if (!m_overlays.empty()) {
+            // An outside press dismisses the menu without resizing the page beneath.
+            dismissOverlays();
+            setCurrInteractible(nullptr);
+        } else if (Element* backdrop = backdropAt(pressPos)) {
+            backdrop->checkLeftClick(pressPos);
+        } else {
+            bool resizerClicked = false;
+            for (auto* r : m_resizers) {
+                if (r->getBounds().contains(pressPos) && r->checkLeftClick(pressPos)) {
+                    resizerClicked = true;
+                    break;
+                }
             }
-        }
-
-        if (!resizerClicked) {
-            Element* clickedOverlay = nullptr;
-            for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
-                if (it->element->getBounds().contains(pressPos)) { clickedOverlay = it->element; break; }
-
-            if (clickedOverlay) clickedOverlay->checkLeftClick(pressPos);
-            else {
-                auto copy = m_overlays;
-                m_overlays.clear();
-                for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
+            if (!resizerClicked) {
                 root->checkLeftClick(pressPos);
                 if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
             }
         }
-    } else if (leftPressed && hoveredBackdrop) {
-        m_interactibleActivatedThisFrame = false;
-        hoveredBackdrop->checkLeftClick(pressPos);
     }
     if (rightPressed) {
         m_interactibleActivatedThisFrame = false;
-        if (!m_overlays.empty()) {
-            auto copy = m_overlays;
-            m_overlays.clear();
-            for (auto& ov : copy) if (ov.onDismiss) ov.onDismiss();
+        if (Element* overlay = overlayAt(pressPos)) {
+            overlay->checkRightClick(pressPos);
+        } else if (!m_overlays.empty()) {
+            dismissOverlays();
+        } else if (Element* backdrop = backdropAt(pressPos)) {
+            backdrop->checkRightClick(pressPos);
+        } else {
+            root->checkRightClick(pressPos);
         }
-        if (hoveredBackdrop) hoveredBackdrop->checkRightClick(pressPos);
-        else                        root->checkRightClick(pressPos);
         if (!m_interactibleActivatedThisFrame) setCurrInteractible(nullptr);
     }
 
@@ -609,16 +627,16 @@ void UILO::update() {
     render():
     - Params:   none
     - Returns:  void
-    - Desc:     Draws the active page, then floating elements, overlays, and
-                resizers in back-to-front order.
+    - Desc:     Draws the active page and its resizers, then popup backdrops
+                and overlays in back-to-front order.
 */
 void UILO::render() {
     if (!m_activePage) return;
 
     m_activePage->render();
+    for (auto* r : m_resizers) r->render();
     for (Element* backdrop : m_backdrops) backdrop->render();
     for (auto& ov : m_overlays) ov.element->render();
-    for (auto* r : m_resizers)  r->render();
 }
 
 
@@ -720,7 +738,13 @@ void UILO::dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool mome
     for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
         if (it->element->getBounds().contains(pos)) { scrollOverlay = it->element; break; }
     if (scrollOverlay) scrollOverlay->checkScroll(pos, delta, precise, momentum);
-    else               m_activePage->m_rootContainer->checkScroll(pos, delta, precise, momentum);
+    else if (m_overlays.empty()) {
+        Element* backdrop = nullptr;
+        for (auto it = m_backdrops.rbegin(); it != m_backdrops.rend(); ++it)
+            if ((*it)->getModifier().getVisible() && (*it)->getBounds().contains(pos)) { backdrop = *it; break; }
+        if (backdrop) backdrop->checkScroll(pos, delta, precise, momentum);
+        else m_activePage->m_rootContainer->checkScroll(pos, delta, precise, momentum);
+    }
     m_inMomentumScroll = false;
 }
 
@@ -739,7 +763,13 @@ void UILO::dispatchZoom(const Vec2f& pos, float magnification) {
     for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
         if (it->element->getBounds().contains(pos)) { overlay = it->element; break; }
     if (overlay) overlay->checkZoom(pos, magnification);
-    else         m_activePage->m_rootContainer->checkZoom(pos, magnification);
+    else if (m_overlays.empty()) {
+        Element* backdrop = nullptr;
+        for (auto it = m_backdrops.rbegin(); it != m_backdrops.rend(); ++it)
+            if ((*it)->getModifier().getVisible() && (*it)->getBounds().contains(pos)) { backdrop = *it; break; }
+        if (backdrop) backdrop->checkZoom(pos, magnification);
+        else m_activePage->m_rootContainer->checkZoom(pos, magnification);
+    }
 }
 
 
@@ -779,6 +809,10 @@ bool UILO::wantsScrollMomentum(const Vec2f& pos) const {
     Element* root = nullptr;
     for (auto it = m_overlays.rbegin(); it != m_overlays.rend(); ++it)
         if (it->element->getBounds().contains(pos)) { root = it->element; break; }
+    if (!root && !m_overlays.empty()) return false;
+    if (!root)
+        for (auto it = m_backdrops.rbegin(); it != m_backdrops.rend(); ++it)
+            if ((*it)->getModifier().getVisible() && (*it)->getBounds().contains(pos)) { root = *it; break; }
     if (!root && m_activePage) root = m_activePage->m_rootContainer;
     if (!root) return false;
 

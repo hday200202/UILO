@@ -99,8 +99,8 @@ private:
                 invisible to layout -- its siblings are placed as though it were
                 not there, and it sits at the boundary between them -- so adding
                 one never shifts the arrangement. It draws through UILO's post-
-                render pass, which puts it on top of everything including the
-                neighbours it straddles.
+                render pass, which puts it above the page neighbours it straddles,
+                but below popup backdrops and menus.
     - The target and the container bounds are pushed in by Row and Column during
       layout rather than looked up here, because only the parent knows which
       sibling is adjacent once invisible children have been skipped.
