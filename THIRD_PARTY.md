@@ -60,3 +60,12 @@ subdirectory:
 
 The Wt backend is opt-in (`-DUILO_WT=ON`) and is not part of a default build. If
 you enable it, its licence applies to what you ship.
+
+### Private libdecor core on Linux
+
+On systems with libdecor 0.2.5, CMake can build a private core from upstream commit
+`149c6f0b05663aaa69fdf7f94be2483776d1a311`, with the GNOME configure-coalescing
+patch in `cmake/patches/libdecor-gnome-resize.patch`. This component is MIT
+licensed. Its source and copyright notices are downloaded into the build's
+`_deps/uilo_decor_source-src` directory; include its `LICENSE` when redistributing
+the shared library. System libdecor decoration plugins remain system components.

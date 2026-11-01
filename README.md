@@ -58,6 +58,34 @@ Examples build into `examples/bin/`. Run them **from `examples/`**, since a few 
 cd examples && ./bin/containers
 ```
 
+### GNOME / Wayland
+
+On GNOME, SDL uses libdecor's GTK plugin for the native title bar. GTK's base
+theme and the desktop's dark preference both matter: use the base `Adwaita`
+theme with `prefer-dark`. On some installations, the theme name `Adwaita-dark`
+falls back to a light style. UILO's content palette is controlled separately by
+the app.
+
+With system libdecor 0.2.5, Linux builds fetch a pinned, patched core that
+coalesces obsolete GNOME resize configurations before redrawing decorations.
+It uses the existing system decoration plugin. This avoids the event-polling
+stalls from drawing every queued intermediate size, and requires no environment
+override or system-library replacement. CMake links the private core
+automatically; distribute its `gnome-decor/libdecor-0.so.0.200.5` with applications
+using this build configuration. Set `-DUILO_GNOME_RESIZE_FIX=OFF` to use the system
+core. The build needs pkg-config, libdecor/Wayland development files, `patch`,
+and `wayland-scanner`.
+
+The containers example toggles requested VSync with **V**. Vulkan uses FIFO when
+enabled, and tries IMMEDIATE, then MAILBOX, then FIFO when disabled. During a
+Wayland resize it temporarily prefers tear-free MAILBOX, then restores FIFO
+150 ms after the size settles. The application's VSync preference is preserved.
+The selected
+mode is printed to stderr. MAILBOX permits rendering ahead while the compositor
+still displays frames at the monitor's refresh rate; disabling VSync cannot force
+the compositor to display more frames. If neither alternative is supported, a
+warning explains the FIFO fallback.
+
 ## Hello, UILO
 
 A complete program. UILO owns no window of its own: you create a `Renderer`, hand it to `UILO` along with a root `Page`, and drive the frame yourself.

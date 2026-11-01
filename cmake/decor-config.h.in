@@ -1,0 +1,5 @@
+#define _GNU_SOURCE
+#define VERSION "0.2.5"
+#define LIBDECOR_PLUGIN_API_VERSION 1
+#define HAVE_XDG_SHELL_V6 1
+#define LIBDECOR_PLUGIN_DIR "@_uilo_decor_libdir@/libdecor/plugins-1"
