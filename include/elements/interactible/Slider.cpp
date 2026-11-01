@@ -195,6 +195,10 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
+bool Slider::wantsScrollMomentum() const {
+    return m_uiloRef && !m_uiloRef->getScrollAdjustsControls();
+}
+
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
     - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
@@ -213,6 +217,7 @@ bool Slider::checkScroll(
     bool /*precise*/,
     bool /*momentum*/
 ) {
+    if (m_uiloRef && !m_uiloRef->getScrollAdjustsControls()) return false;
     if (!m_bounds.contains(mousePosition)) return false;
     const float range = m_options.getMax() - m_options.getMin();
     const float step  = m_options.getStep() > 0.f

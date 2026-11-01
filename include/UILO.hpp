@@ -100,6 +100,11 @@ public:
     void dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum = false);
     void dispatchZoom(const Vec2f& pos, float magnification);
     bool wantsScrollMomentum(const Vec2f& pos) const;
+    // Disable wheel/trackpad value changes while retaining click/drag and key input.
+    // Controls then let parent views scroll, including momentum over their bounds.
+    void setScrollAdjustsControls(bool enabled) { m_scrollAdjustsControls = enabled; }
+    bool getScrollAdjustsControls() const { return m_scrollAdjustsControls; }
+
     // Cursor position in render pixels, read live from the window rather than
     // from the once-per-frame cache, so event callbacks that fire mid-frame see
     // where the pointer actually is.
@@ -293,6 +298,7 @@ private:
     bool anyKeyDown() const;
     valo::Window* window() const { return m_renderer ? m_renderer->window() : nullptr; }
 
+    bool m_scrollAdjustsControls = true;
     Theme m_theme;
 
     std::unordered_map<std::string, float> m_scrollLinksX;

@@ -205,6 +205,7 @@ public:
         bool momentum = false
     ) override;
 
+    bool wantsScrollMomentum() const override;
     void onDeactivate() override;
 
     void  setValue(float value);

@@ -57,6 +57,9 @@ public:
     Element* floatingAt(const Vec2f& mousePosition) const;
 
     void addElement(Element* element);
+    // Detaches a child without destroying it; ownership stays with UILO.
+    // Use outside this container's input traversal. erase() remains deferred.
+    void removeElement(Element* element);
     void setUILO(UILO& uiloRef) override;
     void collectResizers(std::vector<Element*>& out) override;
     bool isDirty() const override;

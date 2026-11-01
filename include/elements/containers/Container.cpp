@@ -194,25 +194,23 @@ bool Container::checkHover(const Vec2f& mousePosition) {
                 the first that takes it, and otherwise falls back to the
                 Modifier's onScroll handler. A plain Container does not scroll
                 itself -- Row and Column override this.
-    - A floating child under the pointer swallows the event even when it scrolls
-      nothing, or the view behind it would slide out from under the cursor.
+    - A floating child receives the event instead of its covered siblings. If
+      it declines, scrolling can bubble to the parent (for example when wheel
+      adjustment on a floating slider is disabled).
 */
-bool Container::checkScroll(
-    const Vec2f& mousePosition,
-    float delta,
-    bool precise,
-    bool momentum
-) {
-    if (Element* top = floatingAt(mousePosition)) {
-        top->checkScroll(mousePosition, delta, precise, momentum);
+bool Container::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
+    Element* top = floatingAt(mousePosition);
+    if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
-    }
 
-    for (auto& child : m_children) {
-        if (child->getModifier().isFloating()) continue;
-        if (child->getBounds().contains(mousePosition))
-            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
-    }
+    if (!top)
+        for (auto& child : m_children) {
+            if (child->getModifier().isFloating())
+                continue;
+            if (child->getBounds().contains(mousePosition))
+                if (child->checkScroll(mousePosition, delta, precise, momentum))
+                    return true;
+        }
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta);
@@ -222,7 +220,6 @@ bool Container::checkScroll(
     return false;
 }
 
-
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
     - Params:   const Vec2f& mousePosition, Vec2f delta, bool precise, bool
@@ -230,22 +227,19 @@ bool Container::checkScroll(
     - Returns:  bool -- true when the event was consumed
     - Desc:     The two-axis form of the above, passing the whole delta down.
 */
-bool Container::checkScroll(
-    const Vec2f& mousePosition,
-    Vec2f delta,
-    bool precise,
-    bool momentum
-) {
-    if (Element* top = floatingAt(mousePosition)) {
-        top->checkScroll(mousePosition, delta, precise, momentum);
+bool Container::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
+    Element* top = floatingAt(mousePosition);
+    if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
-    }
 
-    for (auto& child : m_children) {
-        if (child->getModifier().isFloating()) continue;
-        if (child->getBounds().contains(mousePosition))
-            if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
-    }
+    if (!top)
+        for (auto& child : m_children) {
+            if (child->getModifier().isFloating())
+                continue;
+            if (child->getBounds().contains(mousePosition))
+                if (child->checkScroll(mousePosition, delta, precise, momentum))
+                    return true;
+        }
 
     if (m_bounds.contains(mousePosition) && m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta.y);
@@ -254,7 +248,6 @@ bool Container::checkScroll(
 
     return false;
 }
-
 
 /*
     checkZoom(const Vec2f& mousePosition, float magnification):
@@ -420,6 +413,14 @@ void Container::setUILO(UILO& uiloRef) {
 }
 
 
+// Detach without destroying the UILO-owned child or leaving a drag reference.
+void Container::removeElement(Element* element) {
+    m_children.erase(std::remove(m_children.begin(), m_children.end(), element), m_children.end());
+    if (m_dragChild == element) m_dragChild = nullptr;
+    m_dirty = true;
+}
+
+
 /*
     collectResizers(std::vector<Element*>& out):
     - Params:   std::vector<Element*>& out
@@ -427,6 +428,7 @@ void Container::setUILO(UILO& uiloRef) {
     - Desc:     Gathers every Resizer in the subtree. UILO hit-tests them ahead
                 of the tree walk, so it needs them in one flat list.
 */
+
 void Container::collectResizers(std::vector<Element*>& out) {
     for (auto* child : m_children) {
         if (child->getType() == ElementType::Resizer)

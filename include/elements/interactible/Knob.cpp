@@ -279,6 +279,10 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     return true;
 }
 
+bool Knob::wantsScrollMomentum() const {
+    return m_uiloRef && !m_uiloRef->getScrollAdjustsControls();
+}
+
 /*
     checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum):
     - Params:   const Vec2f& mousePosition, float delta, bool precise, bool
@@ -295,6 +299,7 @@ bool Knob::checkScroll(
     bool /*precise*/,
     bool /*momentum*/
 ) {
+    if (m_uiloRef && !m_uiloRef->getScrollAdjustsControls()) return false;
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
     const float r  = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
