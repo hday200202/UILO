@@ -908,33 +908,37 @@ void Column::setZoomY(float z) {
     - A floating child under the pointer takes the event and the column does not
       scroll, so the view does not slide out from under a panel laid over it.
 */
-bool Column::checkScroll(
-    const Vec2f& mousePosition,
-    float delta,
-    bool precise,
-    bool momentum
-) {
-    if (!m_bounds.contains(mousePosition)) return false;
+bool Column::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
+    if (!m_bounds.contains(mousePosition))
+        return false;
 
-    if (Element* top = floatingAt(mousePosition)) {
-        top->checkScroll(mousePosition, delta, precise, momentum);
+    Element* top = floatingAt(mousePosition);
+    if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
-    }
 
     if (m_options.getScrollable()) {
-        for (auto* child : m_children)
-            if (child->getBounds().contains(mousePosition))
-                if (child->checkScroll(mousePosition, delta, precise, momentum)) return true;
+        if (!top)
+            for (auto* child : m_children)
+                if (child->getBounds().contains(mousePosition))
+                    if (child->checkScroll(mousePosition, delta, precise, momentum))
+                        return true;
 
-        if (!canUseLooseScrollBounds(m_options, contentOverflow())) return false;
+        if (!canUseLooseScrollBounds(m_options, contentOverflow()))
+            return false;
 
         applyScrollOffset(m_scrollOffset - delta * scrollStep(precise));
         return true;
     }
 
+    if (top) {
+        if (m_modifier.getOnScroll()) {
+            m_modifier.getOnScroll()(this, delta);
+            return true;
+        }
+        return false;
+    }
     return Container::checkScroll(mousePosition, delta, precise, momentum);
 }
-
 
 /*
     checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum):
@@ -948,23 +952,22 @@ bool Column::checkScroll(
                 Falls back to the Modifier's onScroll handler when nothing
                 consumed the event.
 */
-bool Column::checkScroll(
-    const Vec2f& mousePosition,
-    Vec2f delta,
-    bool precise,
-    bool momentum
-) {
-    if (!m_bounds.contains(mousePosition)) return false;
+bool Column::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
+    if (!m_bounds.contains(mousePosition))
+        return false;
 
-    if (Element* top = floatingAt(mousePosition)) {
-        top->checkScroll(mousePosition, delta, precise, momentum);
+    Element* top = floatingAt(mousePosition);
+    if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
-    }
 
     bool consumed = false;
-    for (auto* child : m_children)
-        if (child->getBounds().contains(mousePosition))
-            if (child->checkScroll(mousePosition, delta, precise, momentum)) { consumed = true; break; }
+    if (!top)
+        for (auto* child : m_children)
+            if (child->getBounds().contains(mousePosition))
+                if (child->checkScroll(mousePosition, delta, precise, momentum)) {
+                    consumed = true;
+                    break;
+                }
 
     if (m_options.getScrollable() && delta.y != 0.f) {
         if (canUseLooseScrollBounds(m_options, contentOverflow())) {
@@ -980,5 +983,4 @@ bool Column::checkScroll(
 
     return consumed;
 }
-
 }
