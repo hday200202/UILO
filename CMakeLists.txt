@@ -206,6 +206,8 @@ if(NOT EXISTS "${UILO_VALO_DIR}/CMakeLists.txt")
 endif()
 
 set(VALO_SHARED OFF CACHE BOOL "" FORCE)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchValo.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GnomeResize.cmake")
 add_subdirectory("${UILO_VALO_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/valo")
 
 endif() # NOT UILO_WT
@@ -333,6 +335,10 @@ target_include_directories(uilo PRIVATE
 # VALO brings SDL3 with it (PUBLIC on its side), so an application only has to
 # link `uilo`.
 target_link_libraries(uilo PUBLIC VALO::VALO)
+if(TARGET uilo_gnome_decor)
+    target_link_libraries(uilo PUBLIC uilo_gnome_decor)
+    target_compile_definitions(uilo PRIVATE UILO_GNOME_RESIZE_FIX)
+endif()
 
 # The one UI program, compiled to SPIR-V at build time and linked in, so a built
 # application needs no shader files or tools beside it. The software backend

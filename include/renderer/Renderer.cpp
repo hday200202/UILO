@@ -13,6 +13,10 @@
    would drop. */
 VALO_DECLARE_EMBEDDED_SHADERS(uilo)
 
+#if defined(UILO_GNOME_RESIZE_FIX)
+extern "C" void uilo_link_gnome_decor();
+#endif
+
 namespace uilo {
 
 namespace {
@@ -295,6 +299,9 @@ Renderer::~Renderer() { shutdown(); }
 bool Renderer::init(uint32_t width, uint32_t height,
                     const std::string& title, uint8_t msaa) {
     if (m_initialised) return true;
+#if defined(UILO_GNOME_RESIZE_FIX)
+    uilo_link_gnome_decor();
+#endif
     auto& impl = *m_impl;
 
     bool tryVulkan   = false;
@@ -518,7 +525,11 @@ void Renderer::beginFrame() {
 
     const Vec2u sz = getSize();
     if (sz.x != m_lastWidth || sz.y != m_lastHeight) {
-        if (sz.x > 0 && sz.y > 0) impl.valo.resize();
+        /* VALO::beginFrame handles SDL resize events itself. Requesting the
+           same resize here recreates the swapchain twice in one frame, since
+           clearing the base layer can already acquire a swapchain image.
+           Keep the explicit path for size changes without an SDL event. */
+        if (sz.x > 0 && sz.y > 0 && !impl.window->resized()) impl.valo.resize();
         m_lastWidth  = sz.x;
         m_lastHeight = sz.y;
     }

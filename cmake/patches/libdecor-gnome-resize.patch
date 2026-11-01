@@ -1,0 +1,84 @@
+diff --git a/src/libdecor.c b/src/libdecor.c
+index a4c81a7..59bff26 100644
+--- a/src/libdecor.c
++++ b/src/libdecor.c
+@@ -117,6 +117,8 @@ struct libdecor_frame_private {
+ 	} state;
+ 
+ 	struct libdecor_configuration *pending_configuration;
++    struct libdecor_configuration *queued_configuration;
++    struct wl_callback *configure_sync;
+ 
+ 	int content_width;
+ 	int content_height;
+@@ -348,6 +350,20 @@ libdecor_configuration_get_window_state(struct libdecor_configuration *configura
+ 	return true;
+ }
+ 
++static void
++configure_sync_done(void *data, struct wl_callback *callback, uint32_t serial)
++{
++    struct libdecor_frame *frame = data;
++    struct libdecor_frame_private *priv = frame->priv;
++    struct libdecor_configuration *configuration = priv->queued_configuration;
++    wl_callback_destroy(callback);
++    priv->configure_sync = NULL;
++    priv->queued_configuration = NULL;
++    priv->iface->configure(frame, configuration, priv->user_data);
++    libdecor_configuration_free(configuration);
++}
++static const struct wl_callback_listener configure_sync_listener = { configure_sync_done };
++
+ static void
+ xdg_surface_configure(void *user_data,
+ 		      struct xdg_surface *xdg_surface,
+@@ -365,11 +381,34 @@ xdg_surface_configure(void *user_data,
+ 
+ 	configuration->serial = serial;
+ 
+-	frame_priv->iface->configure(frame,
+-				     configuration,
+-				     frame_priv->user_data);
+-
+-	libdecor_configuration_free(configuration);
++    const char *desktop = getenv("XDG_CURRENT_DESKTOP");
++    if (!desktop || !strstr(desktop, "GNOME")) {
++        frame_priv->iface->configure(frame, configuration, frame_priv->user_data);
++        libdecor_configuration_free(configuration);
++        return;
++    }
++
++    /* The compositor may queue several sizes while the client is rendering.
++     * Keep the latest serial/size and redraw decorations once per roundtrip,
++     * instead of drawing every obsolete intermediate size synchronously. */
++    struct libdecor_configuration *previous = frame_priv->queued_configuration;
++    if (previous) {
++        if (!configuration->has_size && previous->has_size) {
++            configuration->has_size = true;
++            configuration->window_width = previous->window_width;
++            configuration->window_height = previous->window_height;
++        }
++        if (!configuration->has_window_state && previous->has_window_state) {
++            configuration->has_window_state = true;
++            configuration->window_state = previous->window_state;
++        }
++        libdecor_configuration_free(previous);
++    }
++    frame_priv->queued_configuration = configuration;
++    if (!frame_priv->configure_sync) {
++        frame_priv->configure_sync = wl_display_sync(frame_priv->context->wl_display);
++        wl_callback_add_listener(frame_priv->configure_sync, &configure_sync_listener, frame);
++    }
+ }
+ 
+ static const struct xdg_surface_listener xdg_surface_listener = {
+@@ -633,6 +672,9 @@ libdecor_frame_unref(struct libdecor_frame *frame)
+ 			xdg_toplevel_destroy(frame_priv->xdg_toplevel);
+ 		if (frame_priv->xdg_surface)
+ 			xdg_surface_destroy(frame_priv->xdg_surface);
++        if (frame_priv->configure_sync)
++            wl_callback_destroy(frame_priv->configure_sync);
++        free(frame_priv->queued_configuration);
+ 
+ 		plugin->priv->iface->frame_free(plugin, frame);
+ 

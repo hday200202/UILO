@@ -1,0 +1,217 @@
+diff --git a/include/render/vulkan/VulkanRenderer.cpp b/include/render/vulkan/VulkanRenderer.cpp
+index a3491d0..8a81812 100644
+--- a/include/render/vulkan/VulkanRenderer.cpp
++++ b/include/render/vulkan/VulkanRenderer.cpp
+@@ -9,6 +9,7 @@
+ #include <cstring>
+ #include <filesystem>
+ #include <fstream>
++#include <SDL3/SDL_video.h>
+ 
+ #include <stb_image.h>
+ 
+@@ -29,6 +30,11 @@ bool VulkanRenderer::initDevice(Window& window, const uint32_t framesInFlight, c
+ bool VulkanRenderer::beginFrameIfNeeded() {
+     if (m_frameOpen) return true;
+ 
++    if (m_liveResizing && std::chrono::steady_clock::now() >= m_resizeUntil) {
++        m_liveResizing = false;
++        m_needsRecreate = true;
++    }
++
+     const VkDevice device = m_ctx.device();
+     const uint32_t frame = m_frameIndex;
+ 
+@@ -637,8 +643,7 @@ bool VulkanRenderer::recreateSwapchain() {
+ 
+     const uint32_t oldImageCount = m_swapchain.imageCount();
+ 
+-    m_swapchain.shutdown();
+-    if (!m_swapchain.init(m_ctx, m_window->getSize(), m_owner->m_cfg.vsync, m_owner->m_cfg.srgbBackbuffer)) {
++    if (!m_swapchain.init(m_ctx, m_window->getSize(), m_owner->m_cfg.vsync, m_owner->m_cfg.srgbBackbuffer, m_liveResizing)) {
+         std::fprintf(stderr, "[vulkan] swapchain recreate failed\n");
+         return false;
+     }
+@@ -2820,6 +2825,13 @@ void VulkanRenderer::releaseProgram(const ProgramID id) {
+ 
+ void VulkanRenderer::resize(const uint32_t w, const uint32_t h) {
+     (void)w; (void)h;
++    // Keep Wayland resize feedback moving without enabling tearing. Restore
++    // FIFO once the size settles; the application's VSync preference is intact.
++    const char* driver = SDL_GetCurrentVideoDriver();
++    if (driver && std::strcmp(driver, "wayland") == 0) {
++        m_liveResizing = true;
++        m_resizeUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
++    }
+     m_needsRecreate = true;
+ }
+ 
+@@ -2848,4 +2860,4 @@ uint32_t VulkanRenderer::height() const {
+ 
+ } // namespace valo
+ 
+-#endif // VALO_HAS_VULKAN
+\ No newline at end of file
++#endif // VALO_HAS_VULKAN
+diff --git a/include/render/vulkan/VulkanRenderer.hpp b/include/render/vulkan/VulkanRenderer.hpp
+index d2a6e63..81b6bab 100644
+--- a/include/render/vulkan/VulkanRenderer.hpp
++++ b/include/render/vulkan/VulkanRenderer.hpp
+@@ -2,6 +2,8 @@
+ 
+ #ifdef VALO_HAS_VULKAN
+ 
++#include <chrono>
++
+ #include "VulkanContext.hpp"
+ #include "VulkanSwapchain.hpp"
+ #include "VulkanFrames.hpp"
+@@ -273,6 +275,8 @@ private:
+     RenderTargetID                  m_scaledBackbuffer      = 0;
+     float                           m_appliedScale          = 1.f;
+     bool                            m_needsRecreate         = false;
++    bool                            m_liveResizing          = false;
++    std::chrono::steady_clock::time_point m_resizeUntil{};
+ 
+     uint32_t                        m_pushConstantSize      = 0;
+     std::vector<ProgramID>          m_oversizedUniforms;    // reported once each
+@@ -396,4 +400,4 @@ inline constexpr uint32_t samplerIndex(const Wrap u, const Wrap v, const Filter
+ 
+ } // namespace valo
+ 
+-#endif // VALO_HAS_VULKAN
+\ No newline at end of file
++#endif // VALO_HAS_VULKAN
+diff --git a/include/render/vulkan/VulkanSwapchain.cpp b/include/render/vulkan/VulkanSwapchain.cpp
+index baf3c84..b0b6a79 100644
+--- a/include/render/vulkan/VulkanSwapchain.cpp
++++ b/include/render/vulkan/VulkanSwapchain.cpp
+@@ -31,8 +31,8 @@ VkSurfaceFormatKHR chooseFormat(VkPhysicalDevice phys, VkSurfaceKHR surface, con
+     return formats[0];
+ }
+ 
+-VkPresentModeKHR choosePresentMode(VkPhysicalDevice phys, VkSurfaceKHR surface, const bool vsync) {
+-    if (vsync) return VK_PRESENT_MODE_FIFO_KHR;
++VkPresentModeKHR choosePresentMode(VkPhysicalDevice phys, VkSurfaceKHR surface, const bool vsync, const bool liveResize) {
++    if (vsync && !liveResize) return VK_PRESENT_MODE_FIFO_KHR;
+ 
+     uint32_t n = 0;
+     vkGetPhysicalDeviceSurfacePresentModesKHR(phys, surface, &n, nullptr);
+@@ -40,30 +40,38 @@ VkPresentModeKHR choosePresentMode(VkPhysicalDevice phys, VkSurfaceKHR surface,
+     vkGetPhysicalDeviceSurfacePresentModesKHR(phys, surface, &n, modes.data());
+ 
+     for (auto m : modes)
+-        if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) return m;
++        if (!vsync && m == VK_PRESENT_MODE_IMMEDIATE_KHR) return m;
+ 
++    // Wayland may offer MAILBOX without IMMEDIATE. It permits rendering
++    // ahead of the display without tearing instead of throttling via FIFO.
++    for (auto m : modes)
++        if (m == VK_PRESENT_MODE_MAILBOX_KHR) return m;
++
++    if (!vsync)
++        std::fprintf(stderr, "[vulkan] VSync off requested, but neither IMMEDIATE nor MAILBOX is available\n");
+     return VK_PRESENT_MODE_FIFO_KHR;
+ }
+ 
+ } // namespace
+ 
+-bool VulkanSwapchain::init(VulkanContext& ctx, const Vec2u& size, const bool vsync, const bool srgb) {
++bool VulkanSwapchain::init(VulkanContext& ctx, const Vec2u& size, const bool vsync, const bool srgb, const bool liveResize) {
+     m_ctx = &ctx;
+ 
+     VkSurfaceCapabilitiesKHR caps{};
+     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.physicalDevice(), ctx.surface(), &caps);
+ 
+     const VkSurfaceFormatKHR surfaceFormat = chooseFormat(ctx.physicalDevice(), ctx.surface(), srgb);
+-    const VkPresentModeKHR presentMode = choosePresentMode(ctx.physicalDevice(), ctx.surface(), vsync);
++    const VkPresentModeKHR presentMode = choosePresentMode(ctx.physicalDevice(), ctx.surface(), vsync, liveResize);
+ 
++    VkExtent2D extent{};
+     if (caps.currentExtent.width != UINT32_MAX)
+-        m_extent = caps.currentExtent;
++        extent = caps.currentExtent;
+     else {
+-        m_extent.width = std::clamp(size.x, caps.minImageExtent.width, caps.maxImageExtent.width);
+-        m_extent.height = std::clamp(size.y, caps.minImageExtent.height, caps.maxImageExtent.height);
++        extent.width = std::clamp(size.x, caps.minImageExtent.width, caps.maxImageExtent.width);
++        extent.height = std::clamp(size.y, caps.minImageExtent.height, caps.maxImageExtent.height);
+     }
+ 
+-    if (m_extent.width == 0 || m_extent.height == 0) return false;
++    if (extent.width == 0 || extent.height == 0) return false;
+ 
+     uint32_t imageCount = caps.minImageCount + 1;
+     if (caps.maxImageCount > 0)
+@@ -78,7 +86,7 @@ bool VulkanSwapchain::init(VulkanContext& ctx, const Vec2u& size, const bool vsy
+         .minImageCount          = imageCount,
+         .imageFormat            = surfaceFormat.format,
+         .imageColorSpace        = surfaceFormat.colorSpace,
+-        .imageExtent            = m_extent,
++        .imageExtent            = extent,
+         .imageArrayLayers       = 1,
+         .imageUsage             = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT 
+                                 | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+@@ -89,14 +97,23 @@ bool VulkanSwapchain::init(VulkanContext& ctx, const Vec2u& size, const bool vsy
+         .compositeAlpha         = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+         .presentMode            = presentMode,
+         .clipped                = VK_TRUE,
+-        .oldSwapchain           = VK_NULL_HANDLE
++        .oldSwapchain           = m_swapchain
+     };
+ 
+-    if (vkCreateSwapchainKHR(ctx.device(), &ci, nullptr, &m_swapchain) != VK_SUCCESS) {
++    VkSwapchainKHR replacement = VK_NULL_HANDLE;
++    if (vkCreateSwapchainKHR(ctx.device(), &ci, nullptr, &replacement) != VK_SUCCESS) {
+         std::fprintf(stderr, "[vulkan] vkCreateSwapchainKHR failed\n");
+         return false;
+     }
+ 
++    // Establish the replacement before retiring the old presentation buffers.
++    // Destroying the old chain first can stall Wayland waiting for the
++    // compositor to release the last displayed frame during a live resize.
++    shutdown();
++    m_ctx = &ctx;
++    m_swapchain = replacement;
++    m_extent = extent;
++
+     m_format = surfaceFormat.format;
+ 
+     uint32_t n = 0;
+@@ -130,7 +147,8 @@ bool VulkanSwapchain::init(VulkanContext& ctx, const Vec2u& size, const bool vsy
+     std::fprintf(
+         stderr, "[vulkan] swapchain %ux%u, %u images, %s\n",
+         m_extent.width, m_extent.height, n,
+-        presentMode == VK_PRESENT_MODE_FIFO_KHR ? "FIFO" : "IMMEDIATE"
++        presentMode == VK_PRESENT_MODE_FIFO_KHR ? "FIFO" :
++        presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX" : "IMMEDIATE"
+     );
+     
+     return true;
+@@ -155,4 +173,4 @@ void VulkanSwapchain::shutdown() {
+ 
+ } // namespace valo
+ 
+-#endif // VALO_HAS_VULKAN
+\ No newline at end of file
++#endif // VALO_HAS_VULKAN
+diff --git a/include/render/vulkan/VulkanSwapchain.hpp b/include/render/vulkan/VulkanSwapchain.hpp
+index 776534d..fe69e10 100644
+--- a/include/render/vulkan/VulkanSwapchain.hpp
++++ b/include/render/vulkan/VulkanSwapchain.hpp
+@@ -18,7 +18,7 @@ public:
+     VulkanSwapchain(const VulkanSwapchain&) = delete;
+     VulkanSwapchain& operator=(const VulkanSwapchain&) = delete;
+ 
+-    bool init(VulkanContext& ctx, const Vec2u& size, const bool vsync = true, const bool srgb = false);
++    bool init(VulkanContext& ctx, const Vec2u& size, const bool vsync = true, const bool srgb = false, const bool liveResize = false);
+     void shutdown();
+ 
+     VkSwapchainKHR handle() const { return m_swapchain; }
+@@ -39,4 +39,4 @@ private:
+ 
+ } // namespace valo
+ 
+-#endif // VALO_HAS_VULKAN
+\ No newline at end of file
++#endif // VALO_HAS_VULKAN
