@@ -258,6 +258,7 @@ public:
     ColumnOptions&       getOptions()       { return m_options; }
     void                 setOptions(const ColumnOptions& opts);
     void                 setScrollOffset(float offset);
+    void                 scrollIntoView(const Rectf& bounds);
 
     void update(Rectf& parentBounds, float dt) override;
     void render() override;

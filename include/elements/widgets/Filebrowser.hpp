@@ -626,6 +626,10 @@ public:
     const fs::path& getSelectedPath() const { return m_selectedPath; }
     void setSelectedPath(const fs::path& path);
     void clearSelection();
+    // Select the next visible row without expanding folders or firing mouse activation.
+    bool navigateSelection(int direction);
+    bool expandSelection();
+    bool collapseSelection();
 
     void markForRebuild() { m_needsRebuild = true; }
 
@@ -661,6 +665,10 @@ private:
     void               sortEntries(std::vector<FSEntry*>& entries) const;
     void               handleEntryClicked(const fs::path& path, bool isDirectory);
 
+    struct EntryRow { fs::path path;Element* row;bool directory; };
+    std::vector<EntryRow> m_entryRows;
+    bool m_revealSelection=false;
+    void revealSelection();
     FileBrowserOptions              m_fbOptions;
     std::optional<FileTree> m_tree;
     std::unordered_set<std::string> m_expanded;

@@ -192,6 +192,18 @@ void Column::applyScrollOffset(float target) {
                 height rather than the scrolling viewport, so it can be called
                 before the first layout pass has run.
 */
+void Column::scrollIntoView(const Rectf& bounds) {
+    if (!m_options.getScrollable() || m_scrollViewportHeight <= 0.f)
+        return;
+    float target = m_scrollOffset;
+    if (bounds.position.y < m_scrollViewportY)
+        target += bounds.position.y - m_scrollViewportY;
+    else if (bounds.position.y + bounds.size.y > m_scrollViewportY + m_scrollViewportHeight)
+        target += bounds.position.y + bounds.size.y - m_scrollViewportY - m_scrollViewportHeight;
+    if (target != m_scrollOffset)
+        applyScrollOffset(target);
+}
+
 void Column::setScrollOffset(float offset) {
     const float contentMax = std::max(0.f, m_contentHeight - m_bounds.size.y);
     float minScroll = 0.f;
