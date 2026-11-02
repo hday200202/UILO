@@ -136,10 +136,16 @@ void FileBrowser::applyPanelOptions() {
                 handler would invalidate the iteration in progress.
 */
 void FileBrowser::update(Rectf& parentBounds, float dt) {
-    if (m_needsRebuild) rebuildRows();
+    if (m_needsRebuild)
+        rebuildRows();
+    auto area = parentBounds;
     Column::update(parentBounds, dt);
+    if (m_revealSelection) {
+        m_revealSelection = false;
+        revealSelection();
+        Column::update(area, 0.f);
+    }
 }
-
 
 /*
     setRootPath(const fs::path& path):
@@ -269,6 +275,67 @@ void FileBrowser::setSelectedPath(const fs::path& path) {
     m_needsRebuild = true;
 }
 
+bool FileBrowser::navigateSelection(int direction) {
+    if (!direction || m_entryRows.empty())
+        return false;
+    auto it = std::find_if(m_entryRows.begin(), m_entryRows.end(),
+                           [&](const auto& row) { return row.path == m_selectedPath; });
+    const auto current = it - m_entryRows.begin();
+    const auto index = it == m_entryRows.end()
+                           ? (direction > 0 ? 0 : std::ptrdiff_t(m_entryRows.size() - 1))
+                           : std::clamp(current + (direction > 0 ? 1 : -1), std::ptrdiff_t(0),
+                                        std::ptrdiff_t(m_entryRows.size() - 1));
+    const auto path = m_entryRows[size_t(index)].path;
+    if (path == m_selectedPath) {
+        m_revealSelection = true;
+        return false;
+    }
+    setSelectedPath(path);
+    m_revealSelection = true;
+    if (m_fbOptions.getOnEntrySelected())
+        m_fbOptions.getOnEntrySelected()(path);
+    return true;
+}
+bool FileBrowser::expandSelection() {
+    auto it = std::find_if(m_entryRows.begin(), m_entryRows.end(),
+                           [&](const auto& row) { return row.path == m_selectedPath; });
+    if (it == m_entryRows.end() || !it->directory)
+        return false;
+    if (isExpanded(it->path)) {
+        auto next = it + 1;
+        return next != m_entryRows.end() && next->path.parent_path() == it->path ? navigateSelection(1)
+                                                                                 : false;
+    }
+    expandPath(it->path);
+    m_revealSelection = true;
+    return true;
+}
+bool FileBrowser::collapseSelection() {
+    if (m_selectedPath.empty())
+        return false;
+    if (isExpanded(m_selectedPath)) {
+        collapsePath(m_selectedPath);
+        m_revealSelection = true;
+        return true;
+    }
+    const auto parent = m_selectedPath.parent_path();
+    auto it = std::find_if(m_entryRows.begin(), m_entryRows.end(),
+                           [&](const auto& row) { return row.path == parent; });
+    if (it == m_entryRows.end())
+        return false;
+    setSelectedPath(parent);
+    m_revealSelection = true;
+    if (m_fbOptions.getOnEntrySelected())
+        m_fbOptions.getOnEntrySelected()(parent);
+    return true;
+}
+void FileBrowser::revealSelection() {
+    const auto it = std::find_if(m_entryRows.begin(), m_entryRows.end(),
+                                 [&](const auto& row) { return row.path == m_selectedPath; });
+    if (it == m_entryRows.end())
+        return;
+    scrollIntoView(it->row->getBounds());
+}
 
 /*
     clearSelection():
@@ -317,6 +384,7 @@ void FileBrowser::handleEntryClicked(const fs::path& path, bool isDirectory) {
                 child list.
 */
 void FileBrowser::clearRows() {
+    m_entryRows.clear();
     for (auto* child : m_children) eraseSubtree(child);
     m_children.clear();
     m_dirty = true;
@@ -778,6 +846,7 @@ Element* FileBrowser::buildRow(FSEntry* entry, int depth) {
 
     auto* row = new Row(rowModifier, rowOpts, contains{});
     for (Element* child : children) row->addElement(child);
+    m_entryRows.push_back({path,row,isDir});
     return row;
 }
 
