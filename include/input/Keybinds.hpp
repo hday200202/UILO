@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Input.hpp"
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <string>
@@ -18,6 +21,10 @@ namespace uilo {
     - bindAction(name, key(s), callback, onPressOnly)
         onPressOnly = true  -> fires once on the press edge
         onPressOnly = false -> fires every frame the key is held
+    - setActionRepeat(name, enabled, delayMs, intervalMs)
+        Opt-in timed repeat: fire on press, wait (400ms by default), then repeat
+        every 65ms. This replaces per-frame dispatch for that action. Suppressing
+        dispatch cancels repeat until the key is released and pressed again.
       Several keys bound to one action behave as "any of these", so
       { Key::Equals, Key::KpPlus } is a single action.
     - update() is driven by UILO::update(); an application only binds and
@@ -35,6 +42,10 @@ public:
         std::vector<Key> keys;
         ActionCallback   callback;
         bool             onPressOnly = false;
+        bool             repeat = false;
+        std::chrono::milliseconds repeatDelay{400}, repeatInterval{65};
+        bool             repeatArmed = false;
+        std::chrono::steady_clock::time_point nextRepeat{};
     };
 
     void setWindow(const valo::Window* window) { m_window = window; }
@@ -56,6 +67,18 @@ public:
         bool onPressOnly = false
     ) {
         bindAction(name, { key }, std::move(callback), onPressOnly);
+    }
+
+    bool setActionRepeat(const std::string& name, bool enabled = true,
+                         uint32_t delayMs = 400, uint32_t intervalMs = 65) {
+        auto it = m_actions.find(name);
+        if (it == m_actions.end()) return false;
+        auto& action = it->second;
+        action.repeat = enabled;
+        action.repeatDelay = std::chrono::milliseconds(delayMs);
+        action.repeatInterval = std::chrono::milliseconds(std::max(1u, intervalMs));
+        action.repeatArmed = false;
+        return true;
     }
 
     void unbindAction(const std::string& name) { m_actions.erase(name); }
@@ -81,21 +104,33 @@ public:
     void update(bool dispatch = true) {
         if (!m_window) return;
 
-        if (dispatch) {
-            for (auto& [name, action] : m_actions) {
-                (void)name;
-                bool isDown  = false;
-                bool wasDown = false;
-
-                for (auto key : action.keys) {
-                    if (m_window->isKeyDown(key)) isDown = true;
-                    auto prev = m_prevState.find(key);
-                    if (prev != m_prevState.end() && prev->second) wasDown = true;
-                }
-
-                if (isDown && action.callback && (!action.onPressOnly || !wasDown))
-                    action.callback();
+        const auto now = std::chrono::steady_clock::now();
+        for (auto& [name, action] : m_actions) {
+            (void)name;
+            bool isDown = false, wasDown = false;
+            for (auto key : action.keys) {
+                if (m_window->isKeyDown(key)) isDown = true;
+                auto prev = m_prevState.find(key);
+                if (prev != m_prevState.end() && prev->second) wasDown = true;
             }
+            if (!dispatch || !isDown) {
+                action.repeatArmed = false;
+                continue;
+            }
+            bool fire = !wasDown;
+            if (action.repeat) {
+                if (!wasDown) {
+                    action.repeatArmed = true;
+                    action.nextRepeat = now + action.repeatDelay;
+                } else if (action.repeatArmed && now >= action.nextRepeat) {
+                    fire = true;
+                    // Do not catch up missed ticks in a burst after a slow frame.
+                    action.nextRepeat = now + action.repeatInterval;
+                }
+            } else if (!action.onPressOnly) {
+                fire = true;
+            }
+            if (fire && action.callback) action.callback();
         }
 
         /* Snapshot after every action has been evaluated. */

@@ -997,6 +997,8 @@ std::string Translator::styleFor(const Node& n, PseudoRules& pseudo) {
             case CursorType::SizeVertical:   c = "row-resize"; break;
             case CursorType::Text:           c = "text";       break;
             case CursorType::Crosshair:      c = "crosshair";  break;
+            case CursorType::ResizeStart:    c = "w-resize";   break;
+            case CursorType::ResizeEnd:      c = "e-resize";   break;
         }
         css += std::string("cursor:") + c + ";";
     }

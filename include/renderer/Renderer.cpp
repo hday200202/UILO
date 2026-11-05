@@ -507,6 +507,8 @@ void Renderer::setCursor(CursorType type) {
         case CursorType::SizeVertical:   shape = valo::CursorShape::ResizeNS;  break;
         case CursorType::Text:           shape = valo::CursorShape::Text;      break;
         case CursorType::Crosshair:      shape = valo::CursorShape::Crosshair; break;
+        case CursorType::ResizeStart:    shape = valo::CursorShape::ResizeStart; break;
+        case CursorType::ResizeEnd:      shape = valo::CursorShape::ResizeEnd; break;
     }
     m_impl->window->setCursor(shape);
 }
