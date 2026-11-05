@@ -85,6 +85,7 @@ class UILO {
 public:
     UILO();
     UILO(Renderer& renderer, Page* page);
+    ~UILO();
 
     void update();
     void render();
@@ -104,6 +105,12 @@ public:
     // Controls then let parent views scroll, including momentum over their bounds.
     void setScrollAdjustsControls(bool enabled) { m_scrollAdjustsControls = enabled; }
     bool getScrollAdjustsControls() const { return m_scrollAdjustsControls; }
+    // Opt-in host behavior: hide the pointer for value drags and use Shift for
+    // fine movement in standard controls. Other UILO applications keep defaults.
+    void setValueDragBehavior(bool enabled);
+    bool getValueDragBehavior() const { return m_valueDragBehavior; }
+    void requestValueDrag() { if (m_valueDragBehavior) m_valueDragRequested = true; }
+    bool isValueDragCursorHidden() const { return m_valueDragHidden; }
 
     // Cursor position in render pixels, read live from the window rather than
     // from the once-per-frame cache, so event callbacks that fire mid-frame see
@@ -160,6 +167,11 @@ public:
     void showContextMenu(const std::vector<ContextMenuItem>& items, const Vec2f& at);
     void closeContextMenu();
     bool isContextMenuOpen() const;
+    // Editors can reserve arrow keys for their contents without disabling
+    // pointer scrolling or Page Up/Down navigation.
+    // Native child windows can own input while SDL still reports this window.
+    void setPointerInputFilter(std::function<bool()> allowed) { m_pointerInputFilter = std::move(allowed); }
+    void setArrowKeyScrollingEnabled(bool enabled) { m_arrowKeyScrolling = enabled; }
 
     // Popup infrastructure, not the way to float an ordinary element -- use
     // Modifier::setFloating for that. A backdrop is laid out at window size and
@@ -220,12 +232,17 @@ public:
     void refreshTheme();
 
     void requestCursor(CursorType type, int priority = 0);
+    // A host with non-UILO native windows can leave their OS cursors alone.
+    void setCursorUpdatesEnabled(bool enabled) { m_cursorUpdatesEnabled = enabled; }
 
     float getScrollLinkOffset(const std::string& linkId, bool horizontal) const;
     void  setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal);
     float getZoomLinkValue(const std::string& linkId, bool horizontal) const;
     void  setZoomLinkValue(const std::string& linkId, float zoom, bool horizontal);
 
+    // Owned windows update layout and redraw during native resizing by default.
+    // Override with a complete frame callback for custom drawing/application
+    // visuals. Do not poll events from it. Passing {} restores the default.
     void setOnLiveResize(std::function<void()> cb);
 
     template <typename T> T* getElement(const std::string& name);
@@ -256,6 +273,7 @@ private:
     float m_scale = 1.f;
     float m_deltaTime = 0.f;
     bool  m_running = true;
+    bool  m_arrowKeyScrolling = true;
 
     Timer m_timer;
 
@@ -269,6 +287,7 @@ private:
 
     Renderer* m_renderer = nullptr;
     Vec2u     m_prevWindowSize = {0u, 0u};
+    std::function<bool()> m_pointerInputFilter;
     Vec2f     m_mousePos       = {};
     bool      m_inMomentumScroll = false;
     // Where the in-progress scroll gesture started. Momentum ticks are dispatched
@@ -279,6 +298,7 @@ private:
     bool      m_forceTreeUpdate = false;
 
     std::function<void()> m_onLiveResize;
+    bool m_liveResizeInstalled = false, m_inLiveResize = false;
 
     bool m_prevLeftMouse  = false;
     bool m_prevRightMouse = false;
@@ -299,6 +319,7 @@ private:
     valo::Window* window() const { return m_renderer ? m_renderer->window() : nullptr; }
 
     bool m_scrollAdjustsControls = true;
+    bool m_valueDragBehavior = false, m_valueDragRequested = false, m_valueDragHidden = false;
     Theme m_theme;
 
     std::unordered_map<std::string, float> m_scrollLinksX;
@@ -309,6 +330,7 @@ private:
     CursorType m_pendingCursor         = CursorType::Arrow;
     int        m_pendingCursorPriority = 0;
     CursorType m_activeCursor          = CursorType::Arrow;
+    bool m_cursorUpdatesEnabled = true;
 
     Interactible* m_currInteractible             = nullptr;
     bool          m_interactibleActivatedThisFrame = false;
@@ -328,11 +350,6 @@ private:
                 window to the key and mouse bindings so they can read input
                 from it.
 */
-inline void UILO::setRenderer(Renderer& renderer) {
-    m_renderer = &renderer;
-    m_keybinds.setWindow(renderer.window());
-    m_mousebinds.setWindow(renderer.window());
-}
 
 
 /*

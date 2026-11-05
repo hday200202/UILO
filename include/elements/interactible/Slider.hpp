@@ -226,6 +226,9 @@ private:
     float m_value    = 0.f;
     float m_scrollAccum = 0.f;
     bool  m_dragging = false;
+    bool m_dragMoved = false;
+    Vec2f m_dragLastMouse{};
+    float m_dragValue = 0;
     uint64_t m_lastClickMs = 0;
 };
 

@@ -588,7 +588,7 @@ void setScale(float scale);          // pair with OS::scale()
 void     registerOverlay(Element* e, std::function<void()> onDismiss = {});
 void     unregisterOverlay(Element* e);
 
-void setOnLiveResize(std::function<void()> cb);  // keep drawing during a drag
+void setOnLiveResize(std::function<void()> cb);  // override the default resize frame
 
 float getScale()        const;
 float getDeltaTime()    const;
@@ -597,6 +597,14 @@ float getAvgFrameRate() const;
 Keybinds&   getKeybinds();
 Mousebinds& getMousebinds();
 ```
+
+Owned windows keep updating layout and redrawing during native live resizing by
+default, including the macOS and Windows modal resize loops. Resize frames do
+not dispatch clicks or keyboard shortcuts. Embedded views keep their host's
+frame scheduling. Applications with custom drawing or visual state outside the
+element tree can override `setOnLiveResize()` with a complete update/render
+frame; do not call `pollEvents()` from that callback. Pass `{}` to restore the
+default redraw.
 
 ### Modifier methods
 

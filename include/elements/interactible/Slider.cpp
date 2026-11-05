@@ -48,8 +48,20 @@ void Slider::update(Rectf& parentBounds, float /*dt*/) {
             const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
             if (m_uiloRef) m_uiloRef->requestCursor(
                 isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 2);
-            const Vec2f mouse = m_uiloRef->getMousePosition();
-            applyValue(isHoriz ? valueFromMouseX(mouse.x) : valueFromMouseY(mouse.y));
+            const Vec2f mouse = m_uiloRef->queryMousePixelPosition();
+            const auto delta = mouse - m_dragLastMouse;
+            if (delta.x != 0 || delta.y != 0) m_dragMoved = true;
+            if (m_dragMoved) m_uiloRef->requestValueDrag();
+            if (m_uiloRef->getValueDragBehavior()) {
+                const float travel = isHoriz ? m_bounds.size.x - 2 * resolveThumbHalfWidth()
+                    : m_bounds.size.y - 2 * resolveThumbHalfHeight();
+                const float difference = (isHoriz ? delta.x : -delta.y) / std::max(1.f, travel)
+                    * (m_options.getMax() - m_options.getMin());
+                const float fine = hasMod(m_uiloRef->getKeyModifiers(), KeyMod::Shift) ? .1f : 1.f;
+                m_dragValue = std::clamp(m_dragValue + difference * fine, m_options.getMin(), m_options.getMax());
+                applyValue(m_dragValue);
+            } else applyValue(isHoriz ? valueFromMouseX(mouse.x) : valueFromMouseY(mouse.y));
+            m_dragLastMouse = mouse;
         }
     }
 }
@@ -189,8 +201,10 @@ bool Slider::checkLeftClick(const Vec2f& mousePosition) {
     }
 
     m_dragging = true;
+    m_dragMoved = false; m_dragLastMouse = mousePosition;
     const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
     applyValue(isHoriz ? valueFromMouseX(mousePosition.x) : valueFromMouseY(mousePosition.y));
+    m_dragValue = m_value;
     if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
     return true;
 }

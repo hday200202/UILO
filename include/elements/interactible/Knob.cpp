@@ -108,14 +108,22 @@ void Knob::update(Rectf& parentBounds, float /*dt*/) {
         } else {
             if (m_uiloRef) m_uiloRef->requestCursor(CursorType::SizeVertical, 2);
             const float scale = m_uiloRef ? m_uiloRef->getScale() : 1.f;
-            const float curY  = m_uiloRef->getMousePosition().y;
+            const float curY  = m_uiloRef->queryMousePixelPosition().y;
             const float dy    = m_dragStartY - curY;   /* up = positive */
             const float range = m_options.getMax() - m_options.getMin();
             const float pxPerRange = std::max(1.f, m_options.getDragPixelsPerRange() * scale);
             /* Flip the delta when the arc sweeps clockwise, so dragging up
                always turns the indicator the same way. */
             const float sign = (sweepDegrees() >= 0.f) ? 1.f : -1.f;
-            applyValue(m_dragStartVal + sign * (dy / pxPerRange) * range);
+            const float fine = m_uiloRef->getValueDragBehavior() && hasMod(m_uiloRef->getKeyModifiers(), KeyMod::Shift) ? .1f : 1.f;
+            if (dy != 0) m_dragMoved = true;
+            if (m_dragMoved) m_uiloRef->requestValueDrag();
+            const float next = m_dragStartVal + sign * (dy / pxPerRange) * range * fine;
+            applyValue(next);
+            if (m_uiloRef->getValueDragBehavior()) {
+                m_dragStartVal = std::clamp(next, m_options.getMin(), m_options.getMax());
+                m_dragStartY = curY;
+            }
         }
     }
 }
@@ -273,6 +281,7 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
     }
 
     m_dragging     = true;
+    m_dragMoved = false;
     m_dragStartY   = mousePosition.y;
     m_dragStartVal = m_value;
     if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
@@ -360,7 +369,7 @@ void Knob::setValue(float v) { applyValue(v); }
                 the step when one is set, and fires onValueChanged only when the
                 result actually differs.
 */
-void Knob::applyValue(float raw) {
+void Knob::applyValue(float raw, bool notify) {
     float v = std::clamp(raw, m_options.getMin(), m_options.getMax());
     if (m_options.getStep() > 0.f) {
         v = m_options.getMin()
@@ -371,7 +380,7 @@ void Knob::applyValue(float raw) {
     if (v == m_value) return;
     m_value = v;
     m_dirty = true;
-    if (m_options.getOnValueChanged()) m_options.getOnValueChanged()(m_value);
+    if (notify && m_options.getOnValueChanged()) m_options.getOnValueChanged()(m_value);
 }
 
 } // namespace uilo

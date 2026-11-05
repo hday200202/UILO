@@ -261,7 +261,7 @@ bool Element::claimsPointerEvents() const {
                 here.
 */
 bool Element::checkLeftClick(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition)) return false;
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition)) return false;
     if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);
     return claimsPointerEvents();
 }
@@ -274,7 +274,7 @@ bool Element::checkLeftClick(const Vec2f& mousePosition) {
     - Desc:     As checkLeftClick, for the right button.
 */
 bool Element::checkRightClick(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition)) return false;
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition)) return false;
     if (m_modifier.getOnRightClick()) m_modifier.getOnRightClick()(this);
     if (openContextMenu(mousePosition)) return true;
     return claimsPointerEvents();
@@ -316,7 +316,7 @@ bool Element::openContextMenu(const Vec2f& at) {
       Arrow suppress it.
 */
 bool Element::checkHover(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition)) {
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition)) {
         if (m_hovered) {
             m_hovered = false; m_dirty = true;
             if (m_modifier.getOnHoverExit()) m_modifier.getOnHoverExit()(this);
@@ -355,7 +355,7 @@ bool Element::checkScroll(
     bool /*precise*/,
     bool /*momentum*/
 ) {
-    if (!m_bounds.contains(mousePosition)) return false;
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition)) return false;
     if (m_modifier.getOnScroll()) {
         m_modifier.getOnScroll()(this, delta);
         return true;

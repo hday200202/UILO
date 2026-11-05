@@ -33,6 +33,20 @@ UILO::UILO() {
     installDefaultTheme(m_theme);
 }
 
+UILO::~UILO() {
+    if (m_liveResizeInstalled) if (auto* w = window()) w->setResizeCallback({});
+}
+
+void UILO::setRenderer(Renderer& renderer) {
+    if (m_renderer != &renderer) {
+        if (m_liveResizeInstalled) if (auto* w = window()) w->setResizeCallback({});
+        m_liveResizeInstalled = false;
+    }
+    m_renderer = &renderer;
+    m_keybinds.setWindow(renderer.window());
+    m_mousebinds.setWindow(renderer.window());
+}
+
 
 /*
     setTheme(const Theme& theme):
@@ -283,6 +297,15 @@ void UILO::removePopupBackdrop(Element* e) {
     - Desc:     Requests a cursor for this frame. The highest-priority request
                 wins; ties keep the most recent.
 */
+void UILO::setValueDragBehavior(bool enabled) {
+    m_valueDragBehavior = enabled;
+    if (!enabled) {
+        m_valueDragRequested = false;
+        if (m_valueDragHidden && window()) window()->setCursorVisible(true);
+        m_valueDragHidden = false;
+    }
+}
+
 void UILO::requestCursor(CursorType type, int priority) {
     if (priority >= m_pendingCursorPriority) {
         m_pendingCursor         = type;
@@ -353,8 +376,8 @@ void UILO::setZoomLinkValue(const std::string& linkId, float zoom, bool horizont
     setOnLiveResize(std::function<void()> cb):
     - Params:   std::function<void()> cb
     - Returns:  void
-    - Desc:     Sets a callback invoked during native live window resize so the
-                host can redraw at each intermediate size.
+    - Desc:     Overrides the default layout/redraw during native resizing with
+                a host frame callback. An empty callback restores the default.
 */
 void UILO::setOnLiveResize(std::function<void()> cb) {
     m_onLiveResize = std::move(cb);
@@ -365,10 +388,10 @@ void UILO::setOnLiveResize(std::function<void()> cb) {
     update():
     - Params:   none
     - Returns:  void
-    - Desc:     Advances the UI by one frame. On the first frame -- and only
-                when UILO owns its window, never when embedded in a host -- it
-                installs the macOS native scroll and zoom monitors and the live-
-                resize configuration. Each frame it reads the mouse position
+    - Desc:     Advances the UI by one frame. Owned windows install a live-resize
+                frame callback; embedded views leave frame scheduling to their
+                host. macOS additionally installs native scroll/zoom monitors.
+                Each normal frame it reads the mouse position
                 in backing pixels, updates layout
                 for the active page and every floating element, culls elements
                 marked for deletion, then dispatches hover, left-click, and
@@ -378,19 +401,28 @@ void UILO::setOnLiveResize(std::function<void()> cb) {
                 while held.
 */
 void UILO::update() {
+    if (!m_liveResizeInstalled && m_renderer && m_renderer->ownsContext()) {
+        if (auto* w = window()) {
+            m_liveResizeInstalled = true;
+            configureMacWindowForLiveResize(w->nativeHandle());
+            w->setResizeCallback([this] {
+                if (m_inLiveResize || !m_running || !m_activePage) return;
+                m_inLiveResize = true;
+                struct ResizeScope { bool& active; ~ResizeScope() { active = false; } } scope{m_inLiveResize};
+                if (m_onLiveResize) m_onLiveResize();
+                else {
+                    update();
+                    m_renderer->beginFrame();
+                    m_renderer->clear();
+                    render();
+                    m_renderer->endFrame();
+                }
+            });
+        }
+    }
     static bool s_macInstalled = false;
     if (!s_macInstalled && m_renderer && m_renderer->ownsContext()) {
         s_macInstalled = true;
-        if (valo::Window* w = window()) {
-            /* The NSWindow on macOS; the call is a no-op everywhere else. */
-            configureMacWindowForLiveResize(w->nativeHandle());
-
-            /* Runs inside the OS's modal resize loop too, where the main loop is
-               blocked, so the host can redraw at every intermediate size. */
-            w->setResizeCallback([this] {
-                if (m_onLiveResize) m_onLiveResize();
-            });
-        }
         installMacScrollMonitor([this](float dyLines, float dxLines, bool momentum) -> bool {
             /* A coast belongs to whatever the gesture was flicked on, so
                momentum ticks replay at the position the gesture started from. */
@@ -412,7 +444,7 @@ void UILO::update() {
     }
 
     m_deltaTime = m_timer.restart();
-    tickMacScrollMomentum(m_deltaTime);
+    if (!m_inLiveResize) tickMacScrollMomentum(m_deltaTime);
     m_pendingCursor         = CursorType::Arrow;
     m_pendingCursorPriority = 0;
 
@@ -430,8 +462,10 @@ void UILO::update() {
        pages, or hides an element is reflected in this frame's tree walk. */
     const bool keyboardOwnedByWidget =
         m_currInteractible && m_currInteractible->wantsTextInput();
-    m_keybinds.update(!keyboardOwnedByWidget && m_overlays.empty() && m_backdrops.empty());
-    m_mousebinds.update();
+    if (!m_inLiveResize) {
+        m_keybinds.update(!keyboardOwnedByWidget && m_overlays.empty() && m_backdrops.empty());
+        m_mousebinds.update();
+    }
 
     if (!m_activePage) return;
 
@@ -477,7 +511,11 @@ void UILO::update() {
             m_elementPool.begin(), m_elementPool.end(),
             [&](const std::unique_ptr<Element>& e) {
                 if (e->m_markedForDeletion) {
-                    if (!e->m_name.empty()) m_elements.erase(e->m_name);
+                    if (!e->m_name.empty()) {
+                        const auto named = m_elements.find(e->m_name);
+                        // A replacement widget may already own the same name.
+                        if (named != m_elements.end() && named->second == e.get()) m_elements.erase(named);
+                    }
                     return true;
                 }
                 return false;
@@ -485,6 +523,9 @@ void UILO::update() {
         ), m_elementPool.end()
     );
 
+    // Native border dragging owns input and its cursor. A resize frame only
+    // advances element updates/layout; queued presses wait for the normal loop.
+    if (m_inLiveResize) return;
     m_mousePos = queryMousePixelPosition();
     const Vec2f mouse = m_mousePos;
 
@@ -495,6 +536,8 @@ void UILO::update() {
        the event stream. The latch is what catches a tap that was already over by
        the time this frame polled -- every trackpad two-finger tap, and any fast
        click. Its position wins, since it is where the button actually went down. */
+    if (m_pointerInputFilter && !m_pointerInputFilter())
+        m_pendingLeftPress = m_pendingRightPress = false;
     const bool leftPressed  = (leftHeld  && !m_prevLeftMouse)  || m_pendingLeftPress;
     const bool rightPressed = (rightHeld && !m_prevRightMouse) || m_pendingRightPress;
     const Vec2f pressPos = (m_pendingLeftPress || m_pendingRightPress)
@@ -555,10 +598,18 @@ void UILO::update() {
         root->checkHover(popupOpen ? kNowhere : mouse);
     }
 
-    if (m_pendingCursor != m_activeCursor) {
-        m_renderer->setCursor(m_pendingCursor);
-        m_activeCursor = m_pendingCursor;
+    // A native editor or the window system may reset the OS cursor while the
+    // logical hover stays unchanged. Reassert it over our own window each frame.
+    const bool hideValueCursor = m_valueDragBehavior && m_valueDragRequested &&
+        m_cursorUpdatesEnabled && isMouseButtonDown(MouseButton::Left) && window() && window()->hasInputFocus();
+    if (hideValueCursor != m_valueDragHidden) {
+        if (window()) window()->setCursorVisible(!hideValueCursor);
+        m_valueDragHidden = hideValueCursor;
     }
+    m_valueDragRequested = false;
+    if (m_cursorUpdatesEnabled)
+        m_renderer->setCursor(m_pendingCursor);
+    m_activeCursor = m_pendingCursor;
 
     // Popup layers own a press before page-level handles, matching draw order.
     auto overlayAt = [&](const Vec2f& pos) -> Element* {
@@ -649,6 +700,7 @@ void UILO::render() {
                 backing scale, which the window has already applied.
 */
 Vec2f UILO::queryMousePixelPosition() const {
+    if (m_pointerInputFilter && !m_pointerInputFilter()) return {-1000000.f, -1000000.f};
     if (valo::Window* w = window()) {
         const valo::Vec2f p = w->mousePosition();
         return { p.x, p.y };
@@ -664,6 +716,7 @@ Vec2f UILO::queryMousePixelPosition() const {
     - Desc:     Whether a mouse button is physically held right now.
 */
 bool UILO::isMouseButtonDown(MouseButton button) const {
+    if (m_pointerInputFilter && !m_pointerInputFilter()) return false;
     valo::Window* w = window();
     return w && w->isMouseDown(button);
 }
@@ -856,6 +909,12 @@ void UILO::pollEvents() {
 void UILO::handleWindowEvent(const valo::WindowEvent& event) {
     using Type = valo::WindowEventType;
     if (!m_activePage) return;
+    if (m_pointerInputFilter && !m_pointerInputFilter() &&
+        (event.type == Type::MouseDown || event.type == Type::MouseUp ||
+         event.type == Type::MouseMove || event.type == Type::Wheel)) {
+        m_pendingLeftPress = m_pendingRightPress = false;
+        return;
+    }
 
     const KeyMod mods  = event.mods;
     const bool   shift = hasMod(mods, KeyMod::Shift);
@@ -944,7 +1003,7 @@ void UILO::handleWindowEvent(const valo::WindowEvent& event) {
             }
         }
 
-        if ((key == Key::Up || key == Key::Down ||
+        if (((m_arrowKeyScrolling && (key == Key::Up || key == Key::Down)) ||
              key == Key::PageUp || key == Key::PageDown ||
              key == Key::Home || key == Key::End) &&
             !m_currInteractible) {

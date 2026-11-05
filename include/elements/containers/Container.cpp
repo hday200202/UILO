@@ -80,6 +80,7 @@ Element* Container::floatingAt(const Vec2f& mousePosition) const {
       answers.
 */
 bool Container::checkLeftClick(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible()) return false;
     /* A press on a draggable floating child starts a drag rather than being
        treated as an ordinary click on it. */
     if (beginFloatingDrag(mousePosition)) return true;
@@ -92,6 +93,7 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
     bool childClicked = false;
     for (auto& child : m_children) {
         if (childClicked) break;
+        if (!child->getModifier().getVisible()) continue;
         if (child->getType() == ElementType::Resizer) continue;
         if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
@@ -114,6 +116,7 @@ bool Container::checkLeftClick(const Vec2f& mousePosition) {
     - Desc:     As checkLeftClick, for the right button.
 */
 bool Container::checkRightClick(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible()) return false;
     if (Element* top = floatingAt(mousePosition)) {
         top->checkRightClick(mousePosition);
         return true;
@@ -122,6 +125,7 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
     bool childClicked = false;
     for (auto& child : m_children) {
         if (childClicked) break;
+        if (!child->getModifier().getVisible()) continue;
         if (child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             childClicked |= child->checkRightClick(mousePosition);
@@ -154,7 +158,7 @@ bool Container::checkRightClick(const Vec2f& mousePosition) {
 bool Container::checkHover(const Vec2f& mousePosition) {
     static constexpr Vec2f kNowhere{-1e9f, -1e9f};
 
-    Element* top = floatingAt(mousePosition);
+    Element* top = m_modifier.getVisible() ? floatingAt(mousePosition) : nullptr;
     bool childHovered = false;
 
     for (auto& child : m_children) {
@@ -164,12 +168,13 @@ bool Container::checkHover(const Vec2f& mousePosition) {
            owner is blind either way -- otherwise a hidden one, whose stale bounds
            still cover the cursor, would light up. */
         const bool owns  = child == top;
-        const bool blind = !owns && (top || child->getModifier().isFloating());
+        const bool blind = !m_modifier.getVisible() || !child->getModifier().getVisible() ||
+                           (!owns && (top || child->getModifier().isFloating()));
         if (child->checkHover(blind ? kNowhere : mousePosition))
             childHovered = true;
     }
 
-    const bool inside = !childHovered && !top && m_bounds.contains(mousePosition);
+    const bool inside = m_modifier.getVisible() && !childHovered && !top && m_bounds.contains(mousePosition);
 
     if (inside && !m_hovered) {
         m_hovered = true; m_dirty = true;
@@ -199,13 +204,14 @@ bool Container::checkHover(const Vec2f& mousePosition) {
       adjustment on a floating slider is disabled).
 */
 bool Container::checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum) {
+    if (!m_modifier.getVisible()) return false;
     Element* top = floatingAt(mousePosition);
     if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
 
     if (!top)
         for (auto& child : m_children) {
-            if (child->getModifier().isFloating())
+            if (!child->getModifier().getVisible() || child->getModifier().isFloating())
                 continue;
             if (child->getBounds().contains(mousePosition))
                 if (child->checkScroll(mousePosition, delta, precise, momentum))
@@ -228,13 +234,14 @@ bool Container::checkScroll(const Vec2f& mousePosition, float delta, bool precis
     - Desc:     The two-axis form of the above, passing the whole delta down.
 */
 bool Container::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precise, bool momentum) {
+    if (!m_modifier.getVisible()) return false;
     Element* top = floatingAt(mousePosition);
     if (top && top->checkScroll(mousePosition, delta, precise, momentum))
         return true;
 
     if (!top)
         for (auto& child : m_children) {
-            if (child->getModifier().isFloating())
+            if (!child->getModifier().getVisible() || child->getModifier().isFloating())
                 continue;
             if (child->getBounds().contains(mousePosition))
                 if (child->checkScroll(mousePosition, delta, precise, momentum))
@@ -261,6 +268,7 @@ bool Container::checkScroll(const Vec2f& mousePosition, Vec2f delta, bool precis
                 one.
 */
 bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
+    if (!m_modifier.getVisible()) return false;
     if (Element* top = floatingAt(mousePosition)) {
         top->checkZoom(mousePosition, magnification);
         return true;
@@ -268,7 +276,7 @@ bool Container::checkZoom(const Vec2f& mousePosition, float magnification) {
 
     bool consumed = false;
     for (auto& child : m_children) {
-        if (child->getModifier().isFloating()) continue;
+        if (!child->getModifier().getVisible() || child->getModifier().isFloating()) continue;
         if (child->getBounds().contains(mousePosition))
             if (child->checkZoom(mousePosition, magnification)) consumed = true;
     }
@@ -425,12 +433,14 @@ void Container::removeElement(Element* element) {
     collectResizers(std::vector<Element*>& out):
     - Params:   std::vector<Element*>& out
     - Returns:  void
-    - Desc:     Gathers every Resizer in the subtree. UILO hit-tests them ahead
+    - Desc:     Gathers visible Resizers from visible subtrees. UILO hit-tests them ahead
                 of the tree walk, so it needs them in one flat list.
 */
 
 void Container::collectResizers(std::vector<Element*>& out) {
+    if (!m_modifier.getVisible()) return;
     for (auto* child : m_children) {
+        if (!child->getModifier().getVisible()) continue;
         if (child->getType() == ElementType::Resizer)
             out.push_back(child);
         else

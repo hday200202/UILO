@@ -150,7 +150,7 @@ void Resizer::render() {
                 straddles.
 */
 bool Resizer::checkHover(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition)) {
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition)) {
         if (m_hovered) {
             m_hovered = false; m_dirty = true;
             if (m_modifier.getOnHoverExit()) m_modifier.getOnHoverExit()(this);
@@ -183,7 +183,7 @@ bool Resizer::checkHover(const Vec2f& mousePosition) {
                 side it points at.
 */
 bool Resizer::checkLeftClick(const Vec2f& mousePosition) {
-    if (!m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
+    if (!m_modifier.getVisible() || !m_bounds.contains(mousePosition) || !m_uiloRef || !m_target) return false;
 
     /* 0 means "not clicked yet", so it must not count as a previous click:
        without that guard the first click within the double-click window of

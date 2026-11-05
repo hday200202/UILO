@@ -9,13 +9,17 @@ Dropdown::Dropdown(
     Modifier modifier, DropdownOptions options,
     std::initializer_list<std::string> items,
     const std::string& name
-): m_options(std::move(options)), m_items(items) {
+): Dropdown(std::move(modifier), std::move(options), std::vector<std::string>(items), name) {}
+
+Dropdown::Dropdown(Modifier modifier, DropdownOptions options, std::vector<std::string> items,
+                   const std::string& name)
+    : m_options(std::move(options)), m_items(std::move(items)) {
     m_modifier = modifier;
     m_name     = name;
     m_type     = ElementType::Dropdown;
 
     /* Header label. */
-    TextOptions headerTextOpts;
+    TextOptions headerTextOpts;headerTextOpts.setWrap(false);
     if (!m_options.getFontPath().empty()) headerTextOpts.setFont(m_options.getFontPath());
     headerTextOpts
         .setContent(m_options.getPlaceholder());
@@ -97,9 +101,13 @@ Dropdown::Dropdown(
             .setOutlineThickness(m_options.getPopupOutlineThickness()),
         contains{}, "");
 
+    buildItems();
+}
+
+void Dropdown::buildItems() {
     /* Item buttons. */
     for (size_t i = 0; i < m_items.size(); ++i) {
-        TextOptions itemTextOpts;
+        TextOptions itemTextOpts;itemTextOpts.setWrap(false);
         if (!m_options.getFontPath().empty()) itemTextOpts.setFont(m_options.getFontPath());
         itemTextOpts
             .setContent(m_items[i]);
@@ -214,12 +222,26 @@ void Dropdown::updateHeaderLabel() {
                 onItemChanged. An index outside the list clears the selection
                 back to the placeholder rather than being ignored.
 */
-void Dropdown::setSelectedIndex(int idx) {
+void Dropdown::setSelectedIndex(int idx, bool notify) {
     if (idx < 0 || static_cast<size_t>(idx) >= m_items.size()) return;
     m_selectedIndex = idx;
     updateHeaderLabel();
-    if (m_options.getOnItemChanged())
+    if (notify && m_options.getOnItemChanged())
         m_options.getOnItemChanged()(m_items[static_cast<size_t>(idx)]);
+}
+
+void Dropdown::setItems(std::vector<std::string> items) {
+    if(items==m_items)return;
+    const auto selected=getSelectedItem();closePopup();
+    auto retire=[&](auto&& self,Element* element)->void {
+        if(auto* container=dynamic_cast<Container*>(element))for(auto* child:container->getChildren())self(self,child);
+        if(element->getUILO()){if(element->getUILO()->getCurrInteractible()==element)element->getUILO()->setCurrInteractible(nullptr);element->getModifier().setVisible(false);element->erase();}else delete element;
+    };
+    const auto children=m_popup->getChildren();
+    for(auto* child:children){m_popup->removeElement(child);retire(retire,child);}
+    m_itemTexts.clear();m_itemButtons.clear();m_dividers.clear();m_items=std::move(items);buildItems();
+    const auto at=std::find(m_items.begin(),m_items.end(),selected);
+    m_selectedIndex=at==m_items.end()?-1:int(at-m_items.begin());updateHeaderLabel();m_dirty=true;
 }
 
 /*

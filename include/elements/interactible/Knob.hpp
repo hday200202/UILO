@@ -223,6 +223,7 @@ public:
     void onDeactivate() override;
 
     void  setValue(float v);
+    void  setValueSilently(float v) { applyValue(v, false); }
     float getValue() const { return m_value; }
 
     const KnobOptions& getOptions() const { return m_options; }
@@ -233,12 +234,13 @@ public:
     float angleForValue(float v) const;
 
 private:
-    void  applyValue(float raw);
+    void  applyValue(float raw, bool notify = true);
 
     KnobOptions m_options;
     float m_value         = 0.f;
     float m_scrollAccum   = 0.f;
     bool  m_dragging      = false;
+    bool  m_dragMoved = false;
     float m_dragStartY    = 0.f;
     float m_dragStartVal  = 0.f;
     uint64_t m_lastClickMs = 0;

@@ -18,6 +18,8 @@ enum class CursorType {
     SizeVertical,
     Text,
     Crosshair,
+    ResizeStart,
+    ResizeEnd,
 };
 
 }

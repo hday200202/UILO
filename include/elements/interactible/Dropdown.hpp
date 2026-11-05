@@ -293,6 +293,9 @@ public:
         const std::string& name = ""
     );
 
+    Dropdown(Modifier modifier, DropdownOptions options, std::vector<std::string> items,
+             const std::string& name = "");
+
     void setUILO(UILO& uiloRef) override;
     void update(Rectf& parentBounds, float dt) override;
     void render() override;
@@ -301,7 +304,8 @@ public:
 
     int                getSelectedIndex() const { return m_selectedIndex; }
     const std::string& getSelectedItem()  const;
-    void               setSelectedIndex(int idx);
+    void               setSelectedIndex(int idx, bool notify = true);
+    void               setItems(std::vector<std::string> items);
     const std::vector<std::string>& getItems() const { return m_items; }
 
     const DropdownOptions& getOptions() const { return m_options; }
@@ -318,6 +322,7 @@ private:
     void  closePopup();
     void  updateHeaderLabel();
     void  updateArrowIcon();
+    void  buildItems();
 
     DropdownOptions          m_options;
     std::vector<std::string> m_items;
