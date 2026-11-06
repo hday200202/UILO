@@ -40,6 +40,7 @@ public:
     */
     void inheritFrom(const TextboxOptions& prototype) {
         m_outlineThickness.inherit(prototype.m_outlineThickness);
+        m_ellipsis.inherit(prototype.m_ellipsis);
         m_outerPadding.inherit(prototype.m_outerPadding);
         m_charSize.inherit(prototype.m_charSize);
         m_rounding.inherit(prototype.m_rounding);
@@ -144,6 +145,9 @@ public:
     TextboxOptions& setLineNumberCharSize(unsigned int n) { m_lineNumberCharSize.set(n); return *this; }
 
     // Behaviour
+    TextboxOptions& setEllipsis(bool v) { m_ellipsis.set(v); return *this; }
+    bool getEllipsis() const { return m_ellipsis.get(); }
+
     TextboxOptions& setMultiline(bool v)             { m_multiline = v;        return *this; }
     TextboxOptions& setWrap(bool v)                  { m_wrap = v;             return *this; }
     TextboxOptions& setMaxResizeLines(int n)         { m_maxResizeLines = n;   return *this; }
@@ -265,6 +269,7 @@ private:
     Themed<std::optional<bool>> m_currentLineNumberItalic;
     Themed<std::optional<unsigned int>> m_lineNumberCharSize;
 
+    Themed<bool>       m_ellipsis {false};
     bool               m_multiline         = false;
     bool               m_wrap              = true;   /* wrap text when multiline */
     int                m_maxResizeLines    = 0;   /* 0 = unlimited; >0 = clamp height, scroll beyond */

@@ -40,6 +40,7 @@ public:
     void inheritFrom(const TextOptions& prototype) {
         m_color.inherit(prototype.m_color);
         m_wrap.inherit(prototype.m_wrap);
+        m_ellipsis.inherit(prototype.m_ellipsis);
         m_bold.inherit(prototype.m_bold);
         m_italic.inherit(prototype.m_italic);
         m_underlined.inherit(prototype.m_underlined);
@@ -69,6 +70,9 @@ public:
     TextOptions& setCharSize(unsigned int n)        { m_charSize.set(n); return *this; }
     TextOptions& setColor(const Color& c)           { m_color.set(c); return *this; }
     TextOptions& setColorRole(const std::string& r) { m_colorRole.set(r); return *this; }
+    TextOptions& setEllipsis(bool v) { m_ellipsis.set(v); return *this; }
+    bool getEllipsis() const { return m_ellipsis.get(); }
+
     TextOptions& setWrap(bool v)                    { m_wrap.set(v); return *this; }
     TextOptions& setBold(bool v)                    { m_bold.set(v); return *this; }
     TextOptions& setItalic(bool v)                  { m_italic.set(v); return *this; }
@@ -101,6 +105,7 @@ private:
     Themed<Color> m_color {Color::White};
     Themed<std::string> m_colorRole {"text"};
 
+    Themed<bool>  m_ellipsis {false};
     Themed<bool>  m_wrap          {false};
     Themed<bool>  m_bold          {false};
     Themed<bool>  m_italic        {false};
@@ -208,6 +213,7 @@ private:
     uint32_t     m_fontId = 0xFFFFFFFFu;
     std::string  m_content;
     std::string  m_wrappedContent;
+    std::string  m_drawContent;
     unsigned int m_charSize      = 30;
     Color        m_lastColor     = Color::White;
     float        m_lastWrapWidth = 0.f;

@@ -142,51 +142,9 @@ set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
 
-# Use a persistent build directory (.sdl3build in project root) that survives
-# clean rebuilds. This way SDL3 only builds once.
-set(UILO_SDL3_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.sdl3build")
-
-# Only configure/build SDL3 if the library doesn't exist
-# (subsequent runs skip this to avoid unnecessary rebuilds)
-find_library(UILO_SDL3_BUILT NAMES SDL3 PATHS "${UILO_SDL3_BUILD_DIR}" NO_DEFAULT_PATH)
-if(NOT UILO_SDL3_BUILT)
-    add_subdirectory("${UILO_SDL3_DIR}" "${UILO_SDL3_BUILD_DIR}")
-else()
-    # SDL3 already built, create a target to link against
-    add_library(SDL3-static STATIC IMPORTED GLOBAL)
-    set_target_properties(SDL3-static PROPERTIES
-        IMPORTED_LOCATION "${UILO_SDL3_BUILT}"
-    )
-    add_library(SDL3::SDL3-static ALIAS SDL3-static)
-    target_include_directories(SDL3-static INTERFACE "${UILO_SDL3_DIR}/include")
-
-    # Link against required system frameworks (same as when built via add_subdirectory)
-    if(APPLE)
-        target_link_libraries(SDL3-static INTERFACE
-            "-framework Cocoa"
-            "-framework IOKit"
-            "-framework CoreFoundation"
-            "-framework CoreGraphics"
-            "-framework CoreVideo"
-            "-framework CoreMedia"
-            "-framework CoreAudio"
-            "-framework AudioToolbox"
-            "-framework GameController"
-            "-framework AVFoundation"
-            "-framework MetalKit"
-            "-framework Metal"
-            "-framework Carbon"
-            "-framework CoreHaptics"
-            "-framework ForceFeedback"
-            "-framework UniformTypeIdentifiers"
-        )
-    elseif(UNIX AND NOT APPLE)
-        target_link_libraries(SDL3-static INTERFACE
-            Threads::Threads
-            ${CMAKE_DL_LIBS}
-        )
-    endif()
-endif()
+# Keep SDL in this build tree and retain its exported usage requirements.
+# Importing a cached archive loses system libraries and can mix configurations.
+add_subdirectory("${UILO_SDL3_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/sdl3")
 
 # ---------------------------------------------------------------------------
 # VALO (vendored in ext/VALO, cloned by build.sh; its own build.sh fetches

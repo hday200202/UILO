@@ -116,8 +116,11 @@ void Knob::update(Rectf& parentBounds, float /*dt*/) {
                always turns the indicator the same way. */
             const float sign = (sweepDegrees() >= 0.f) ? 1.f : -1.f;
             const float fine = m_uiloRef->getValueDragBehavior() && hasMod(m_uiloRef->getKeyModifiers(), KeyMod::Shift) ? .1f : 1.f;
-            if (dy != 0) m_dragMoved = true;
-            if (m_dragMoved) m_uiloRef->requestValueDrag();
+            if (dy != 0) {
+                m_dragMoved = true;
+                m_lastClickMs = 0;
+            }
+            if (m_dragMoved) m_uiloRef->requestValueDrag(m_dragAnchor);
             const float next = m_dragStartVal + sign * (dy / pxPerRange) * range * fine;
             applyValue(next);
             if (m_uiloRef->getValueDragBehavior()) {
@@ -239,6 +242,10 @@ void Knob::render() {
                 which is the axis a drag actually works on.
 */
 bool Knob::checkHover(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible()) {
+        m_hovered = false;
+        return false;
+    }
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
     const float r  = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
@@ -260,6 +267,7 @@ bool Knob::checkHover(const Vec2f& mousePosition) {
                 jump to.
 */
 bool Knob::checkLeftClick(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible() || !m_uiloRef) return false;
     const float cx = m_bounds.position.x + m_bounds.size.x * 0.5f;
     const float cy = m_bounds.position.y + m_bounds.size.y * 0.5f;
     const float r  = std::min(m_bounds.size.x, m_bounds.size.y) * 0.5f;
@@ -282,6 +290,7 @@ bool Knob::checkLeftClick(const Vec2f& mousePosition) {
 
     m_dragging     = true;
     m_dragMoved = false;
+    m_dragAnchor   = mousePosition;
     m_dragStartY   = mousePosition.y;
     m_dragStartVal = m_value;
     if (m_modifier.getOnLeftClick()) m_modifier.getOnLeftClick()(this);

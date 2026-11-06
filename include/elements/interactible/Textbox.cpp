@@ -1,3 +1,4 @@
+#include "../../utils/TextOverflow.hpp"
 #include "Textbox.hpp"
 #include "../../utils/Resources.hpp"
 #include "../../UILO.hpp"
@@ -966,7 +967,24 @@ void Textbox::render() {
         ? resolveColor(m_options.getPlaceholderColorRole(), m_options.getPlaceholderColor())
         : resolveColor(m_options.getTextColorRole(),        m_options.getTextColor());
 
-    if (showPlaceholder) {
+    if (!m_focused && !m_options.getMultiline() && m_options.getEllipsis()) {
+        const auto display = ellipsizeText(
+            showPlaceholder ? m_options.getPlaceholder() : m_wrappedDisplay,
+            area.size.x,
+            [&](const std::string& text) { return renderer.measureText(text, font, pxH).size.x; });
+        const auto metrics = renderer.measureText(display, font, pxH);
+        Vec2f origin = area.position;
+        if (hasAlign(m_options.getTextAlignX(), Align::CenterX))
+            origin.x += (area.size.x - metrics.size.x) * .5f;
+        else if (hasAlign(m_options.getTextAlignX(), Align::Right))
+            origin.x += area.size.x - metrics.size.x;
+        if (hasAlign(m_options.getTextAlignY(), Align::CenterY))
+            origin.y += (area.size.y - metrics.size.y) * .5f;
+        else if (hasAlign(m_options.getTextAlignY(), Align::Bottom))
+            origin.y += area.size.y - metrics.size.y;
+        renderer.drawText(display, {std::round(origin.x), std::round(origin.y)},
+            font, pxH, textColor, TextStyle{m_options.getBold(), m_options.getItalic()});
+    } else if (showPlaceholder) {
         const std::string& ph = m_options.getPlaceholder();
         if (!ph.empty()) {
             TextMetrics pm = renderer.measureText(ph, font, pxH);
