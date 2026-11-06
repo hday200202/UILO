@@ -291,20 +291,31 @@ void UILO::removePopupBackdrop(Element* e) {
 
 
 /*
-    requestCursor(CursorType type, int priority):
-    - Params:   CursorType type, int priority
-    - Returns:  void
-    - Desc:     Requests a cursor for this frame. The highest-priority request
-                wins; ties keep the most recent.
+	Enables host-specific hidden value dragging. Disabling restores the native
+	pointer immediately and discards any accumulated recentering offset.
 */
 void UILO::setValueDragBehavior(bool enabled) {
     m_valueDragBehavior = enabled;
     if (!enabled) {
         m_valueDragRequested = false;
+        m_valueDragAnchorRequested = m_valueDragAnchored = false;
+        m_valueDragOffset = {};
         if (m_valueDragHidden && window()) window()->setCursorVisible(true);
         m_valueDragHidden = false;
     }
 }
+
+/*
+	Requests an anchored value drag for this frame. The anchor is in render pixels;
+	widgets continue to read uninterrupted virtual coordinates while the physical
+	pointer stays inside the window. Ordinary hidden graph gestures remain unchanged.
+*/
+void UILO::requestValueDrag(const Vec2f& anchor) {
+	if (!m_valueDragBehavior) return;
+	m_valueDragRequested = m_valueDragAnchorRequested = true;
+	m_valueDragAnchor = anchor;
+}
+
 
 void UILO::requestCursor(CursorType type, int priority) {
     if (priority >= m_pendingCursorPriority) {
@@ -606,6 +617,28 @@ void UILO::update() {
         if (window()) window()->setCursorVisible(!hideValueCursor);
         m_valueDragHidden = hideValueCursor;
     }
+	if (hideValueCursor && m_valueDragAnchorRequested) {
+		const Vec2f position = queryMousePixelPosition();
+		const auto size = window()->getSize();
+		const float density = std::max(1.f, window()->getPixelDensity());
+		/* Native warp events round to window points. Matching that precision
+		   prevents a fractional thumb position from feeding back into its value. */
+		const Vec2f anchor{
+			std::round(std::clamp(m_valueDragAnchor.x, 2.f, std::max(2.f, float(size.x) - 2.f)) / density) * density,
+			std::round(std::clamp(m_valueDragAnchor.y, 2.f, std::max(2.f, float(size.y) - 2.f)) / density) * density
+		};
+		const auto before = window()->mousePosition();
+		if (before.x != anchor.x || before.y != anchor.y) {
+			window()->setMousePositionLocal({anchor.x, anchor.y});
+		}
+		const auto physical = window()->mousePosition();
+		m_valueDragOffset = position - Vec2f{physical.x, physical.y};
+		m_valueDragAnchored = true;
+	} else {
+		m_valueDragAnchored = false;
+		m_valueDragOffset = {};
+	}
+	m_valueDragAnchorRequested = false;
     m_valueDragRequested = false;
     if (m_cursorUpdatesEnabled)
         m_renderer->setCursor(m_pendingCursor);
@@ -703,7 +736,11 @@ Vec2f UILO::queryMousePixelPosition() const {
     if (m_pointerInputFilter && !m_pointerInputFilter()) return {-1000000.f, -1000000.f};
     if (valo::Window* w = window()) {
         const valo::Vec2f p = w->mousePosition();
-        return { p.x, p.y };
+		const Vec2f physical{p.x, p.y};
+		if (m_valueDragAnchored && w->hasInputFocus() && w->isMouseDown(MouseButton::Left)) {
+			return physical + m_valueDragOffset;
+		}
+		return physical;
     }
     return m_mousePos;
 }
@@ -718,7 +755,7 @@ Vec2f UILO::queryMousePixelPosition() const {
 bool UILO::isMouseButtonDown(MouseButton button) const {
     if (m_pointerInputFilter && !m_pointerInputFilter()) return false;
     valo::Window* w = window();
-    return w && w->isMouseDown(button);
+    return w && (!m_valueDragAnchored || w->hasInputFocus()) && w->isMouseDown(button);
 }
 
 

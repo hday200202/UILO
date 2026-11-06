@@ -110,11 +110,14 @@ public:
     void setValueDragBehavior(bool enabled);
     bool getValueDragBehavior() const { return m_valueDragBehavior; }
     void requestValueDrag() { if (m_valueDragBehavior) m_valueDragRequested = true; }
+    // Keep the physical pointer at a control while exposing continuous drag coordinates.
+    void requestValueDrag(const Vec2f& anchor);
     bool isValueDragCursorHidden() const { return m_valueDragHidden; }
 
     // Cursor position in render pixels, read live from the window rather than
     // from the once-per-frame cache, so event callbacks that fire mid-frame see
-    // where the pointer actually is.
+    // where the pointer actually is. Anchored value drags include the accumulated
+    // warp offset so recentering never changes the value being edited.
     Vec2f queryMousePixelPosition() const;
 
     // Live input state, for widgets that poll while a drag is in progress
@@ -320,6 +323,8 @@ private:
 
     bool m_scrollAdjustsControls = true;
     bool m_valueDragBehavior = false, m_valueDragRequested = false, m_valueDragHidden = false;
+    bool m_valueDragAnchorRequested = false, m_valueDragAnchored = false;
+    Vec2f m_valueDragAnchor{}, m_valueDragOffset{};
     Theme m_theme;
 
     std::unordered_map<std::string, float> m_scrollLinksX;

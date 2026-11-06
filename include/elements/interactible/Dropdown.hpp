@@ -149,6 +149,9 @@ public:
     const std::string& getItemColorRole() const { return m_itemColorRole.get(); }
     Color        getItemHoverColor()  const { return m_itemHoverColor; }
     const std::string& getItemHoverColorRole() const { return m_itemHoverColorRole.get(); }
+    // Optional wider popup keeps routing/device names readable in compact headers.
+    DropdownOptions& setPopupMinWidth(float px) { m_popupMinWidth = px; return *this; }
+    float getPopupMinWidth() const { return m_popupMinWidth; }
     float        getItemHeight()      const { return m_itemHeight; }
     int          getMaxItems()       const { return m_maxItems; }
     float        getItemRounding()    const { return m_itemRounding.get().value_or(0.f); }
@@ -229,6 +232,7 @@ private:
     Color        m_headerTextColor = Color::White;
     Themed<std::string> m_headerTextColorRole {"text"};
     std::string  m_placeholder;
+    float        m_popupMinWidth = 0.f;
     float        m_headerPadding = 10.f;
     float        m_itemPadding   = 10.f;
     Color                m_headerOutlineColor = Color::Transparent;

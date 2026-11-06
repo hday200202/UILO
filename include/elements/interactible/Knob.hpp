@@ -241,6 +241,7 @@ private:
     float m_scrollAccum   = 0.f;
     bool  m_dragging      = false;
     bool  m_dragMoved = false;
+    Vec2f m_dragAnchor{};
     float m_dragStartY    = 0.f;
     float m_dragStartVal  = 0.f;
     uint64_t m_lastClickMs = 0;

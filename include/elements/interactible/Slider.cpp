@@ -50,8 +50,10 @@ void Slider::update(Rectf& parentBounds, float /*dt*/) {
                 isHoriz ? CursorType::SizeHorizontal : CursorType::SizeVertical, 2);
             const Vec2f mouse = m_uiloRef->queryMousePixelPosition();
             const auto delta = mouse - m_dragLastMouse;
-            if (delta.x != 0 || delta.y != 0) m_dragMoved = true;
-            if (m_dragMoved) m_uiloRef->requestValueDrag();
+            if (delta.x != 0 || delta.y != 0) {
+                m_dragMoved = true;
+                m_lastClickMs = 0;
+            }
             if (m_uiloRef->getValueDragBehavior()) {
                 const float travel = isHoriz ? m_bounds.size.x - 2 * resolveThumbHalfWidth()
                     : m_bounds.size.y - 2 * resolveThumbHalfHeight();
@@ -61,6 +63,19 @@ void Slider::update(Rectf& parentBounds, float /*dt*/) {
                 m_dragValue = std::clamp(m_dragValue + difference * fine, m_options.getMin(), m_options.getMax());
                 applyValue(m_dragValue);
             } else applyValue(isHoriz ? valueFromMouseX(mouse.x) : valueFromMouseY(mouse.y));
+			if (m_dragMoved) {
+				const float range = m_options.getMax() - m_options.getMin();
+				const float t = range > 0 ? (m_value - m_options.getMin()) / range : 0.f;
+				Vec2f anchor = m_bounds.position + m_bounds.size * .5f;
+				if (isHoriz) {
+					const float half = resolveThumbHalfWidth();
+					anchor.x = m_bounds.position.x + half + t * (m_bounds.size.x - 2 * half);
+				} else {
+					const float half = resolveThumbHalfHeight();
+					anchor.y = m_bounds.position.y + half + (1 - t) * (m_bounds.size.y - 2 * half);
+				}
+				m_uiloRef->requestValueDrag(anchor);
+			}
             m_dragLastMouse = mouse;
         }
     }
@@ -167,6 +182,10 @@ void Slider::render() {
                 pointer is inside, so the control reads as draggable.
 */
 bool Slider::checkHover(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible()) {
+        m_hovered = false;
+        return false;
+    }
     if (m_bounds.contains(mousePosition) && m_uiloRef) {
         const bool isHoriz = m_options.getOrientation() == SliderOrientation::Horizontal;
         m_uiloRef->requestCursor(
@@ -185,6 +204,7 @@ bool Slider::checkHover(const Vec2f& mousePosition) {
                 the usual window restores the configured default instead.
 */
 bool Slider::checkLeftClick(const Vec2f& mousePosition) {
+    if (!m_modifier.getVisible() || !m_uiloRef) return false;
     if (!m_bounds.contains(mousePosition)) return false;
 
     /* Double click within the usual window restores the default. */

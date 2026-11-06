@@ -5,6 +5,7 @@
 #include "../../renderer/Renderer.hpp"
 
 #include <sstream>
+#include "../../utils/TextOverflow.hpp"
 
 namespace uilo {
 
@@ -180,7 +181,7 @@ void Text::update(Rectf& parentBounds, float dt) {
         }
     }
 
-    if (m_options.getWrap() && contentArea().size.x != m_lastWrapWidth) {
+    if (contentArea().size.x != m_lastWrapWidth) {
         m_lastWrapWidth = contentArea().size.x;
         needRebuild = true;
     }
@@ -214,7 +215,13 @@ void Text::render() {
     const float pxH   = (float)m_charSize * scale;
 
     if (!m_cachedMetricsValid) {
-        m_cachedMetrics      = renderer.measureText(m_wrappedContent, f, pxH);
+        m_drawContent = m_wrappedContent;
+        if (m_options.getEllipsis() && !m_options.getWrap() &&
+            m_drawContent.find('\n') == std::string::npos) {
+            m_drawContent = ellipsizeText(m_drawContent, contentArea().size.x,
+                [&](const std::string& text) { return renderer.measureText(text, f, pxH).size.x; });
+        }
+        m_cachedMetrics      = renderer.measureText(m_drawContent, f, pxH);
         m_cachedMetricsValid = true;
     }
     const TextMetrics& m = m_cachedMetrics;
@@ -237,7 +244,7 @@ void Text::render() {
     const Color textColor = m_uiloRef
         ? m_uiloRef->getPalette().resolve(m_options.getColorRole(), m_options.getColor())
         : m_options.getColor();
-    renderer.drawText(m_wrappedContent, pos, f, pxH, textColor,
+    renderer.drawText(m_drawContent, pos, f, pxH, textColor,
                       TextStyle{m_options.getBold(), m_options.getItalic()});
 }
 

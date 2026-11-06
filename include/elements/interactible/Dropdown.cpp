@@ -279,13 +279,15 @@ Rectf Dropdown::computePopupBounds() const {
     const float maxH    = static_cast<float>(maxN) * itemH
                         + static_cast<float>(std::max(0, maxN - 1)) * divH;
     const float popupH     = std::min(totalH, maxH);
-    const float popupX     = m_bounds.position.x;
-    const float popupW     = m_bounds.size.x;
+    float       popupX     = m_bounds.position.x;
+    float       popupW     = std::max(m_bounds.size.x, m_options.getPopupMinWidth() * scale);
     float       popupY     = m_bounds.position.y + m_bounds.size.y
                            + m_options.getSpacer() * scale;
 
     if (m_uiloRef) {
         const auto winSize = m_uiloRef->getWindowSize();
+        popupW = std::min(popupW, static_cast<float>(winSize.x));
+        popupX = std::clamp(popupX, 0.f, static_cast<float>(winSize.x) - popupW);
         if (popupY + popupH > static_cast<float>(winSize.y))
             popupY = m_bounds.position.y - popupH;
     }
