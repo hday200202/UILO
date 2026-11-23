@@ -32,6 +32,7 @@
 // Composite widgets
 #include "widgets/Filebrowser.hpp"
 #include "widgets/DatePicker.hpp"
+#include "widgets/ColorPicker.hpp"
 #include "widgets/DateField.hpp"
 #include "widgets/Terminal.hpp"
 #include "widgets/ContextMenu.hpp"

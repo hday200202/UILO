@@ -252,4 +252,8 @@ inline Button* ghostButton(
                           std::forward<F>(onClick), name);
 }
 
-}
+inline ColorPicker* colorpicker(
+    Modifier modifier = {}, ColorPickerOptions options = {}, const std::string& name = ""
+) { return new ColorPicker(modifier, options, name); }
+
+} // namespace uilo
