@@ -41,7 +41,7 @@ scale()
 
 **Returns** — float
 
-[UILO](../UILO.hpp.md#uilo) lays out in virtual pixels that map 1:1 onto the window's pixels, so the useful scale is "how many real panel pixels does one virtual pixel cover" -- native panel resolution divided by the virtual desktop size. This is NOT SDL_GetDisplayContentScale, which reports 1.0 on macOS however the desktop is scaled, and NOT the backing-store ratio either: at a 1470x956 desktop macOS renders 2940x1912 and scans it out to a 2560x1664 panel, so the backing ratio says 2.0 while the panel only gives 1.74 physical pixels per point. Using 2.0 would draw everything ~15% too large.
+[UILO](../UILO.hpp.md#uilo) lays out in virtual pixels that map 1:1 onto the window's pixels, so the useful scale is "how many real panel pixels does one virtual pixel cover" -- native panel resolution divided by the virtual desktop size. This is NOT the display's content scale, which reports 1.0 on macOS however the desktop is scaled, and NOT the backing-store ratio either: at a 1470x956 desktop macOS renders 2940x1912 and scans it out to a 2560x1664 panel, so the backing ratio says 2.0 while the panel only gives 1.74 physical pixels per point. Using 2.0 would draw everything ~15% too large.
 
 ---
 
@@ -53,7 +53,7 @@ displaySize()
 
 **Returns** — [Vec2u](Math.hpp.md#vec2u)
 
-Prefer the platform's own answer; SDL's bounds agree with it on macOS but this keeps the two halves of the scale ratio coming from one source.
+Prefer the platform's own answer; the window system's bounds agree with it on macOS but this keeps the two halves of the scale ratio coming from one source.
 
 ---
 
@@ -149,7 +149,7 @@ executableDirectory()
 
 **Returns** — std::string
 
-Owned by SDL and valid for the process lifetime -- do not free.
+The directory the running executable lives in, with a trailing separator.
 
 ---
 

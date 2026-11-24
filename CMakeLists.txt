@@ -30,97 +30,14 @@ option(UILO_BUILD_EXAMPLES "Build example programs" ${_UILO_DEV_DEFAULT})
 option(UILO_BUILD_TOOLS    "Build the project generator and other tools" ${_UILO_DEV_DEFAULT})
 option(UILO_SHARED        "Build UILO as a shared library" OFF)
 
-# Web backend. UILO's element tree is renderer-free to construct -- VALO is only
-# touched from update()/render(), which the web backend never calls. With this
-# ON we swap one rendering target for another: the renderer and platform sources
-# are dropped, a no-op backend takes their place, and Wt is built and linked
-# instead of VALO. The UI code you write is identical either way.
-option(UILO_WT "Build UILO for the web (Wt) instead of VALO" OFF)
-
-if(UILO_WT)
-    set(UILO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(UILO_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
-    message(STATUS "[UILO] UILO_WT: web build -- Wt instead of VALO")
-endif()
-
-if(MSVC AND NOT UILO_WT)
-    # The desktop build has always used the static runtime (/MT), and
-    # applications built against it link with the same. VALO and SDL3 build
-    # inside this project and follow it. The web (UILO_WT) build's Boost is
-    # built with runtime-link=shared (/MD), so it stays on the default dynamic
-    # runtime instead -- forcing /MT there would mismatch Boost.
+if(MSVC)
+    # The build uses the static runtime (/MT), and applications built against
+    # it link with the same. VALO and SDL3 build inside this project and follow
+    # it.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 find_package(Threads REQUIRED)
-
-# ---------------------------------------------------------------------------
-# Wt + Boost (vendored in ext/wt and ext/boost, provisioned by `build.sh wt`)
-# ---------------------------------------------------------------------------
-# The web backend's equivalent of the SDL3/VALO section below: same pattern,
-# same ext/ directory, cloned and built once by build.sh.
-if(UILO_WT)
-    set(UILO_WT_DIR    "${CMAKE_CURRENT_SOURCE_DIR}/ext/wt")
-    set(UILO_BOOST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/boost")
-
-    if(NOT EXISTS "${UILO_WT_DIR}/CMakeLists.txt" OR NOT EXISTS "${UILO_BOOST_DIR}")
-        message(FATAL_ERROR
-            "[UILO] vendored Wt/Boost not found under ${CMAKE_CURRENT_SOURCE_DIR}/ext\n"
-            "Run ./build.sh wt (from Git Bash on Windows) -- it clones Wt and "
-            "clones + builds Boost the same way it does SDL3 and VALO.")
-    endif()
-
-    # Boost is built statically by build.sh into ext/boost/stage/lib. Point Wt's
-    # find_package(Boost) at exactly that and nothing else, so a system Boost
-    # can never be picked up by accident.
-    set(BOOST_ROOT            "${UILO_BOOST_DIR}" CACHE PATH "" FORCE)
-    set(Boost_USE_STATIC_LIBS ON  CACHE BOOL "" FORCE)
-    set(Boost_NO_BOOST_CMAKE  ON  CACHE BOOL "" FORCE)
-    set(Boost_NO_SYSTEM_PATHS ON  CACHE BOOL "" FORCE)
-
-    # Wt has a lot of optional pieces (PDF, image rendering, every Dbo database
-    # backend, Qt interop, SSL, its own examples and tests). None of them are
-    # reachable through the UILO API, so they stay off and the build stays small.
-    # CONNECTOR_HTTP is the exception: it builds libwthttp, the stand-alone
-    # server that uilo::wt::run() starts.
-    #
-    # SHARED_LIBS OFF forces static libs on every platform (Wt defaults to
-    # shared on Linux/macOS), so the result is one self-contained executable
-    # with no Wt libraries to locate at runtime.
-    set(SHARED_LIBS        OFF CACHE BOOL "" FORCE)
-    set(BUILD_EXAMPLES     OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTS        OFF CACHE BOOL "" FORCE)
-    set(ENABLE_LIBWTTEST   OFF CACHE BOOL "" FORCE)
-    set(ENABLE_LIBWTDBO    OFF CACHE BOOL "" FORCE)
-    set(ENABLE_SQLITE      OFF CACHE BOOL "" FORCE)
-    set(ENABLE_POSTGRES    OFF CACHE BOOL "" FORCE)
-    set(ENABLE_FIREBIRD    OFF CACHE BOOL "" FORCE)
-    set(ENABLE_MYSQL       OFF CACHE BOOL "" FORCE)
-    set(ENABLE_MSSQLSERVER OFF CACHE BOOL "" FORCE)
-    set(ENABLE_SSL         OFF CACHE BOOL "" FORCE)
-    set(ENABLE_HARU        OFF CACHE BOOL "" FORCE)
-    set(ENABLE_PANGO       OFF CACHE BOOL "" FORCE)
-    set(ENABLE_QT4         OFF CACHE BOOL "" FORCE)
-    set(ENABLE_QT5         OFF CACHE BOOL "" FORCE)
-    set(ENABLE_QT6         OFF CACHE BOOL "" FORCE)
-    set(CONNECTOR_HTTP     ON  CACHE BOOL "" FORCE)
-    set(CONNECTOR_FCGI     OFF CACHE BOOL "" FORCE)
-
-    # Build Wt itself as C++17. UILO needs C++20, but that only has to apply to
-    # UILO's own targets, and holding Wt at the standard it is tested against
-    # avoids inheriting our requirement onto 500 files of someone else's code.
-    set(_uilo_saved_cxx_standard "${CMAKE_CXX_STANDARD}")
-    set(CMAKE_CXX_STANDARD 17)
-    add_subdirectory("${UILO_WT_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/wt")
-    set(CMAKE_CXX_STANDARD "${_uilo_saved_cxx_standard}")
-
-    # Wt's headers live in src/; WConfig.h is generated into its binary dir.
-    set(UILO_WT_INCLUDE_DIRS
-        "${UILO_WT_DIR}/src"
-        "${CMAKE_CURRENT_BINARY_DIR}/wt")
-endif()
-
-if(NOT UILO_WT)
 
 # ---------------------------------------------------------------------------
 # SDL3 (vendored by VALO in ext/VALO/ext/SDL3, at the release VALO pins)
@@ -168,28 +85,13 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchValo.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GnomeResize.cmake")
 add_subdirectory("${UILO_VALO_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/valo")
 
-endif() # NOT UILO_WT
-
 # ---------------------------------------------------------------------------
 # UILO library
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE UILO_SRCS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cpp"
 )
-# include/wt/ holds the headless backend; it replaces the renderer rather than
-# adding to it, so it is only ever in the source list for a UILO_WT build.
-list(FILTER UILO_SRCS EXCLUDE REGEX "/include/wt/")
-
-if(UILO_WT)
-    # Drop everything that talks to the GPU or the OS and substitute no-ops.
-    # platform/ goes too: MacStubs.cpp is guarded on !__APPLE__, so the
-    # headless backend supplies those symbols on every platform instead.
-    list(FILTER UILO_SRCS EXCLUDE REGEX "/include/(renderer|platform)/")
-    list(APPEND UILO_SRCS
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/HeadlessBackend.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/Translator.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/wt/UiloWt.cpp")
-elseif(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # macOS: native scroll shim (Objective-C++) — gives us precise trackpad
     # deltas + OS momentum that SDL3's Cocoa backend drops.
     # (OBJCXX language already enabled in project() declaration above.)
@@ -239,51 +141,6 @@ target_include_directories(uilo PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/elements"
 )
-
-if(UILO_WT)
-    # Both backends drop their library into lib/, so they must not share a file
-    # name: a desktop build would otherwise overwrite the web one (and vice
-    # versa) and a consumer would silently link the wrong archive -- the build
-    # directories are separate, but the output path is not.
-    #   libuilo.a     desktop (VALO)
-    #   libuilo_wt.a  web     (Wt)
-    set_target_properties(uilo PROPERTIES OUTPUT_NAME uilo_wt)
-
-    # UILO's input API names VALO's key, button and modifier types, which are
-    # declared header-only in render/Window.hpp. The web build needs those
-    # declarations and nothing else of VALO; the few Window members UILO calls
-    # are stubbed in wt/HeadlessBackend.cpp, so VALO itself is never built.
-    target_include_directories(uilo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ext/VALO/include")
-
-    # Icon.cpp lives under include/elements/, so it is part of this build too and
-    # still needs NanoSVG's headers to compile. Rasterizing is inert here (the
-    # headless backend hands back an invalid texture and Icon bails), but the
-    # element's markup accessor is exactly what a web translator consumes.
-    target_include_directories(uilo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ext/nanosvg")
-
-    # PUBLIC: it gates the web API at the bottom of UILO.hpp, so consumer TUs
-    # need it defined too or including <UILO.hpp> gets them nothing.
-    target_compile_definitions(uilo PUBLIC UILO_WT)
-
-    # PUBLIC include dirs and libs so an application only has to link `uilo` --
-    # Wt comes with it, and stays available for anyone who wants to reach past
-    # the bridge via Session::application().
-    target_include_directories(uilo PUBLIC ${UILO_WT_INCLUDE_DIRS})
-    target_link_libraries(uilo PUBLIC wt wthttp Threads::Threads)
-
-    # UILO's headers need C++20 (Palette's heterogeneous map lookups, among
-    # others). PUBLIC so consumers don't have to know that.
-    target_compile_features(uilo PUBLIC cxx_std_20)
-
-    if(MSVC)
-        target_compile_options(uilo PUBLIC /utf-8)
-        target_compile_options(uilo PRIVATE /W3)
-    else()
-        target_compile_options(uilo PRIVATE -Wall -Wextra)
-    endif()
-
-    return()
-endif()
 
 target_include_directories(uilo PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/ext/stb"

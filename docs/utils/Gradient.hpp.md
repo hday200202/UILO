@@ -19,7 +19,7 @@ One corner of a gradient: a literal [Color](Color.hpp.md#color), or a palette ro
 
 ### Gradient
 
-A per-corner background fill, built once and shared across elements the same way a [Material](Material.hpp.md#material) is. Each of the four corners is a [GradientColor](#gradientcolor) -- a literal [Color](Color.hpp.md#color) or a palette role, freely mixable, and since [GradientColor](#gradientcolor) converts implicitly from both you never name the type at a call site. Colors are interpolated across the background quad on the GPU and clipped by the same rounded-corner mask a solid fill uses, so gradients and rounding compose at no extra cost.
+A per-corner background fill, built once and shared across elements. Each of the four corners is a [GradientColor](#gradientcolor) -- a literal [Color](Color.hpp.md#color) or a palette role, freely mixable, and since [GradientColor](#gradientcolor) converts implicitly from both you never name the type at a call site. Colors are interpolated across the background quad on the GPU and clipped by the same rounded-corner mask a solid fill uses, so gradients and rounding compose at no extra cost.
 
 > The fluent setters name the position each colour occupies, so a gradient reads without having to remember corner order:
 

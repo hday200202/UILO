@@ -32,7 +32,7 @@ Which neighbour the handle resizes, how wide its hit strip is, what it draws as,
 
 ### Resizer
 
-A drag handle placed inside a [Row](../containers/Row.hpp.md#row) or [Column](../containers/Column.hpp.md#column) beside the element it resizes. It occupies a strip for hit detection but is invisible to layout -- its siblings are placed as though it were not there, and it sits at the boundary between them -- so adding one never shifts the arrangement. It draws through [UILO](../../UILO.hpp.md#uilo)'s post- render pass, which puts it on top of everything including the neighbours it straddles.
+A drag handle placed inside a [Row](../containers/Row.hpp.md#row) or [Column](../containers/Column.hpp.md#column) beside the element it resizes. It occupies a strip for hit detection but is invisible to layout -- its siblings are placed as though it were not there, and it sits at the boundary between them -- so adding one never shifts the arrangement. It draws through [UILO](../../UILO.hpp.md#uilo)'s post- render pass, which puts it above the page neighbours it straddles, but below popup backdrops and menus.
 
 > The target and the container bounds are pushed in by [Row](../containers/Row.hpp.md#row) and [Column](../containers/Column.hpp.md#column) during layout rather than looked up here, because only the parent knows which sibling is adjacent once invisible children have been skipped.
 

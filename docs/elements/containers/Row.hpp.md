@@ -19,7 +19,7 @@
 
 ### RowOptions
 
-Everything a [Row](#row) draws that is not layout: background fill, gradient, corner rounding, border, scrolling, the subdivision grid and zoom. Colors come as a literal plus a role, where the role wins when it resolves against the active [Palette](../../Palette.hpp.md#palette) and the literal is the fallback. A gradient takes precedence over a flat fill when active, and a [Material](../../utils/Material.hpp.md#material) on the [Modifier](../Modifier.hpp.md#modifier) takes precedence over both. Sizes are unscaled content pixels; [UILO](../../UILO.hpp.md#uilo) multiplies by its scale at layout time.
+Everything a [Row](#row) draws that is not layout: background fill, gradient, corner rounding, border, scrolling, the subdivision grid and zoom. Colors come as a literal plus a role, where the role wins when it resolves against the active [Palette](../../Palette.hpp.md#palette) and the literal is the fallback. A gradient takes precedence over a flat fill when active. Sizes are unscaled content pixels; [UILO](../../UILO.hpp.md#uilo) multiplies by its scale at layout time.
 
 ---
 

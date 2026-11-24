@@ -21,7 +21,7 @@
 
 ### Theme
 
-What everything looks like before anyone says otherwise: the palette, and a prototype for every [Modifier](../elements/Modifier.hpp.md#modifier) and *Options type in the library. A [UILO](../UILO.hpp.md#uilo) owns one, so two of them can look different in the same process -- which is what a Wt session needs.
+What everything looks like before anyone says otherwise: the palette, and a prototype for every [Modifier](../elements/Modifier.hpp.md#modifier) and *Options type in the library. A [UILO](../UILO.hpp.md#uilo) owns one, so two of them can look different in the same process.
 
 ```cpp
 ui.getTheme().palette().set("accent", {90, 140, 255, 255});

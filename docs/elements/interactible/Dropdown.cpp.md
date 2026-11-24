@@ -121,7 +121,7 @@ closePopup()
 
 **Returns** — void
 
-Hides the list by removing the popup from the floating layer and points the arrow back at its closed glyph. The popup is kept rather than destroyed, so reopening costs nothing and the web bridge -- which only translates structure once -- is not invalidated.
+Hides the list by removing the popup from the floating layer and points the arrow back at its closed glyph. The popup is kept rather than destroyed, so reopening costs nothing.
 
 ---
 
@@ -138,7 +138,7 @@ update(Rectf& parentBounds, float dt)
 
 **Returns** — void
 
-Resolves the dropdown's bounds, ticks the header with them, and ticks the popup against its computed bounds while it is open. The [Modifier](../Modifier.hpp.md#modifier)'s material is mirrored onto both, so a glass dropdown looks the same collapsed and open. Also handles dismissal: a click outside closes the popup, and the just- dismissed flag stops that same click from immediately reopening it through the header.
+Resolves the dropdown's bounds, ticks the header with them, and ticks the popup against its computed bounds while it is open. Also handles dismissal: a click outside closes the popup, and the just- dismissed flag stops that same click from immediately reopening it through the header.
 
 ---
 

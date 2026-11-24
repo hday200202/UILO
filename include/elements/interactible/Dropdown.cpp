@@ -320,9 +320,7 @@ void Dropdown::openPopup() {
     - Returns:  void
     - Desc:     Hides the list by removing the popup from the floating layer and
                 points the arrow back at its closed glyph. The popup is kept
-                rather than destroyed, so reopening costs nothing and the web
-                bridge -- which only translates structure once -- is not
-                invalidated.
+                rather than destroyed, so reopening costs nothing.
 */
 void Dropdown::closePopup() {
     m_isOpen        = false;

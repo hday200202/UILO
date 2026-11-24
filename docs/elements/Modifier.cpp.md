@@ -15,7 +15,6 @@
 - [`setFreePosition(Dimension x, Dimension y)`](#setfreeposition)
 - [`setFloating(bool floating)`](#setfloating)
 - [`setDraggable(bool draggable)`](#setdraggable)
-- [`setMaterial(const Material& m)`](#setmaterial)
 - [`setCursor(CursorType cursor)`](#setcursor)
 - [`clearCursor()`](#clearcursor)
 - [`setContextMenu(std::vector&lt;ContextMenuItem&gt; items)`](#setcontextmenu)
@@ -38,7 +37,6 @@
 - [`getFreeX() / getFreeY()`](#getfreex)
 - [`isFloating()`](#isfloating)
 - [`isDraggable()`](#isdraggable)
-- [`getMaterial()`](#getmaterial)
 - [`getCursor()`](#getcursor)
 - [`hasCursor()`](#hascursor)
 
@@ -186,22 +184,6 @@ setDraggable(bool draggable)
 **Returns** — [Modifier](Modifier.hpp.md#modifier)&
 
 Lets the pointer move a floating element by dragging it, which writes back to its free position. Ignored unless the element is floating, since a child in the flow is positioned by its container.
-
----
-
-### setMaterial
-
-```cpp
-setMaterial(const Material& m)
-```
-
-**Parameters**
-
-- `const Material& m`
-
-**Returns** — [Modifier](Modifier.hpp.md#modifier)&
-
-Gives the element a material background -- glass and the like. A material owns the background: it draws its own rounded rect, tint and effect, so the element's flat fill is skipped rather than drawn underneath it.
 
 ---
 
@@ -480,18 +462,6 @@ isDraggable()
 **Returns** — bool
 
 Whether a floating element may be moved by the pointer.
-
----
-
-### getMaterial
-
-```cpp
-getMaterial()
-```
-
-**Returns** — const [Material](../utils/Material.hpp.md#material)&
-
-The element's material. Kind None means it has none, and the ordinary background is drawn instead.
 
 ---
 

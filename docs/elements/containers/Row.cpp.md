@@ -270,7 +270,7 @@ render()
 
 **Returns** — void
 
-Draws the row: background, then the subdivision grid, then its children. The grid goes between the two so it sits behind every child. A [Material](../../utils/Material.hpp.md#material) on the [Modifier](../Modifier.hpp.md#modifier) makes the whole subtree one glass group, so the children composite into the blur the background established rather than each blurring separately.
+Draws the row: background, then the subdivision grid, then its children. The grid goes between the two so it sits behind every child.
 
 ---
 
@@ -286,7 +286,7 @@ renderBackground(float scale)
 
 **Returns** — void
 
-Draws the row's background. A [Material](../../utils/Material.hpp.md#material) takes precedence and owns the background outright -- it draws its own rounded rect, tint and effect, so the flat fill is skipped rather than drawn underneath it. Otherwise an active gradient wins over the flat colour, and either is drawn with whatever outline the options ask for. Nothing is drawn at all when the fill is transparent and there is no outline.
+Draws the row's background. An active gradient wins over the flat colour, and either is drawn with whatever outline the options ask for. Nothing is drawn at all when the fill is transparent and there is no outline.
 
 ---
 

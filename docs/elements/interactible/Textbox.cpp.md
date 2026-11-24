@@ -46,7 +46,7 @@
 - [`checkScroll(const Vec2f& mousePos, float delta, bool precise, bool momentum)`](#checkscroll)
 - [`handleTextInput(char32_t c)`](#handletextinput)
 - [`insertTab()`](#inserttab)
-- [`handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui)`](#handlekeyinput)
+- [`handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui)`](#handlekeyinput)
 
 ---
 
@@ -624,12 +624,13 @@ Inserts one indent as spaces. Tab always inserts spaces rather than a literal ta
 ### handleKeyInput
 
 ```cpp
-handleKeyInput(SDL_Keycode key, bool shift, bool ctrl, bool gui)
+handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui)
 ```
 
 **Parameters**
 
-- `SDL_Keycode key`
+- `Key key`
+- `char32_t symbol`
 - `bool shift`
 - `bool ctrl`
 - `bool gui`

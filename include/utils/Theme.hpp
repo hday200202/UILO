@@ -31,7 +31,7 @@ void installDefaultTheme(Theme& theme);
     - Desc:     What everything looks like before anyone says otherwise: the
                 palette, and a prototype for every Modifier and *Options type in
                 the library. A UILO owns one, so two of them can look different
-                in the same process -- which is what a Wt session needs.
+                in the same process.
 
                     ui.getTheme().palette().set("accent", {90, 140, 255, 255});
                     ui.setTheme(myTheme);

@@ -14,8 +14,8 @@ namespace uilo {
     ElementType:
     - Desc:     Which kind of element an instance is, for the cases where
                 behaviour has to branch on it rather than on a virtual call:
-                layout skipping Resizers, hit-testing looking for Interactibles,
-                and the Wt bridge choosing which widget to build. Includes types
+                layout skipping Resizers and hit-testing looking for
+                Interactibles. Includes types
                 that are planned but not yet implemented.
 */
 enum class ElementType {
@@ -69,7 +69,6 @@ public:
     virtual bool isDirty() const;
     bool         isHovered() const { return m_hovered; }
     UILO*        getUILO()   const { return m_uiloRef; }
-    bool         takesPointerEvents() const;
     float        getDeltaTime() const;
 
     Color resolveColor(std::string_view role, Color literal) const;
@@ -159,20 +158,6 @@ protected:
 };
 
 
-/*
-    takesPointerEvents():
-    - Params:   none
-    - Returns:  bool
-    - Desc:     Public read of claimsPointerEvents(), for the web bridge. Native
-                hit-testing stops at the first element that claims a click, so
-                ancestors never see it, but a DOM click bubbles to every
-                ancestor's handler. The bridge stops propagation on exactly the
-                elements that claim, which is what keeps a click on a popup's
-                arrow from also reaching the scrim behind it and dismissing it.
-*/
-inline bool Element::takesPointerEvents() const {
-    return claimsPointerEvents();
-}
 
 
 /*

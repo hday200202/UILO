@@ -711,10 +711,8 @@ private:
     // rewrites each cell's day, adjacency, click target, and the title, then
     // recolours. Only valid when every month lays out identically (fixed six
     // rows, adjacent days drawn as cells); returns false otherwise so the
-    // caller can fall back to a rebuild. This is the path that keeps paging
-    // working under the Wt bridge, whose sync only re-applies properties to the
-    // elements translated once at build time -- a rebuild swaps those elements
-    // out and would go unseen.
+    // caller can fall back to a rebuild. Paging through months this way creates
+    // and destroys nothing.
     bool updateGridInPlace(int year, unsigned month);
 
     Element* buildHeader();

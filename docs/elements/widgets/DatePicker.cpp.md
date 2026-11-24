@@ -183,7 +183,7 @@ updateGridInPlace(int year, unsigned month)
 
 **Returns** — bool -- true if the grid was paged in place, false if the shape differs between months and a rebuild is required instead.
 
-Rewrites each existing day cell to the day it now shows -- its number, whether it belongs to the month, and the date its click and hover handlers carry -- then refreshes the title and recolours. No element is created or destroyed, so the Wt bridge picks the changes up through its ordinary property sync.
+Rewrites each existing day cell to the day it now shows -- its number, whether it belongs to the month, and the date its click and hover handlers carry -- then refreshes the title and recolours. No element is created or destroyed.
 
 ---
 

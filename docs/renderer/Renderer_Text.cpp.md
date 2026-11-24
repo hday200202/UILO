@@ -10,6 +10,7 @@
 - [`initAtlasFace(...)`](#initatlasface)
 - [`getFace(uint32_t fontId, float pixelHeight)`](#getface)
 - [`getGlyph(FontFace& face, uint32_t codepoint)`](#getglyph)
+- [`uploadDirtyAtlases()`](#uploaddirtyatlases)
 - [`loadFont(const std::string& path)`](#loadfont)
 - [`measureText(const std::string& utf8, const Font& font, float sizePx)`](#measuretext)
 - [`charPositions(const std::string& utf8, const Font& font, float sizePx)`](#charpositions)
@@ -47,7 +48,7 @@ initAtlasFace(...)
 - `std::vector<uint8_t> ttf`
 - `float pixelHeight`
 
-Sets up a font face at one pixel size: reads the vertical metrics, scales them, and allocates a blank single-channel atlas the glyphs are packed into on demand.
+Sets up a font face at one pixel size: reads the vertical metrics, scales them, and allocates a blank atlas the glyphs are packed into on demand. The GPU texture is created by the caller, which owns the VALO instance.
 
 ---
 
@@ -62,7 +63,7 @@ getFace(uint32_t fontId, float pixelHeight)
 - `uint32_t fontId`
 - `float pixelHeight`
 
-**Returns** — FontFace*
+**Returns** — [FontFace](RendererImpl.hpp.md#fontface)*
 
 The cached face for a font at a pixel size, created on first use. Sizes are cached separately because a glyph atlas is rasterised at one size; asking for a new size builds a new face rather than scaling an existing one, which would blur it.
 
@@ -82,6 +83,16 @@ getGlyph(FontFace& face, uint32_t codepoint)
 **Returns** — const Glyph*
 
 The cached glyph for a codepoint, rasterised and packed into the atlas on first use. Packing runs left to right in rows; when the atlas is full the glyph is recorded as zero-sized so it simply does not draw, rather than corrupting the sheet.
+
+---
+
+### uploadDirtyAtlases
+
+```cpp
+uploadDirtyAtlases()
+```
+
+Sends every atlas region rasterised since the last frame to its texture, one rectangle per face. Runs at endFrame, before VALO executes the frame, so a glyph first drawn this frame is already on the GPU when its quad is.
 
 ---
 

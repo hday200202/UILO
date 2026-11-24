@@ -40,7 +40,7 @@ DateField(Modifier modifier, DateFieldOptions options, const std::string& name)
 
 **Returns** — [DateField](DateField.hpp.md#datefield)
 
-Builds the field as a [Row](../containers/Row.hpp.md#row) and creates every part it will ever need -- the insets, the icon, the gap, the label and the chevron -- whatever shape it is currently in. Parts are only ever shown or hidden from then on, never created or destroyed, because the web bridge translates structure once and would never see a rebuild.
+Builds the field as a [Row](../containers/Row.hpp.md#row) and creates every part it will ever need -- the insets, the icon, the gap, the label and the chevron -- whatever shape it is currently in. Parts are only ever shown or hidden from then on, never created or destroyed.
 
 ---
 
@@ -85,7 +85,7 @@ update(Rectf& parentBounds, float dt)
 
 **Returns** — void
 
-Resolves the field's own box first so the layout decision is made against this frame's size rather than last frame's, then lays out as a [Row](../containers/Row.hpp.md#row). Native only: the web bridge does not tick, and takes the decision made in the constructor.
+Resolves the field's own box first so the layout decision is made against this frame's size rather than last frame's, then lays out as a [Row](../containers/Row.hpp.md#row).
 
 ---
 
@@ -97,7 +97,7 @@ resolveAspect()
 
 **Returns** — float
 
-The field's width over its height. Prefers the laid-out box, which is exact and follows percent sizing, and falls back to the declared width and height when there is none -- either before the first frame or under the web bridge, which never lays the tree out. Returns 0 when the field is sized in percentages and has not been laid out, since nothing available can say.
+The field's width over its height. Prefers the laid-out box, which is exact and follows percent sizing, and falls back to the declared width and height when there is none -- before the first frame. Returns 0 when the field is sized in percentages and has not been laid out, since nothing available can say.
 
 ---
 
@@ -125,7 +125,7 @@ applyLayout(DateFieldLayout layout)
 
 **Returns** — void
 
-Shows the parts the mode calls for and hides the rest. Nothing is created or destroyed: visibility is a style the web bridge re-applies on every sync, where a change to the child list would never be seen. Returns early when the mode has not changed, so this costs a comparison per frame.
+Shows the parts the mode calls for and hides the rest. Nothing is created or destroyed. Returns early when the mode has not changed, so this costs a comparison per frame.
 
 ---
 
@@ -149,7 +149,7 @@ refreshLabel()
 
 **Returns** — void
 
-Writes the current text into the label and colours it as a value or as a placeholder. Both are ordinary property changes, so this reaches the web through the bridge's usual sync.
+Writes the current text into the label and colours it as a value or as a placeholder.
 
 ---
 

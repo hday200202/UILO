@@ -53,8 +53,8 @@
 - [`checkScroll(const Vec2f& mousePos, float delta, bool precise, bool momentum)`](#checkscroll)
 - [`onDeactivate()`](#ondeactivate)
 - [`handleTextInput(char32_t unicode)`](#handletextinput)
-- [`sendKey(SDL_Keycode key, bool shift, bool ctrl)`](#sendkey)
-- [`handleKeyInput(SDL_Keycode key, bool shift, bool ctrl)`](#handlekeyinput)
+- [`sendKey(Key key, char32_t symbol, bool shift, bool ctrl)`](#sendkey)
+- [`handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui)`](#handlekeyinput)
 
 ---
 
@@ -767,12 +767,13 @@ Sends a typed character to the shell. Nothing is echoed locally: the shell decid
 ### sendKey
 
 ```cpp
-sendKey(SDL_Keycode key, bool shift, bool ctrl)
+sendKey(Key key, char32_t symbol, bool shift, bool ctrl)
 ```
 
 **Parameters**
 
-- `SDL_Keycode key`
+- `Key key`
+- `char32_t symbol`
 - `bool shift`
 - `bool ctrl`
 
@@ -785,14 +786,16 @@ Encodes a non-printing key the way a terminal is expected to. Arrows and Home/En
 ### handleKeyInput
 
 ```cpp
-handleKeyInput(SDL_Keycode key, bool shift, bool ctrl)
+handleKeyInput(Key key, char32_t symbol, bool shift, bool ctrl, bool gui)
 ```
 
 **Parameters**
 
-- `SDL_Keycode key`
+- `Key key`
+- `char32_t symbol`
 - `bool shift`
 - `bool ctrl`
+- `bool gui`
 
 **Returns** — void
 

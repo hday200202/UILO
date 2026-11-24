@@ -1,5 +1,21 @@
 # Migration: bgfx + SDL → VALO
 
+> **Status (2026-11-24): the code migration has landed** (9c0023f, c6c9643).
+> The material system, bgfx, the `.sc` shaders, `cmake/bgfxToolUtils.cmake`
+> and the SDL shim are gone; UILO renders through one `ui.vert`/`ui.frag`
+> program on VALO, `UILO_RENDERER` picks the backend, and the `uilo-new`
+> scaffold points at VALO. `grep -rn "SDL_\|<SDL3\|bgfx" include` finds only
+> stale comments. The checkboxes below were not ticked as the work happened and
+> are kept as a record of the plan, not as a status list.
+>
+> What is still open is carried in TODO.txt under "VALO migration leftovers":
+> the §12 verification runs, `tools/ctxmenu_probe.cpp` (still synthesises
+> `SDL_Event`s, so it no longer builds), the leftover bgfx/SDL wording in
+> comments, and the stale `ext/SDL3`, `ext/bx`, `ext/bimg` gitlinks.
+>
+> The Wt web backend (`UILO_WT`) has since been removed entirely, so every
+> item below that mentions it, `HeadlessBackend.cpp` or `Translator.cpp` is moot.
+
 Checklist for moving UILO onto VALO ([ext/VALO](ext/VALO)). VALO replaces bgfx
 (rendering) **and** SDL (window, input, platform). When this is done, UILO has no
 direct dependency on either, and nothing from SDL appears in UILO's public API.

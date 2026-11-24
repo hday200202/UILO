@@ -23,7 +23,6 @@
 - [`isContextMenuOpen()`](#iscontextmenuopen)
 - [`addPopupBackdrop(Element* e)`](#addpopupbackdrop)
 - [`removePopupBackdrop(Element* e)`](#removepopupbackdrop)
-- [`requestCursor(CursorType type, int priority)`](#requestcursor)
 - [`getScrollLinkOffset(const std::string& linkId, bool horizontal)`](#getscrolllinkoffset)
 - [`setScrollLinkOffset(const std::string& linkId, float offset, bool horizontal)`](#setscrolllinkoffset)
 - [`getZoomLinkValue(const std::string& linkId, bool horizontal)`](#getzoomlinkvalue)
@@ -32,12 +31,16 @@
 - [`update()`](#update)
 - [`render()`](#render)
 - [`queryMousePixelPosition()`](#querymousepixelposition)
-- [`toPixels(float x, float y)`](#topixels)
+- [`isMouseButtonDown(MouseButton button)`](#ismousebuttondown)
+- [`getKeyModifiers()`](#getkeymodifiers)
+- [`getClipboardText()`](#getclipboardtext)
+- [`setClipboardText(const std::string& text)`](#setclipboardtext)
+- [`anyKeyDown()`](#anykeydown)
 - [`dispatchScroll(const Vec2f& pos, Vec2f delta, bool precise, bool momentum)`](#dispatchscroll)
 - [`dispatchZoom(const Vec2f& pos, float magnification)`](#dispatchzoom)
 - [`wantsScrollMomentum(const Vec2f& pos)`](#wantsscrollmomentum)
-- [`handleEvent(const SDL_Event& event)`](#handleevent)
-- [`handleEvent(const SDL_Event& event)`](#handleevent)
+- [`pollEvents()`](#pollevents)
+- [`handleWindowEvent(const valo::WindowEvent& event)`](#handlewindowevent)
 
 ---
 
@@ -66,7 +69,7 @@ UILO()
 
 **Returns** — n/a
 
-Starts on the defaults in Defaults.hpp. A [UILO](UILO.hpp.md#uilo) owns its theme outright, so two of them can look different in the same process -- which is what a Wt session needs.
+Starts on the defaults in Defaults.hpp. A [UILO](UILO.hpp.md#uilo) owns its theme outright, so two of them can look different in the same process.
 
 ---
 
@@ -158,7 +161,7 @@ setCurrInteractible(Interactible* i)
 
 **Returns** — void
 
-Sets the focused interactible, deactivating the previous one, and starts or stops SDL text input depending on whether the new interactible wants keyboard text.
+Sets the focused interactible, deactivating the previous one, and starts or stops the window's text input depending on whether the new interactible wants keyboard text.
 
 ---
 
@@ -296,23 +299,6 @@ Removes a popup backdrop by pointer, which is what dismissing a popup does.
 
 ---
 
-### requestCursor
-
-```cpp
-requestCursor(CursorType type, int priority)
-```
-
-**Parameters**
-
-- `CursorType type`
-- `int priority`
-
-**Returns** — void
-
-Requests a cursor for this frame. The highest-priority request wins; ties keep the most recent.
-
----
-
 ### getScrollLinkOffset
 
 ```cpp
@@ -395,7 +381,7 @@ setOnLiveResize(std::function<void()> cb)
 
 **Returns** — void
 
-Sets a callback invoked during native live window resize so the host can redraw at each intermediate size.
+Overrides the default layout/redraw during native resizing with a host frame callback. An empty callback restores the default.
 
 ---
 
@@ -407,7 +393,7 @@ update()
 
 **Returns** — void
 
-Advances the UI by one frame. On the first frame -- and only when [UILO](UILO.hpp.md#uilo) owns its window, never when embedded in a host -- it installs the macOS native scroll and zoom monitors and the live- resize configuration. Each frame it converts the SDL mouse position from logical points to backing pixels, updates layout for the active page and every floating element, culls elements marked for deletion, then dispatches hover, left-click, and right-click input. Floating elements are opaque to input: the topmost one under the cursor consumes hover and clicks so the page beneath is shielded, and draggable ones follow the cursor while held.
+Advances the UI by one frame. Owned windows install a live-resize frame callback; embedded views leave frame scheduling to their host. macOS additionally installs native scroll/zoom monitors. Each normal frame it reads the mouse position in backing pixels, updates layout for the active page and every floating element, culls elements marked for deletion, then dispatches hover, left-click, and right-click input. Floating elements are opaque to input: the topmost one under the cursor consumes hover and clicks so the page beneath is shielded, and draggable ones follow the cursor while held.
 
 ---
 
@@ -419,7 +405,7 @@ render()
 
 **Returns** — void
 
-Draws the active page, then floating elements, overlays, and resizers in back-to-front order.
+Draws the active page and its resizers, then popup backdrops and overlays in back-to-front order.
 
 ---
 
@@ -431,24 +417,75 @@ queryMousePixelPosition()
 
 **Returns** — [Vec2f](utils/Math.hpp.md#vec2f)
 
-The cursor in render pixels. SDL reports it in window points, so the ratio between the window's point and pixel size converts it; on a retina display those differ by the backing scale.
+The cursor in render pixels, read live from the window. On a retina display that is the window-point position times the backing scale, which the window has already applied.
 
 ---
 
-### toPixels
+### isMouseButtonDown
 
 ```cpp
-toPixels(float x, float y)
+isMouseButtonDown(MouseButton button)
 ```
 
 **Parameters**
 
-- `float x`
-- `float y -- a position in window points`
+- `MouseButton button`
 
-**Returns** — [Vec2f](utils/Math.hpp.md#vec2f) -- the same position in render pixels
+**Returns** — bool
 
-SDL reports both the cursor and mouse-button events in window points; [UILO](UILO.hpp.md#uilo) lays out in render pixels, and on a retina display those differ by the backing scale.
+Whether a mouse button is physically held right now.
+
+---
+
+### getKeyModifiers
+
+```cpp
+getKeyModifiers()
+```
+
+**Returns** — KeyMod
+
+The modifier keys held as of the last event read.
+
+---
+
+### getClipboardText
+
+```cpp
+getClipboardText()
+```
+
+**Returns** — std::string
+
+The system clipboard as UTF-8, empty when it holds no text.
+
+---
+
+### setClipboardText
+
+```cpp
+setClipboardText(const std::string& text)
+```
+
+**Parameters**
+
+- `const std::string& text`
+
+**Returns** — void
+
+Puts UTF-8 text on the system clipboard.
+
+---
+
+### anyKeyDown
+
+```cpp
+anyKeyDown()
+```
+
+**Returns** — bool
+
+Whether any key is physically down right now.
 
 ---
 
@@ -502,36 +539,32 @@ wantsScrollMomentum(const Vec2f& pos)
 
 Walks the visible element tree from the topmost overlay (or the page root) down to the deepest element containing the position, and asks that element whether a flick over it should coast. The macOS monitor uses this both to decide whether to start a coast at the end of a gesture and to stop one that has drifted onto something that does not want it.
 
-> Nothing here routes events to SDL: the monitor consumes every precise scroll it sees, and a mouse wheel never reaches it in the first place.
+> Nothing here routes events to the window: the monitor consumes every precise scroll it sees, and a mouse wheel never reaches it in the first place.
 
 ---
 
-### handleEvent
+### pollEvents
 
 ```cpp
-handleEvent(const SDL_Event& event)
+pollEvents()
+```
+
+**Returns** — void
+
+Reads the window's input for the frame and dispatches every event in the order it arrived. Closing the window stops the app.
+
+---
+
+### handleWindowEvent
+
+```cpp
+handleWindowEvent(const valo::WindowEvent& event)
 ```
 
 **Parameters**
 
-- `const SDL_Event& event`
+- `const valo::WindowEvent& event`
 
 **Returns** — void
 
-Processes one SDL event. Mouse-wheel events map to zoom when Ctrl/Cmd is held, horizontal scroll when Shift is held, or normal scroll otherwise. [Text](elements/decoration/Text.hpp.md#text) input and key input route to the focused interactible, with a filter that drops the stale key- repeat events Wayland can deliver after a key is released. UTF-8 text is decoded one codepoint at a time so batched or IME input is not dropped.
-
----
-
-### handleEvent
-
-```cpp
-handleEvent(const SDL_Event& event)
-```
-
-**Parameters**
-
-- `const SDL_Event& event`
-
-**Returns** — void
-
-Turns one SDL event into [UILO](UILO.hpp.md#uilo)'s own dispatch. Scroll and zoom gestures are separated here -- a wheel with a modifier held is a zoom, not a scroll -- and keyboard events are routed to the active interactible, except for the zoom shortcuts and the navigation keys, which drive scrolling when nothing has focus. A key repeat arriving after every key has physically come up is dropped, which is what stops a held key from continuing to fire once the window has lost and regained focus.
+Turns one window event into [UILO](UILO.hpp.md#uilo)'s own dispatch. Scroll and zoom gestures are separated here -- a wheel with a modifier held is a zoom, not a scroll -- and keyboard events are routed to the active interactible, except for the zoom shortcuts and the navigation keys, which drive scrolling when nothing has focus. A key repeat arriving after every key has physically come up is dropped, which is what stops a held key from continuing to fire once the window has lost and regained focus. UTF-8 text is decoded one codepoint at a time so batched or IME input is not dropped.

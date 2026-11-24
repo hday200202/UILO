@@ -34,8 +34,7 @@ from collections import OrderedDict
 ROOT     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC      = os.path.join(ROOT, 'include')
 OUT      = os.path.join(ROOT, 'docs')
-SKIP     = ('assets/EmbeddedFont', 'assets/EmbeddedIcons', 'assets/EmbeddedAssets',
-            'wt/shim/')
+SKIP     = ('assets/EmbeddedFont', 'assets/EmbeddedIcons', 'assets/EmbeddedAssets')
 KEYS     = ('Params', 'Returns', 'Desc')
 
 BLOCK    = re.compile(r'/\*\n(.*?)\n\s*\*/', re.S)

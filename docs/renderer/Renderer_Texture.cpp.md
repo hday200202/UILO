@@ -12,7 +12,6 @@
 - [`updateTexture(const Texture& tex, const uint8_t* rgba)`](#updatetexture)
 - [`destroyTexture(Texture& tex)`](#destroytexture)
 - [`drawImage(...)`](#drawimage)
-- [`drawGlass(const Rectf& dst, const Material& mat, Color baseColor)`](#drawglass)
 
 ---
 
@@ -28,7 +27,7 @@ loadTexture(const std::string& path)
 
 **Returns** — Texture
 
-applyScissor / scissorEmpty / clip-uniform helpers are shared inlines in RendererImpl.hpp.
+Decodes an image file into a GPU texture, cached by path so the same file is decoded once. A file that fails to load is cached as an invalid texture too, so a bad path is reported once rather than retried every frame.
 
 ---
 
@@ -64,7 +63,7 @@ createTexture(uint16_t width, uint16_t height)
 
 **Returns** — Texture
 
-Creates an empty mutable RGBA8 texture, for content the application updates itself rather than loading from a file.
+Creates an empty mutable RGBA8 texture, for content the application updates itself rather than loading from a file. Created without mips, since every update would otherwise rebuild the whole chain.
 
 ---
 
@@ -79,7 +78,7 @@ updateTexture(const Texture& tex, const uint8_t* rgba)
 - `const Texture& tex`
 - `const uint8_t* rgba`
 
-Uploads a full RGBA8 buffer into a texture created by createTexture.
+Uploads a full RGBA8 buffer into a texture created by createTexture. Takes effect for the frame being built.
 
 ---
 
@@ -93,7 +92,7 @@ destroyTexture(Texture& tex)
 
 - `Texture& tex`
 
-Destroys a texture and invalidates the handle. Only textures the caller owns should be passed: a path-cached one belongs to the renderer and is shared.
+Destroys a texture and invalidates the handle. Only textures the caller owns should be passed: a path-cached one belongs to the renderer and is shared. VALO defers the release until no frame in flight still samples it.
 
 ---
 
@@ -114,19 +113,3 @@ drawImage(...)
 - `bool clipEllipse`
 
 Draws a texture into a rectangle, with a tint, a source sub- rectangle, optional horizontal and vertical flips, and an optional elliptical mask for a round avatar.
-
----
-
-### drawGlass
-
-```cpp
-drawGlass(const Rectf& dst, const Material& mat, Color baseColor)
-```
-
-**Parameters**
-
-- `const Rectf& dst`
-- `const Material& mat`
-- `Color baseColor`
-
------------------------------------------------------------- --------------- drawGlass — sample the blurred backdrop (built in the previous frame) and overlay tint + edge highlight via the fs_glass shader. ------------------------- --------------------------------------------------

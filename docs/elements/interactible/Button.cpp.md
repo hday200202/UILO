@@ -47,7 +47,7 @@ Button(Modifier modifier, ButtonOptions options, const std::string& name)
 
 **Returns** — [Button](Button.hpp.md#button)
 
-Constructs a button as a [Row](../containers/Row.hpp.md#row) carrying the converted options, and adds the label as its first child when one was given. Tagged as a [Button](Button.hpp.md#button) so hit-testing and the web bridge can identify it.
+Constructs a button as a [Row](../containers/Row.hpp.md#row) carrying the converted options, and adds the label as its first child when one was given. Tagged as a [Button](Button.hpp.md#button) so hit-testing can identify it.
 
 ---
 

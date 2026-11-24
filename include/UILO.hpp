@@ -22,50 +22,6 @@ namespace uilo {
 class Interactible;
 class UILO;
 
-#ifdef UILO_WT
-namespace wt {
-/*
-    WebConfig:
-    - Desc: Server-side settings for UILO::runWeb -- the things that have no
-            desktop equivalent because they describe the page and the HTTP
-            server, not the UI. The UI itself (pages, palette, callbacks) is set
-            on the UILO instance exactly as on desktop.
-*/
-struct WebConfig {
-    std::string title       = "UILO";
-    int         port        = 8080;
-    std::string address     = "0.0.0.0";
-    std::string docRoot     = "docroot";                       // static files, served at /
-    std::string resourcesDir = "ext/UILO/ext/wt/resources";    // Wt's bundled JS/themes
-
-    // Font mapping: UILO loads a .ttf by path, the browser needs a CSS family,
-    // and charSize is a pixel height (ascent+descent) whereas CSS font-size
-    // sizes the em square. Defaults are fine for most apps.
-    std::string fontFamily =
-        "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-    float       charSizeToFontSize = 0.86f;
-};
-
-
-/*
-    WebApp:
-    - Desc: One browser session's UILO, plus whatever else has to stay alive for
-            as long as that session does. Implement it on the type that owns
-            your UILO and hand a factory to the per-session runWeb: the server
-            makes one per connection and destroys it when the connection ends,
-            so every browser gets its own pages, palette and application state.
-
-            The single-instance runWeb needs none of this -- there, every
-            connection shares the one UILO it was called on.
-*/
-class WebApp {
-public:
-    virtual ~WebApp() = default;
-    virtual UILO& ui() = 0;
-};
-}
-#endif
-
 /*
     UILO:
     - Desc:     The top-level controller. It owns the pages and the element
@@ -136,26 +92,6 @@ public:
     Page* getActivePage() const { return m_activePage; }
     void setScale(float scale);
 
-#ifdef UILO_WT
-    // Serves this UILO over the web (Wt) and blocks until the server stops --
-    // the web counterpart of the desktop pollEvents/update/render loop. Set up
-    // the UILO exactly as on desktop (addPage/setPage/setTheme/callbacks)
-    // first; runWeb translates the active page, drives it from browser events,
-    // and follows setPage() for navigation. `config` is server-side only.
-    //
-    // Every connection shares this one instance: two browsers are two views of
-    // the same UI, and they are driven from different threads. Single-user
-    // tools want this; anything else wants the factory form below.
-    int runWeb(const wt::WebConfig& config = {});
-
-    // Per-session form. `factory` is called once per browser connection, on
-    // that connection's thread, and the WebApp it returns lives and dies with
-    // the connection -- so each browser gets its own UILO and its own state,
-    // and no two sessions touch the same tree.
-    static int runWeb(std::function<std::unique_ptr<wt::WebApp>()> factory,
-                      const wt::WebConfig& config = {});
-#endif
-
     void registerOverlay(Element* e, std::function<void()> onDismiss = {});
     void unregisterOverlay(Element* e);
 
@@ -182,8 +118,6 @@ public:
     // calendar escapes the container it belongs to.
     Element* addPopupBackdrop(Element* e);
     void     removePopupBackdrop(Element* e);
-
-    std::vector<Element*> getPopupBackdrops() const;
 
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }
@@ -357,23 +291,6 @@ private:
 */
 
 
-/*
-    getPopupBackdrops():
-    - Params:   none
-    - Returns:  std::vector<Element*> -- in insertion order
-    - Desc:     The elements currently in the floating layer. Native rendering
-                walks the internal list directly; this exists for the web
-                bridge, which cannot see it and reads this on each sync to
-                mirror popups -- a picker adds its backdrop here when it opens
-                -- into an on-top overlay.
-*/
-inline std::vector<Element*> UILO::getPopupBackdrops() const {
-    std::vector<Element*> out;
-    out.reserve(m_backdrops.size());
-    for (Element* e : m_backdrops) out.push_back(e);
-    return out;
-}
-
 
 /*
     getElement(const std::string& name):
@@ -392,10 +309,3 @@ T* UILO::getElement(const std::string& name) {
 }
 
 }
-
-// The web backend. Included last so every UILO declaration above is complete by
-// the time it is parsed, and only when the UILO_WT build is active -- a normal
-// desktop build never sees it, and never links Wt.
-#ifdef UILO_WT
-#include "wt/UiloWt.hpp"
-#endif

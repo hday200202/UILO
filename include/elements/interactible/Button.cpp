@@ -39,7 +39,7 @@ RowOptions rowOptionsFrom(const ButtonOptions& o) {
     - Returns:  Button
     - Desc:     Constructs a button as a Row carrying the converted options, and
                 adds the label as its first child when one was given. Tagged as
-                a Button so hit-testing and the web bridge can identify it.
+                a Button so hit-testing can identify it.
 */
 Button::Button(
     Modifier modifier,

@@ -140,7 +140,7 @@ checkScroll(const Vec2f& mousePosition, float delta, bool precise, bool momentum
 
 Offers the scroll to the children under the cursor, stopping at the first that takes it, and otherwise falls back to the [Modifier](../Modifier.hpp.md#modifier)'s onScroll handler. A plain [Container](Container.hpp.md#container) does not scroll itself -- [Row](Row.hpp.md#row) and [Column](Column.hpp.md#column) override this.
 
-> A floating child under the pointer swallows the event even when it scrolls nothing, or the view behind it would slide out from under the cursor.
+> A floating child receives the event instead of its covered siblings. If it declines, scrolling can bubble to the parent (for example when wheel adjustment on a floating slider is disabled).
 
 ---
 
@@ -284,4 +284,4 @@ collectResizers(std::vector<Element*>& out)
 
 **Returns** — void
 
-Gathers every [Resizer](../interactible/Resizer.hpp.md#resizer) in the subtree. [UILO](../../UILO.hpp.md#uilo) hit-tests them ahead of the tree walk, so it needs them in one flat list.
+Gathers visible Resizers from visible subtrees. [UILO](../../UILO.hpp.md#uilo) hit-tests them ahead of the tree walk, so it needs them in one flat list.

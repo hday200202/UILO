@@ -360,8 +360,8 @@ public:
 
 protected:
     // The field is the click target, so the press is always consumed whether or
-    // not the application attached a handler of its own. Native this stops the
-    // parent seeing it; on the web it is what stops the DOM click bubbling.
+    // not the application attached a handler of its own, so the parent never
+    // sees it.
     bool claimsPointerEvents() const override { return true; }
 
 private:
@@ -369,9 +369,7 @@ private:
     // Sets the label's string and colour from the current value.
     void refreshLabel();
     // Shows and hides the row's parts for the mode in force. Only visibility is
-    // touched -- never the child list -- because the web bridge translates the
-    // tree once and thereafter only re-applies properties, so a structural
-    // change would go unseen while a hidden child is plain CSS.
+    // touched -- never the child list.
     void applyLayout(DateFieldLayout layout);
     // Which mode Auto resolves to right now.
     DateFieldLayout resolveLayout() const;

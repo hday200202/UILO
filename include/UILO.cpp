@@ -26,8 +26,7 @@ UILO::UILO(Renderer& renderer, Page* page) {
     - Params:   none
     - Returns:  n/a
     - Desc:     Starts on the defaults in Defaults.hpp. A UILO owns its theme
-                outright, so two of them can look different in the same process
-                -- which is what a Wt session needs.
+                outright, so two of them can look different in the same process.
 */
 UILO::UILO() {
     installDefaultTheme(m_theme);

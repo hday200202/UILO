@@ -149,8 +149,8 @@ private:
                 application never builds or positions one -- it declares items
                 with Modifier::setContextMenu and this is what shows them.
     - Rows are pooled. setItems() relabels and shows the slots it needs and hides
-      the rest, and only ever grows the pool, because the web bridge translates
-      structure once per session and would not see a rebuild. Each slot holds
+      the rest, and only ever grows the pool, so opening a menu allocates nothing once
+      it has been shown at its largest. Each slot holds
       both an item row and a separator rule, and shows whichever the item at that
       position is.
     - A submenu is another ContextMenu, created on demand and owned by the parent

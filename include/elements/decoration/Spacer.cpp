@@ -10,7 +10,7 @@ namespace uilo {
                 name
     - Returns:  Spacer
     - Desc:     Constructs a spacer from a modifier and its options, and tags it
-                as a Spacer so layout and the web bridge can identify it.
+                as a Spacer so layout can identify it.
 */
 Spacer::Spacer(
     Modifier modifier,

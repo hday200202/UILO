@@ -26,5 +26,3 @@ A header button that opens a list of items. The header is a [Button](Button.hpp.
 > It is an [Element](../Element.hpp.md#element) rather than an [Interactible](Interactible.hpp.md#interactible) because the header does the claiming: the press is consumed there whatever callbacks are attached.
 
 > The popup has to be floating rather than a child, because [UILO](../../UILO.hpp.md#uilo) only ticks, hit-tests and renders the floating layer above the page -- a popup left in the tree would be clipped by whatever container the dropdown sits in.
-
-> On the web this becomes a native <select>, so the popup and the arrow are never translated; getItems() exists so that backend can populate its own control from the whole list rather than just the selection.

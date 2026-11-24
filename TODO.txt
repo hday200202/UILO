@@ -5,7 +5,7 @@ UILO TODO & Roadmap
 
 Immediate priorities, in order. UILO's end goal is a DAW, and the timeline needs
 a small, coherent primitive set to draw grids, clips, automation and waveforms.
-See "DAW FOUNDATIONS & THE ZEN DAW" at the bottom of this file for the design.
+The design is in items 1 and 2 below; there is no longer-form write-up yet.
 
 - [ ] 1. Remove uilo::Canvas and uilo::Waveform          <-- the next thing
       - Canvas was an immediate-mode experiment that fought the retained tree.
@@ -26,7 +26,7 @@ See "DAW FOUNDATIONS & THE ZEN DAW" at the bottom of this file for the design.
         explicit (x, y) in content coords, following scroll/zoom -- so clips,
         piano roll and automation are composed elements, not one giant blob.
 
-- [~] 3. Context Menu -- NATIVE DONE, web pending
+- [x] 3. Context Menu
       Root-held as specified: UILO holds one ContextMenu, built on first use, and
       an element declares items with Modifier::setContextMenu -- a fixed list, or
       a builder run on each right-click for a menu that follows state. The
@@ -35,14 +35,10 @@ See "DAW FOUNDATIONS & THE ZEN DAW" at the bottom of this file for the design.
       keyboard navigation (up/down skipping separators and disabled rows, right
       and left to enter and leave a submenu, enter to pick, escape to back out),
       edge flipping on both axes, and a pooled row set that is only ever
-      relabelled so the structure survives.
-      Verified by tools/probe.sh ctxmenu -- 26 assertions against a real window.
-      - [ ] Web: Translator has no case for it yet. The rows are ordinary
-            Buttons in a Column so the geometry translates as-is, but the
-            browser's own menu has to be suppressed, the contextmenu event wired
-            to the same dispatch, and a menu whose row pool GROWS mid-session
-            needs the overlay re-translated -- syncFloating only translates a
-            backdrop it has not seen, and re-uses it by pointer thereafter.
+      relabelled, never rebuilt.
+      Verified by tools/probe.sh ctxmenu -- 26 assertions against a real window
+      -- but that probe has not built since the VALO migration (see "VALO
+      migration leftovers"), so the menu is currently untested.
       - [x] examples/contextmenu.cpp -- a DAW-shaped timeline: lanes with a
             builder menu, clips with a list menu of their own (so the deepest
             element wins), a transport bar, and the page background, for four
@@ -58,7 +54,12 @@ headers, not here.
 
 - [~] File Browser  (include/elements/widgets/Filebrowser.hpp)
       An expanding tree of directories, docked or floating. Done: both modes,
-      extension filtering (setExtensionFilter), sorting, theming.
+      extension filtering (setExtensionFilter), sorting, theming, and
+      selection navigation (navigateSelection / expandSelection /
+      collapseSelection, which scroll the row into view via
+      Column::scrollIntoView).
+      - [ ] Nothing binds those to keys yet -- the app has to wire arrows /
+            enter itself. Decide whether FileBrowser handles them when focused.
       - [ ] Multi-select -- there is one m_selectedPath today, so this is a set
             plus shift/cmd-click range and toggle semantics
       - [ ] Favourites / recent -- needs somewhere to persist a list, which UILO
@@ -74,11 +75,18 @@ headers, not here.
             to today
       - [ ] Time-of-day selection, to make it a full DateTime picker
 
-- [ ] Color Picker  (ColorPicker.{hpp,cpp} exist and are EMPTY)
-      - [ ] Saturation/value area plus a hue strip, with RGB/HSV fields and hex
-            entry
-      - [ ] Alpha slider over a checkerboard
+- [~] Color Picker  (include/elements/widgets/ColorPicker.{hpp,cpp})
+      Done: saturation/value field, vertical hue and alpha rails, preview
+      swatch, editable hex (parseHex accepts what the field accepts), the
+      colorpicker() factory. Programmatic setColor is silent and user edits
+      notify once; achromatic colours keep the last hue. It is an inline
+      widget -- the caller owns any popup and apply/cancel.
+      - [ ] RGB / HSV numeric fields (only hex today)
       - [ ] Palette presets -- rows of swatches, click to pick
+      - [ ] No prototype in Defaults.hpp -- its roles are in-class defaults,
+            so a theme cannot restyle it the way it does the other widgets
+      - [ ] A DateField-style compact swatch that opens it as a popup
+      - [ ] No example and no probe coverage
 
 
 ## Widgets not started
@@ -127,8 +135,7 @@ headers, not here.
 
 - [~] Palette
       Done: central definitions in Defaults.hpp, runtime switching, per-UILO
-      override via UILO::setTheme (which is what gives Wt sessions their own
-      look), and every widget following roles with nothing named at the call
+      override via UILO::setTheme, and every widget following roles with nothing named at the call
       site. A Palette is now reachable only through a Theme -- there is no
       UILO::setPalette any more.
       - [ ] Serialization / deserialization
@@ -253,17 +260,34 @@ headers, not here.
       System clipboard integration is already done.
 
 
-## Known gaps
+## VALO migration leftovers
 
-- Vendored versions
-      - [x] bx / bimg / bgfx are pinned to commit SHAs in build.sh. They used to
-            be cloned at HEAD while SDL3 was pinned, so a clone made on a
-            different day got a different bgfx -- and today's shaderc has dropped
-            the GLSL "120" profile CMakeLists.txt asks for, failing every shader
-            with "Unknown profile: 120" on a fresh checkout.
-      - [ ] Bumping those three is a deliberate step: check
-            _UILO_SHADER_PROFILES in CMakeLists.txt still names profiles the new
-            shaderc has, since bgfx removes them without notice.
+The renderer and window moved from bgfx + SDL to VALO (9c0023f, c6c9643).
+RENDERER_MIGRATION.md is the plan it followed; what is still open:
+
+- [ ] tools/ctxmenu_probe.cpp still builds SDL_Events and pushes them with
+      SDL_PushEvent, and nothing includes SDL any more, so it does not compile.
+      Rework it to drive the tree directly (as pointer_probe does) or retire it.
+- [ ] Stale gitlinks: ext/SDL3, ext/bx and ext/bimg are tracked as submodule
+      entries (mode 160000, added in 0de7f05) with no .gitmodules. Nothing uses
+      them; `git rm --cached` them.
+- [ ] Leftover bgfx / SDL wording in comments: Icon.cpp (uint16 texture
+      limit), Image.cpp / Image.hpp (immutable textures), Renderer.cpp,
+      Renderer_Texture.cpp.
+- [ ] Renderer.hpp still carries the unused FrameBuffer and rotation API
+      (createFrameBuffer..., setRotation...). Port or delete.
+- [ ] The §12 verification matrix in RENDERER_MIGRATION.md -- every example on
+      both the software and Vulkan backends, IME, non-QWERTY shortcuts,
+      validation-clean Vulkan, HiDPI across monitors -- has no recorded run.
+- [ ] VALO is cloned at `main` (VALO_REF in build.sh), not pinned, on purpose
+      while the two are developed together. Pin it before tagging a UILO
+      release, or a checkout made on a different day builds against a
+      different renderer.
+- [ ] IOS_BUILD.md is written for bgfx (shaderc, CAMetalLayer, SDL calls) and
+      needs rewriting for VALO / MoltenVK.
+
+
+## Known gaps
 
 - Terminal
       - [ ] Windows. Pty.cpp's Windows branch fails cleanly with "needs
@@ -275,10 +299,6 @@ headers, not here.
       - [ ] No reflow on resize. The grid is resized and the shell is
             SIGWINCHed, but wrapped lines are not re-wrapped -- a cell grid has
             already thrown away the text that would be needed.
-      - Not fixable: the browser cannot host this. A page cannot fork a process,
-        and proxying one would hand every visitor a shell on the host. Pty is
-        stubbed in wt/HeadlessBackend.cpp so the WT build links, and Translator
-        renders the screen text as a monospace block.
 
 - Input
       - [ ] Touch / pointer support
@@ -310,15 +330,15 @@ headers, not here.
       - Windows is Git Bash only, deliberately, like UILO's own build. The
         README and the CMake error messages that pointed at a build.ps1 which
         never existed now say so.
-      - [ ] Only two templates (minimal, panels). A web/Wt starter would need
-            UILO_WT wiring in the generated CMakeLists.
+      - [ ] Only two templates (minimal, panels).
       - [ ] No `--list-templates`, and no way to add templates without a rebuild.
 
 
 ## Testing & docs
 
-Two probes are the test suite. Both drive elements directly with no UILO bound,
-so they need no window and no GPU:
+The probes are the test suite. All but ctxmenu need no window and no GPU --
+layout and pointer drive elements with no UILO bound, theme binds to a UILO
+that has no renderer:
 
       tools/probe.sh layout     22 cases, dumps every child's resolved bounds.
                                 --baseline saves the golden output, --check
@@ -330,15 +350,21 @@ so they need no window and no GPU:
       tools/probe.sh ctxmenu    26 assertions. Needs a window and a GPU, unlike
                                 the other two: a menu measures its own labels
                                 and flips against the window edges.
-      tools/gen_docs.py --check doc-comment coverage
+                                Currently does not build (SDL leftovers).
+      tools/probe.sh theme      self-checking. Asserts what a theme fills in,
+                                what it leaves alone, and what changes when
+                                the theme is replaced.
+      tools/gen_docs.py --check doc-comment coverage (clean as of 2026-11-24)
       tools/check_readme.py     compiles every code block in README.md
       examples/render_bench     rendering throughput
 
 - [ ] Neither probe covers a widget yet, only containers and dispatch. Add cases
       as widgets land.
-- [ ] gen_docs.py --check reports 24 gaps, all in include/wt: Translator's
-      reconcilePages and translatePageInto, and UiloWt's serverArgs, argPointers
-      and both UILO::runWeb overloads.
+- [ ] gen_docs.py never deletes a page whose source is gone (docs/utils/
+      Material.hpp.md outlived Material.hpp until removed by hand). Have it
+      prune docs/ before writing.
+- [ ] gen_docs.py writes CRLF on Windows while the repo stores LF, so every
+      page shows as modified after a regen there. Open with newline='\n'.
 - [ ] Example apps still missing: todo list, settings panel, dashboard.
 
 
@@ -353,8 +379,7 @@ Row.cpp and Column.cpp.
 Worth doing because 63 of 67 accessor names are already identical between
 RowOptions and ColumnOptions -- the only genuine difference is the zoom axis
 (getZoomableX vs getZoomableY). A template over the Options type therefore works
-by duck typing: no common base class, no virtuals, no change to the public API
-or to the Wt bridge.
+by duck typing: no common base class, no virtuals, no change to the public API.
 
 Shape to aim for: a detail-namespace axis policy in containers/AxisLayout.hpp
 holding main/cross accessors (main, cross, mainDim, isEnd, isMid), then one

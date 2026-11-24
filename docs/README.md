@@ -3,7 +3,7 @@
 Generated from the block comments in `include/` by `tools/gen_docs.py`.
 Edit the comments, not these files.
 
-88 files, 107 types, 879 functions.
+85 files, 104 types, 737 functions.
 
 ## elements
 
@@ -56,6 +56,8 @@ Edit the comments, not these files.
 
 ## elements/widgets
 
+- [ColorPicker.cpp](elements/widgets/ColorPicker.cpp.md) — `Preview`, `Field`, `ColorPicker`, `setColor`, …
+- [ColorPicker.hpp](elements/widgets/ColorPicker.hpp.md) — `ColorPickerOptions`, `ColorPicker`
 - [ContextMenu.cpp](elements/widgets/ContextMenu.cpp.md)
 - [ContextMenu.hpp](elements/widgets/ContextMenu.hpp.md) — `ContextMenuOptions`, `ContextMenu`
 - [DateField.cpp](elements/widgets/DateField.cpp.md)
@@ -77,7 +79,7 @@ Edit the comments, not these files.
 
 - [Renderer.cpp](renderer/Renderer.cpp.md)
 - [Renderer.hpp](renderer/Renderer.hpp.md) — `Font`, `TextMetrics`
-- [RendererImpl.hpp](renderer/RendererImpl.hpp.md) — `PosColorVertex`, `PosColorUvVertex`, `Renderer`
+- [RendererImpl.hpp](renderer/RendererImpl.hpp.md) — `FontFace`, `Renderer::Impl`
 - [Renderer_Text.cpp](renderer/Renderer_Text.cpp.md)
 - [Renderer_Texture.cpp](renderer/Renderer_Texture.cpp.md)
 
@@ -96,7 +98,6 @@ Edit the comments, not these files.
 - [FileTree.hpp](utils/FileTree.hpp.md) — `FileKind`, `EntryType`, `FSEntry`, `File`, …
 - [Gradient.cpp](utils/Gradient.cpp.md)
 - [Gradient.hpp](utils/Gradient.hpp.md) — `GradientColor`, `Gradient`
-- [Material.hpp](utils/Material.hpp.md) — `Material`
 - [Math.hpp](utils/Math.hpp.md) — `Vec2f`, `Vec2u`, `Vec2i`, `Rectf`
 - [OS.cpp](utils/OS.cpp.md)
 - [Resources.cpp](utils/Resources.cpp.md)
@@ -104,13 +105,6 @@ Edit the comments, not these files.
 - [Theme.hpp](utils/Theme.hpp.md) — `Theme`, `UILO_THEMED`
 - [Themed.hpp](utils/Themed.hpp.md) — `Themed`
 - [Timer.hpp](utils/Timer.hpp.md) — `Timer`
-
-## wt
-
-- [HeadlessBackend.cpp](wt/HeadlessBackend.cpp.md) — `Pty`
-- [Translator.cpp](wt/Translator.cpp.md) — `KnobWidget`, `KnobGeometry`, `kTextboxJs`
-- [Translator.hpp](wt/Translator.hpp.md) — `Translator`
-- [UiloWt.cpp](wt/UiloWt.cpp.md) — `UiloApplication`
 
 ## (root)
 
@@ -121,7 +115,7 @@ Edit the comments, not these files.
 - [Palette.cpp](Palette.cpp.md)
 - [Palette.hpp](Palette.hpp.md) — `Palette`
 - [UILO.cpp](UILO.cpp.md)
-- [UILO.hpp](UILO.hpp.md) — `WebConfig`, `WebApp`, `UILO`
+- [UILO.hpp](UILO.hpp.md) — `UILO`
 
 ## All types
 
@@ -131,6 +125,8 @@ Edit the comments, not these files.
 - [Canvas](elements/containers/Canvas.hpp.md#canvas)
 - [CanvasOptions](elements/containers/Canvas.hpp.md#canvasoptions)
 - [Color](utils/Color.hpp.md#color)
+- [ColorPicker](elements/widgets/ColorPicker.cpp.md#colorpicker)
+- [ColorPickerOptions](elements/widgets/ColorPicker.hpp.md#colorpickeroptions)
 - [Column](elements/containers/Column.hpp.md#column)
 - [ColumnOptions](elements/containers/Column.hpp.md#columnoptions)
 - [Container](elements/containers/Container.hpp.md#container)
@@ -155,6 +151,7 @@ Edit the comments, not these files.
 - [ElementType](elements/Element.hpp.md#elementtype)
 - [EntryType](utils/FileTree.hpp.md#entrytype)
 - [FSEntry](utils/FileTree.hpp.md#fsentry)
+- [Field](elements/widgets/ColorPicker.cpp.md#field)
 - [File](utils/FileTree.hpp.md#file)
 - [FileBrowser](elements/widgets/Filebrowser.hpp.md#filebrowser)
 - [FileBrowserOptions](elements/widgets/Filebrowser.hpp.md#filebrowseroptions)
@@ -165,6 +162,7 @@ Edit the comments, not these files.
 - [FileTree](utils/FileTree.hpp.md#filetree)
 - [FilterSpecs](utils/FileDialog.cpp.md#filterspecs)
 - [Font](renderer/Renderer.hpp.md#font)
+- [FontFace](renderer/RendererImpl.hpp.md#fontface)
 - [Gradient](utils/Gradient.hpp.md#gradient)
 - [GradientColor](utils/Gradient.hpp.md#gradientcolor)
 - [GridLineStyle](elements/containers/Canvas.hpp.md#gridlinestyle)
@@ -175,20 +173,16 @@ Edit the comments, not these files.
 - [Interactible](elements/interactible/Interactible.hpp.md#interactible)
 - [Knob](elements/interactible/Knob.hpp.md#knob)
 - [KnobArcDir](elements/interactible/Knob.hpp.md#knobarcdir)
-- [KnobGeometry](wt/Translator.cpp.md#knobgeometry)
 - [KnobOptions](elements/interactible/Knob.hpp.md#knoboptions)
 - [KnobValueChangedFuncPtr](elements/interactible/Knob.hpp.md#knobvaluechangedfuncptr)
-- [KnobWidget](wt/Translator.cpp.md#knobwidget)
-- [Material](utils/Material.hpp.md#material)
 - [Modifier](elements/Modifier.hpp.md#modifier)
 - [Month](utils/DateAndTime.hpp.md#month)
 - [Page](Page.hpp.md#page)
 - [Palette](Palette.hpp.md#palette)
-- [PosColorUvVertex](renderer/RendererImpl.hpp.md#poscoloruvvertex)
-- [PosColorVertex](renderer/RendererImpl.hpp.md#poscolorvertex)
+- [Preview](elements/widgets/ColorPicker.cpp.md#preview)
 - [Pty](platform/Pty.hpp.md#pty)
 - [Rectf](utils/Math.hpp.md#rectf)
-- [Renderer](renderer/RendererImpl.hpp.md#renderer)
+- [Renderer::Impl](renderer/RendererImpl.hpp.md#renderer-impl)
 - [Resizer](elements/interactible/Resizer.hpp.md#resizer)
 - [ResizerDir](elements/interactible/Resizer.hpp.md#resizerdir)
 - [ResizerOptions](elements/interactible/Resizer.hpp.md#resizeroptions)
@@ -213,10 +207,8 @@ Edit the comments, not these files.
 - [ThumbShape](elements/interactible/Slider.hpp.md#thumbshape)
 - [Time](utils/DateAndTime.hpp.md#time)
 - [Timer](utils/Timer.hpp.md#timer)
-- [Translator](wt/Translator.hpp.md#translator)
 - [UILO](UILO.hpp.md#uilo)
 - [UILO_THEMED](utils/Theme.hpp.md#uilo-themed)
-- [UiloApplication](wt/UiloWt.cpp.md#uiloapplication)
 - [ValueChangedFuncPtr](elements/interactible/Slider.hpp.md#valuechangedfuncptr)
 - [Vec2f](utils/Math.hpp.md#vec2f)
 - [Vec2i](utils/Math.hpp.md#vec2i)
@@ -225,9 +217,8 @@ Edit the comments, not these files.
 - [WaveformLayout](elements/decoration/Waveform.hpp.md#waveformlayout)
 - [WaveformOptions](elements/decoration/Waveform.hpp.md#waveformoptions)
 - [WaveformStyle](elements/decoration/Waveform.hpp.md#waveformstyle)
-- [WebApp](UILO.hpp.md#webapp)
-- [WebConfig](UILO.hpp.md#webconfig)
 - [Weekday](utils/DateAndTime.hpp.md#weekday)
 - [WeekdayLabelStyle](elements/widgets/DatePicker.hpp.md#weekdaylabelstyle)
 - [cb_traits](elements/Modifier.hpp.md#cb-traits)
-- [kTextboxJs](wt/Translator.cpp.md#ktextboxjs)
+- [parseHex](elements/widgets/ColorPicker.cpp.md#parsehex)
+- [setColor](elements/widgets/ColorPicker.cpp.md#setcolor)

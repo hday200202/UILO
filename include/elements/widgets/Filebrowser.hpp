@@ -151,8 +151,7 @@ public:
     // whether it is open, the way a Dropdown marks its header. It sits at the
     // right edge however wide the row is, and a file reserves the same width
     // rather than drawing one, so every label in the list clips at the same
-    // place. Native only, like the Dropdown arrow: on the web the entry rows are
-    // built once and expanding a directory does not restructure the DOM.
+    // place.
     FileBrowserOptions& setShowDirectoryArrow(bool v)             { m_showDirArrow = v; return *this; }
     FileBrowserOptions& setDirectoryArrowIcon(std::string_view n)     { m_dirArrowIcon = std::string(n); return *this; }
     // Shown while the directory is expanded. Set both to the same name for an

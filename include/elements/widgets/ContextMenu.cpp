@@ -61,8 +61,7 @@ void ContextMenu::applySurface() {
     - Desc:     Creates one position's worth of elements and appends them to the
                 column: the item row, then the separator rule that position could
                 be instead. Both start hidden. The row's parts are created once
-                and only ever relabelled, so the structure the web bridge
-                translated stays valid.
+                and only ever relabelled, never rebuilt.
 */
 ContextMenu::Slot ContextMenu::makeSlot() {
     const ContextMenuOptions& o = m_cmOptions;

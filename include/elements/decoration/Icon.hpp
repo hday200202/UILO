@@ -151,9 +151,7 @@ inline bool IconOptions::hasStrokeWidth() const {
     - Desc:     Draws an SVG icon. The element holds the *source* markup: the
                 desktop backend parses it with NanoSVG and rasterizes to a
                 texture at the size the icon actually occupies on screen, so it
-                stays crisp as the window scales, while the web backend can emit
-                that same markup inline instead. Keeping source rather than
-                pixels on the element is what lets one Icon serve both.
+                stays crisp as the window scales.
     - The raster is cached and rebuilt only when something it depends on has
       moved -- pixel size, resolved colour, stroke width, or the source itself.
       A palette switch therefore re-tints without the caller doing anything.

@@ -32,7 +32,7 @@ First-argument introspection for a callable, so a user-supplied handler can be w
 
 ### Modifier
 
-The layout and event half of an element, kept separate from the per-widget Options that describe how it is drawn. Carries size, alignment, outer padding, visibility, free position, material, and the callback set: clicks, edge-triggered hover, scroll, and the two per-frame lifecycle hooks. Every setter returns *this so a modifier reads as one declaration at the call site.
+The layout and event half of an element, kept separate from the per-widget Options that describe how it is drawn. Carries size, alignment, outer padding, visibility, free position, and the callback set: clicks, edge-triggered hover, scroll, and the two per-frame lifecycle hooks. Every setter returns *this so a modifier reads as one declaration at the call site.
 
 > There is deliberately no continuous "is hovered" callback: handlers react to the enter and exit transitions and keep any persistent visual change on the element themselves.
 

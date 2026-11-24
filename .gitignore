@@ -17,9 +17,6 @@ build
 # Vendored dependencies in ext/ — all cloned by build.sh at pinned versions.
 # Keep the ext/stb/ directory (contains committed headers), wipe the rest on clean.
 /ext/VALO
-# Web backend (UILO_WT) only.
-/ext/wt
-/ext/boost
 /lib
 
 # Generator binary, built alongside the examples.

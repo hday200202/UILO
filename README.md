@@ -20,8 +20,8 @@ Elements are created with lowercase factory functions and configured with two ob
 - **Cross-platform** — macOS, Linux and Windows; see [IOS_BUILD.md](IOS_BUILD.md) for iOS
 - **Themed by role** — each UILO owns a `Theme`: the palette plus a prototype for every widget, all of it in `include/Defaults.hpp`
 - **Nothing to ship beside the binary** — two fonts and ~280 icons are compiled in
-- **Real widgets** — text, buttons, sliders, knobs, dropdowns, textboxes, images, SVG icons, waveforms, file browser, date picker, resizers, and a working **terminal**
-- **Optional web backend** — the same element tree served through Wt (`-DUILO_WT=ON`)
+- **Real widgets** — text, buttons, sliders, knobs, dropdowns, textboxes, images, SVG icons, waveforms, file browser, date picker, colour picker, resizers, right-click context menus, and a working **terminal**
+- **Native file dialogs** — open/save/folder pickers behind one header (`utils/FileDialog.hpp`), with no third-party code
 - **Integrated build** — vendored dependencies, one-command builds
 
 ## Build
@@ -139,7 +139,7 @@ int main() {
 }
 ```
 
-Two details worth knowing up front:
+Three details worth knowing up front:
 
 - **`uilo.setScale(OS::scale())`** — layout is in points; this is what makes it correct on a HiDPI display. Skip it and everything comes out half size.
 - **No font was set.** Text with no font uses the DejaVu Sans compiled into the binary, so this program needs no asset files at all.
@@ -263,8 +263,7 @@ See [THIRD_PARTY.md](THIRD_PARTY.md) for the licences of what ships inside the b
 
 A `Theme` is the whole look of an application: the palette, and a prototype for
 every `Modifier` and `*Options` type. **Each UILO owns one** — `ui.getTheme()`
-and `ui.setTheme()` — so two of them can look different in the same process,
-which is what a Wt session needs.
+and `ui.setTheme()` — so two of them can look different in the same process.
 
 Every default ships in **[include/Defaults.hpp](include/Defaults.hpp)** — the
 palette's roles and one block per widget. Editing that file restyles the
@@ -381,7 +380,7 @@ column(
 )
 ```
 
-`contains{...}` is the child list. `Canvas` positions children freely instead of stacking them, and `Grid` lays them out in cells.
+`contains{...}` is the child list. `Canvas` positions children freely instead of stacking them.
 
 ## A page worth looking at
 
@@ -562,6 +561,35 @@ escape its container entirely, so those use UILO's overlay layer
 clicking away. Reach for `setFloating` for anything that belongs to a pane, and
 the overlay layer only when something must break out of one.
 
+### Context menus
+
+There is no menu to build, own or position. UILO holds one context menu at the
+root and fills it from whichever element was right-clicked; an element just
+declares its items. The deepest element under the cursor that has items wins.
+
+```cpp
+Element* lane() {
+    return row(
+        Modifier()
+            .setHeight(48_px)
+            .setContextMenu({
+                menuItem("Add clip", [] { /* ... */ }),
+                menuItem("Paste", Resources::icons::clipboard, [] { /* ... */ }),
+                menuSeparator(),
+                menuSubmenu("Colour", {
+                    menuItem("Red",  [] { /* ... */ }),
+                    menuItem("Blue", [] { /* ... */ }),
+                }),
+            }),
+        RowOptions(),
+        contains{});
+}
+```
+
+For a menu that depends on application state, pass a builder instead of a list
+— it runs on every right-click: `.setContextMenu([] { return currentItems(); })`.
+`examples/contextmenu.cpp` has four distinct menus on one timeline.
+
 ## Key APIs
 
 ### UILO (application)
@@ -590,6 +618,13 @@ void     unregisterOverlay(Element* e);
 
 void setOnLiveResize(std::function<void()> cb);  // override the default resize frame
 
+// Opt-in input behaviour, mostly for hosts embedding UILO in a larger app
+void setValueDragBehavior(bool);           // hide the pointer while dragging a Knob/Slider; Shift = fine
+void setScrollAdjustsControls(bool);       // false: the wheel scrolls past Knobs/Sliders instead of turning them
+void setArrowKeyScrollingEnabled(bool);    // false: leave arrow keys to the focused editor
+void setCursorUpdatesEnabled(bool);        // false: never touch the OS cursor
+void setPointerInputFilter(std::function<bool()> allowed);  // gate pointer input, e.g. for native child windows
+
 float getScale()        const;
 float getDeltaTime()    const;
 float getFrameRate()    const;
@@ -610,8 +645,9 @@ default redraw.
 
 ```cpp
 .setWidth(Dimension)     .setHeight(Dimension)    .setAlign(Align)
-.setVisible(bool)        .ignoreScroll(bool)      .setMaterial(Material)
+.setVisible(bool)        .ignoreScroll(bool)
 .setCursor(CursorType)   .clearCursor()
+.setContextMenu(items)   .setContextMenu(builder)  // see Context menus
 
 // out of the flow -- see Floating elements
 .setFloating(bool)       .setDraggable(bool)
@@ -647,7 +683,7 @@ Terminal*    terminal(Modifier, TerminalOptions, name);
 FileBrowser* filebrowser(Modifier, FileBrowserOptions, name);
 DatePicker*  datepicker(Modifier, DatePickerOptions, name);
 DateField*   datefield(Modifier, DateFieldOptions, name);
-
+ColorPicker* colorpicker(Modifier, ColorPickerOptions, name);
 ```
 
 Every argument has a default, so `text({}, TextOptions().setContent("hi"))` is valid and the trailing name is optional. Elements are `new`-allocated and owned by UILO — it sweeps them between frames, so you never delete one yourself.
@@ -662,6 +698,7 @@ Full generated reference for every type and function: **[docs/](docs/)** (regene
 | `text-editor.cpp` | file browser, resizers, code editor, terminal |
 | `terminal.cpp` | a shell in a window, with live-resize wired up |
 | `datepicker.cpp` | date picker and date field |
+| `contextmenu.cpp` | DAW-shaped timeline with list and builder context menus |
 | `gradients.cpp` | per-corner and role-driven gradients |
 | `theme.cpp` | the theme, named roles, and live palette switching |
 | `render_bench.cpp` | throughput benchmark |
@@ -674,9 +711,8 @@ UILO vendors and manages all dependencies:
 - **VALO** — renderer (Vulkan and software) and window, wrapping SDL3
 - **stb_truetype** — glyph rasterisation
 - **NanoSVG** — SVG icon parsing
-- **Wt** — only for the optional web backend (`-DUILO_WT=ON`)
 
-All are cloned into `ext/` and built once, then cached. Clean builds don't rebuild them. Licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md) — note the Wt backend is GPL, so leave it off unless you intend that.
+All are cloned into `ext/` and built once, then cached. Clean builds don't rebuild them. Licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Performance
 

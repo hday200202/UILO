@@ -26,7 +26,7 @@ Spacer(Modifier modifier, SpacerOptions options, const std::string& name)
 
 **Returns** — [Spacer](Spacer.hpp.md#spacer)
 
-Constructs a spacer from a modifier and its options, and tags it as a [Spacer](Spacer.hpp.md#spacer) so layout and the web bridge can identify it.
+Constructs a spacer from a modifier and its options, and tags it as a [Spacer](Spacer.hpp.md#spacer) so layout can identify it.
 
 ---
 

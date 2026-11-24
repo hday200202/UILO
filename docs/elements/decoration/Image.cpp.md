@@ -45,7 +45,7 @@ Constructs an image element from a modifier and its options. The texture is not 
 ~Image()
 ```
 
-Releases the private texture a pixel write may have created. A path-cached texture belongs to the [Renderer](../../renderer/RendererImpl.hpp.md#renderer) and is left alone.
+Releases the private texture a pixel write may have created. A path-cached texture belongs to the Renderer and is left alone.
 
 ---
 
@@ -93,7 +93,7 @@ releaseOwnedTexture()
 
 **Returns** — void
 
-Destroys the texture only when this [Image](Image.hpp.md#image) owns it. Cached textures belong to the [Renderer](../../renderer/RendererImpl.hpp.md#renderer) and are shared with every other [Image](Image.hpp.md#image) naming the same file, so only a private copy-on-write texture is ours to destroy.
+Destroys the texture only when this [Image](Image.hpp.md#image) owns it. Cached textures belong to the Renderer and are shared with every other [Image](Image.hpp.md#image) naming the same file, so only a private copy-on-write texture is ours to destroy.
 
 ---
 

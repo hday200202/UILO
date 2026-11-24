@@ -6,19 +6,20 @@
 
 ## Functions
 
-- [`ensureLayouts()`](#ensurelayouts)
-- [`initShaders()`](#initshaders)
+- [`toValoColor(Color c)`](#tovalocolor)
+- [`sleepUntilNextFrame(double interval, uint64_t& nextTick)`](#sleepuntilnextframe)
+- [`createResources()`](#createresources)
 - [`shutdownResources()`](#shutdownresources)
-- [`destroySceneFramebuffers()`](#destroysceneframebuffers)
-- [`ensureSceneFramebuffers(uint32_t width, uint32_t height)`](#ensuresceneframebuffers)
-- [`runBlurPasses(uint32_t width, uint32_t height)`](#runblurpasses)
-- [`compositeSceneToBackbuffer(...)`](#compositescenetobackbuffer)
-- [`Renderer() : m_impl(std::make_unique&lt;Impl&gt;())`](#renderer)
-- [`~Renderer() { shutdown()`](#renderer)
+- [`applyLayerOrder()`](#applylayerorder)
+- [`refreshClipCache()`](#refreshclipcache)
+- [`beginShape(uint32_t mode, valo::TextureID tex, const float imgFlags[4])`](#beginshape)
+- [`flushBatch()`](#flushbatch)
+- [`Renderer()`](#renderer)
+- [`~Renderer()`](#renderer)
 - [`init(uint32_t width, uint32_t height, const std::string& title, uint8_t msaa)`](#init)
-- [`attach(SDL_Window* hostWindow, uint16_t baseView)`](#attach)
 - [`shutdown()`](#shutdown)
 - [`getSize()`](#getsize)
+- [`window()`](#window)
 - [`setTitle(const std::string& title)`](#settitle)
 - [`getStats()`](#getstats)
 - [`setVsync(bool enabled)`](#setvsync)
@@ -28,15 +29,11 @@
 - [`setCursor(CursorType type)`](#setcursor)
 - [`beginFrame()`](#beginframe)
 - [`endFrame()`](#endframe)
-- [`submitOrtho(uint16_t viewId, Vec2u size)`](#submitortho)
-- [`currentViewId()`](#currentviewid)
 - [`createFrameBuffer(Vec2u size)`](#createframebuffer)
 - [`resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize)`](#resizeframebuffer)
 - [`destroyFrameBuffer(FrameBuffer& fb)`](#destroyframebuffer)
 - [`pushFrameBuffer(FrameBuffer& fb)`](#pushframebuffer)
 - [`popFrameBuffer()`](#popframebuffer)
-- [`beginGlassSubtree()`](#beginglasssubtree)
-- [`endGlassSubtree()`](#endglasssubtree)
 - [`drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint)`](#drawframebuffer)
 - [`pushScissor(Rectf b)`](#pushscissor)
 - [`popScissor()`](#popscissor)
@@ -45,14 +42,9 @@
 - [`setRotation(float degrees, Vec2f pivot)`](#setrotation)
 - [`rotate(float deltaDegrees)`](#rotate)
 - [`clearRotation()`](#clearrotation)
-- [`setMouseState(Vec2f mousePosFbPx)`](#setmousestate)
 - [`clear(Color color)`](#clear)
-- [`refreshClipCache()`](#refreshclipcache)
-- [`batchStateMatches(uint16_t viewId)`](#batchstatematches)
-- [`captureBatchState(uint16_t viewId)`](#capturebatchstate)
-- [`packAvgColor(Color a, Color b, Color c, Color d)`](#packavgcolor)
+- [`avgColor(Color a, Color b, Color c, Color d)`](#avgcolor)
 - [`draw(const Rect& r)`](#draw)
-- [`flushSolidBatch()`](#flushsolidbatch)
 - [`draw(const RoundedRect& rr)`](#draw)
 - [`draw(const Circle& c)`](#draw)
 - [`draw(const Triangle& t)`](#draw)
@@ -62,25 +54,46 @@
 
 ---
 
-### ensureLayouts
+### toValoColor
 
 ```cpp
-ensureLayouts()
+toValoColor(Color c)
 ```
 
-============================================================ ================ Impl ====================================== ======================================
+**Parameters**
+
+- `Color c`
+
+**Returns** — valo::[Color](../utils/Color.hpp.md#color)
+
+A [UILO](../UILO.hpp.md#uilo) colour as VALO's 0..1 floats, for layer clears.
 
 ---
 
-### initShaders
+### sleepUntilNextFrame
 
 ```cpp
-initShaders()
+sleepUntilNextFrame(double interval, uint64_t& nextTick)
+```
+
+**Parameters**
+
+- `double interval -- seconds per frame; uint64_t& nextTick -- steady_clock ns of the next deadline`
+- `0 to re-anchor`
+
+The frame-rate cap. Sleeps most of the remaining time and spins the last half millisecond, so scheduler latency does not overshoot the deadline; re-anchors when the loop has fallen more than a whole frame behind rather than trying to catch up.
+
+---
+
+### createResources
+
+```cpp
+createResources()
 ```
 
 **Returns** — bool
 
-Compiles the embedded shader programs and creates the uniform handles the renderer draws through. Shaders are embedded rather than loaded, so a built application needs no shader files beside it.
+Creates what every frame draws through: the UI program and the arena's vertex and index buffers. The buffers start with one placeholder element because VALO creates a buffer from data; the first frame replaces it.
 
 ---
 
@@ -90,96 +103,79 @@ Compiles the embedded shader programs and creates the uniform handles the render
 shutdownResources()
 ```
 
-Destroys every GPU resource the renderer created -- programs, uniforms, framebuffers, textures and font atlases -- in an order that leaves nothing referencing a destroyed handle.
+Releases every GPU resource the renderer created -- textures, font atlases, framebuffer layers, the program and the arena -- then VALO itself and the window.
 
 ---
 
-### destroySceneFramebuffers
+### applyLayerOrder
 
 ```cpp
-destroySceneFramebuffers()
+applyLayerOrder()
 ```
 
-============================================================ ================ Offscreen scene + blur ladder ([Material](../utils/Material.hpp.md#material)::Glass) ========================================== ==================================
+Framebuffer layers run before the window's, so a framebuffer drawn into the scene has already been rendered that frame.
 
 ---
 
-### ensureSceneFramebuffers
+### refreshClipCache
 
 ```cpp
-ensureSceneFramebuffers(uint32_t width, uint32_t height)
+refreshClipCache()
 ```
 
-**Parameters**
-
-- `uint32_t width`
-- `uint32_t height`
-
-Creates or resizes the offscreen targets the scene is composited through. Recreated only when the size actually changes, since reallocating a framebuffer every frame would stall the GPU.
+Walk the clip stack from the top down and collect the two top- most rounded entries (radius > 0). The first becomes the "inner" SDF (the shape being drawn, e.g. a button's own rounded body); the second becomes the "outer" SDF (the enclosing rounded ancestor, e.g. the parent panel). Both are applied in the fragment shader, so a child element stays its own shape AND gets cropped by the parent's rounded corners.
 
 ---
 
-### runBlurPasses
+### beginShape
 
 ```cpp
-runBlurPasses(uint32_t width, uint32_t height)
+beginShape(uint32_t mode, valo::TextureID tex, const float imgFlags[4])
 ```
 
 **Parameters**
 
-- `uint32_t width`
-- `uint32_t height`
+- `uint32_t mode`
+- `valo::TextureID tex`
+- `const float imgFlags[4]`
 
-Runs the separable blur used by glass materials: a horizontal pass then a vertical one, at reduced resolution. Separating the two turns an NxN kernel into two N-wide ones, which is what makes a wide blur affordable.
+**Returns** — bool -- false when the current scissor is empty
+
+Makes sure the batch about to receive a shape's geometry was opened under exactly this shape's draw state -- target, shader mode, texture, image flags, both rounded clips and the scissor. Anything different submits the batch so far and starts a new one, so draw order is always submission order.
 
 ---
 
-### compositeSceneToBackbuffer
+### flushBatch
 
 ```cpp
-compositeSceneToBackbuffer(...)
+flushBatch()
 ```
 
-**Parameters**
-
-- `uint32_t width`
-- `uint32_t height`
-- `const bgfx::VertexLayout& layout`
-- `bgfx::ProgramHandle program`
-
-Draws the finished offscreen scene onto the backbuffer as a fullscreen quad, which is the last step of a frame.
+Submits the open batch as one VALO command and closes it. The command names a range of the arena, which is uploaded at endFrame before VALO runs the frame's queue.
 
 ---
 
 ### Renderer
 
 ```cpp
-Renderer() : m_impl(std::make_unique<Impl>())
+Renderer()
 ```
 
-**Parameters**
+**Returns** — Renderer
 
-- `) : m_impl(std::make_unique<Impl>()`
-
-**Returns** — R
-
-============================================================ ================ [Renderer](RendererImpl.hpp.md#renderer) ctor/dtor/lifecycle ============== ============================================================ ==
+Creates an uninitialised renderer; init() opens the window.
 
 ---
 
 ### ~Renderer
 
 ```cpp
-~Renderer() { shutdown()
+~Renderer()
 ```
 
-**Parameters**
+**Returns** — n/a
 
-- `) { shutdown(`
-
-**Returns** — R
-
-Shuts the renderer down, releasing the GPU resources and, unless attached to a host's context, the window and bgfx too.
+Shuts the renderer down, releasing the GPU resources, VALO and the window.
 
 ---
 
@@ -198,24 +194,7 @@ init(uint32_t width, uint32_t height, const std::string& title, uint8_t msaa)
 
 **Returns** — bool
 
-Creates the window and brings bgfx up on it, then builds the shaders and the initial framebuffers. Reports false rather than throwing if any stage fails, so an application can fall back or exit cleanly.
-
----
-
-### attach
-
-```cpp
-attach(SDL_Window* hostWindow, uint16_t baseView)
-```
-
-**Parameters**
-
-- `SDL_Window* hostWindow`
-- `uint16_t baseView`
-
-**Returns** — bool
-
-Embedded mode: binds to a window and bgfx context a host already owns. Skips creation entirely, rebases [UILO](../UILO.hpp.md#uilo)'s views to start after the host's, and clears transparent so the UI composites over the host's image rather than erasing it.
+Opens the window and brings VALO up on it, then builds the program and the arena. Vulkan is tried first where VALO was built with it, and the software rasteriser is the fallback, so a machine without a usable GPU still opens. UILO_RENDERER=vulkan | software | auto forces the choice. Reports false rather than throwing if every option fails.
 
 ---
 
@@ -225,7 +204,7 @@ Embedded mode: binds to a window and bgfx context a host already owns. Skips cre
 shutdown()
 ```
 
-Releases everything init() created, and the window and bgfx context too unless this renderer was attached to a host's.
+Releases everything init() created: GPU resources, VALO and the window.
 
 ---
 
@@ -237,7 +216,19 @@ getSize()
 
 **Returns** — [Vec2u](../utils/Math.hpp.md#vec2u)
 
-============================================================ ================ Window / cursor =========================== =================================================
+The window's size in pixels -- the space every element's bounds are expressed in.
+
+---
+
+### window
+
+```cpp
+window()
+```
+
+**Returns** — valo::Window*
+
+The window [UILO](../UILO.hpp.md#uilo) reads input from, null before init().
 
 ---
 
@@ -263,7 +254,7 @@ getStats()
 
 **Returns** — RendererStats
 
-Draw-call and vertex counters for the previous frame, for a HUD or profiling.
+Draw-command and vertex counters for the previous frame, and how long VALO took to run it, for a HUD or profiling.
 
 ---
 
@@ -277,7 +268,7 @@ setVsync(bool enabled)
 
 - `bool enabled`
 
-Turns vertical sync on or off, which takes effect on the next reset.
+Turns vertical sync on or off.
 
 ---
 
@@ -329,7 +320,7 @@ setCursor(CursorType type)
 
 - `CursorType type`
 
-Applies a cursor shape to the window, creating and caching the system cursor on first use.
+Applies a cursor shape to the window. VALO caches the system cursors.
 
 ---
 
@@ -339,7 +330,7 @@ Applies a cursor shape to the window, creating and caching the system cursor on 
 beginFrame()
 ```
 
-============================================================ ================ Frame lifecycle / projection ============== ============================================================ ==
+Starts a frame: picks up a window resize, and resets the arena, the batch, the clip and target stacks and any rotation left set by the previous frame. Nothing reaches VALO until endFrame.
 
 ---
 
@@ -349,34 +340,7 @@ beginFrame()
 endFrame()
 ```
 
-Flush any rects still sitting in the solid-rect batch from the last user draw call before kicking off internal passes.
-
----
-
-### submitOrtho
-
-```cpp
-submitOrtho(uint16_t viewId, Vec2u size)
-```
-
-**Parameters**
-
-- `uint16_t viewId`
-- `Vec2u size`
-
-Sets a view's orthographic projection so one unit is one pixel with the origin at the top left, which is the space every element's bounds are expressed in.
-
----
-
-### currentViewId
-
-```cpp
-currentViewId()
-```
-
-**Returns** — uint16_t
-
-The view currently being drawn into, which is the top of the framebuffer stack or the scene view when that stack is empty.
+Submits the last batch, uploads the arena and any glyphs packed this frame, and hands the frame to VALO: the clear colour the frame ended up with is applied first, then every command in submission order. A minimised window renders nothing.
 
 ---
 
@@ -392,7 +356,7 @@ createFrameBuffer(Vec2u size)
 
 **Returns** — FrameBuffer
 
-============================================================ ================ Framebuffer =============================== =============================================
+A render target with its own layer. Its layer runs before the window's, and it clears to transparent at the start of every frame.
 
 ---
 
@@ -407,7 +371,7 @@ resizeFrameBuffer(FrameBuffer& fb, Vec2u newSize)
 - `FrameBuffer& fb`
 - `Vec2u newSize`
 
-Resizes a framebuffer by recreating it, since a bgfx framebuffer's dimensions are fixed at creation.
+Resizes a framebuffer by recreating it.
 
 ---
 
@@ -421,7 +385,7 @@ destroyFrameBuffer(FrameBuffer& fb)
 
 - `FrameBuffer& fb`
 
-Destroys a framebuffer and its texture.
+Destroys a framebuffer's target and retires its layer.
 
 ---
 
@@ -449,26 +413,6 @@ Returns drawing to whatever target was active before the matching push.
 
 ---
 
-### beginGlassSubtree
-
-```cpp
-beginGlassSubtree()
-```
-
-Opens a glass group, so every element drawn until the matching end composites into the blur the material established rather than each blurring the backdrop separately.
-
----
-
-### endGlassSubtree
-
-```cpp
-endGlassSubtree()
-```
-
-Closes the glass group opened by beginGlassSubtree.
-
----
-
 ### drawFrameBuffer
 
 ```cpp
@@ -482,7 +426,7 @@ drawFrameBuffer(const FrameBuffer& fb, Vec2f dest, Vec2f size, Color tint)
 - `Vec2f size`
 - `Color tint`
 
-Draws a framebuffer's texture as a tinted quad, which is how an offscreen subtree is composited back into the scene.
+Draws a framebuffer's contents as a tinted quad, which is how an offscreen subtree is composited back into the scene.
 
 ---
 
@@ -496,7 +440,7 @@ pushScissor(Rectf b)
 
 - `Rectf b`
 
-============================================================ ================ Scissor =================================== =========================================
+Clips subsequent drawing to a rectangle, intersected with the clip already in force. Draws pick the top of the stack up as their command's scissor.
 
 ---
 
@@ -546,7 +490,7 @@ setRotation(float degrees, Vec2f pivot)
 - `float degrees`
 - `Vec2f pivot`
 
-No flush: rotation is applied CPU-side when vertices are appended, so rects already queued in the batch keep the rotation they were emitted under.
+Rotates subsequent drawing about a pivot. Applied CPU-side as vertices are emitted, so geometry already in the arena keeps the rotation it was emitted under.
 
 ---
 
@@ -574,20 +518,6 @@ Drops any accumulated rotation.
 
 ---
 
-### setMouseState
-
-```cpp
-setMouseState(Vec2f mousePosFbPx)
-```
-
-**Parameters**
-
-- `Vec2f mousePosFbPx`
-
-Detect motion vs the previous frame so animated materials can fade the ripple amplitude when the cursor sits still. Threshold avoids sub-pixel noise from triggering constant "moving" state.
-
----
-
 ### clear
 
 ```cpp
@@ -598,54 +528,14 @@ clear(Color color)
 
 - `Color color`
 
-Clears the scene target to a colour, which begins a frame.
+Sets the colour the current target is cleared to at the start of the frame. The last call in a frame wins and is applied before any of the frame's draws, whenever it was made.
 
 ---
 
-### refreshClipCache
+### avgColor
 
 ```cpp
-refreshClipCache()
-```
-
-Walk the clip stack from the top down and collect the two top- most rounded entries (radius > 0). The first becomes the "inner" SDF (the shape being drawn, e.g. a button's own rounded body); the second becomes the "outer" SDF (the enclosing rounded ancestor, e.g. the parent panel). Both are applied in the fragment shader, so a child element stays its own shape AND gets cropped by the parent's rounded corners.
-
----
-
-### batchStateMatches
-
-```cpp
-batchStateMatches(uint16_t viewId)
-```
-
-**Parameters**
-
-- `uint16_t viewId`
-
-**Returns** — bool
-
-Whether a new shape can join the batch already being built. Batching is only valid while the view, clip and transform are unchanged, so this is what decides between appending and flushing first.
-
----
-
-### captureBatchState
-
-```cpp
-captureBatchState(uint16_t viewId)
-```
-
-**Parameters**
-
-- `uint16_t viewId`
-
-Records the view, clip and transform a batch was started under, so batchStateMatches has something to compare against.
-
----
-
-### packAvgColor
-
-```cpp
-packAvgColor(Color a, Color b, Color c, Color d)
+avgColor(Color a, Color b, Color c, Color d)
 ```
 
 **Parameters**
@@ -655,7 +545,7 @@ packAvgColor(Color a, Color b, Color c, Color d)
 - `Color c`
 - `Color d`
 
-**Returns** — inline uint32_t
+**Returns** — [Color](../utils/Color.hpp.md#color)
 
 Center-vertex color for gradient quads: the average of the four corners.
 
@@ -671,17 +561,7 @@ draw(const Rect& r)
 
 - `const Rect& r`
 
-Queues an axis-aligned rectangle, with an optional inside border and per-corner gradient, into the solid batch.
-
----
-
-### flushSolidBatch
-
-```cpp
-flushSolidBatch()
-```
-
-Submits the accumulated solid geometry as one draw call and empties the batch. Called whenever the state changes or a textured draw has to be ordered against it.
+Queues an axis-aligned rectangle, with an optional inside border and per-corner gradient, into the batch.
 
 ---
 
@@ -709,7 +589,7 @@ draw(const Circle& c)
 
 - `const Circle& c`
 
-Queues a circle, tessellated to a segment count that keeps the silhouette smooth at its drawn size.
+Queues a circle as a rounded rect with radius == half-size, so the fragment shader's SDF gives it sub-pixel antialiasing.
 
 ---
 
@@ -737,7 +617,7 @@ draw(const Line& l)
 
 - `const Line& l`
 
-Queues a single line as a quad expanded to its thickness.
+Queues a single line as a quad expanded to its thickness, with a one-pixel alpha skirt either side for antialiasing.
 
 ---
 

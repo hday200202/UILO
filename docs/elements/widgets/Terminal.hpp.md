@@ -36,7 +36,7 @@ Everything a [Terminal](#terminal) draws and how it starts its shell: the font a
 
 ### Terminal
 
-A terminal emulator: a real shell on a pseudo-terminal, its output parsed into a character grid and drawn, and keystrokes encoded back to it. Native only -- it needs a PTY and a process, neither of which the Wt backend has, so on the web it renders as an inert panel.
+A terminal emulator: a real shell on a pseudo-terminal, its output parsed into a character grid and drawn, and keystrokes encoded back to it. Needs a PTY, so it does not run on Windows yet.
 
 > The grid is sized from the font's own metrics and the element's bounds, so resizing the window reflows the shell: the new dimensions are pushed through to the PTY, which raises SIGWINCH and makes a running program redraw at the new size.
 

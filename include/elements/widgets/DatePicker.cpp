@@ -214,8 +214,7 @@ void DatePicker::showMonth(int year, unsigned month) {
     - Desc:     Rewrites each existing day cell to the day it now shows -- its
                 number, whether it belongs to the month, and the date its click
                 and hover handlers carry -- then refreshes the title and
-                recolours. No element is created or destroyed, so the Wt bridge
-                picks the changes up through its ordinary property sync.
+                recolours. No element is created or destroyed.
 */
 bool DatePicker::updateGridInPlace(int year, unsigned month) {
     const DatePickerOptions& o = m_dpOptions;

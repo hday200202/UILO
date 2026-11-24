@@ -32,7 +32,8 @@ Copyright (C) Google, Inc. Licensed under the Apache Licence, Version 2.0:
     http://www.apache.org/licenses/LICENSE-2.0
 
 The font's own name table carries the same statement. The copy embedded here
-came from `ext/bgfx/examples/runtime/font/droidsansmono.ttf`.
+came from `examples/runtime/font/droidsansmono.ttf` in the bgfx repository,
+which UILO used as its renderer before VALO.
 
 Unless required by applicable law or agreed to in writing, software distributed
 under the Apache Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES
@@ -52,14 +53,11 @@ subdirectory:
 
 | Component     | Licence      | Used for                          |
 |---------------|--------------|-----------------------------------|
-| bgfx / bimg / bx | BSD 2-Clause | rendering backend              |
-| SDL3          | Zlib         | windowing and input               |
+| VALO          | see `ext/VALO` | renderer (Vulkan / software) and window |
+| SDL3          | Zlib         | windowing and input, via VALO     |
 | stb_truetype  | MIT / public domain | glyph rasterisation        |
+| stb_image     | MIT / public domain | image decoding             |
 | NanoSVG       | Zlib         | SVG icon parsing                  |
-| Wt            | GPL / commercial | the optional web backend only |
-
-The Wt backend is opt-in (`-DUILO_WT=ON`) and is not part of a default build. If
-you enable it, its licence applies to what you ship.
 
 ### Private libdecor core on Linux
 

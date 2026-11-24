@@ -108,8 +108,7 @@ public:
 
     // Arrow ---------------------------------------------------------------
     // The marker at the right end of the header, the way a dropdown is
-    // normally drawn. Native only: on the web a Dropdown becomes a <select>,
-    // which the browser draws its own arrow on.
+    // normally drawn.
     DropdownOptions& setShowArrow(bool v)                { m_showArrow = v; return *this; }
     DropdownOptions& setArrowIcon(std::string_view n)    { m_arrowIcon = std::string(n); return *this; }
     // Shown while the popup is up, when set; otherwise the arrow does not
@@ -277,9 +276,6 @@ private:
     - The popup has to be floating rather than a child, because UILO only ticks,
       hit-tests and renders the floating layer above the page -- a popup left in
       the tree would be clipped by whatever container the dropdown sits in.
-    - On the web this becomes a native <select>, so the popup and the arrow are
-      never translated; getItems() exists so that backend can populate its own
-      control from the whole list rather than just the selection.
 */
 class Dropdown : public Element {
 public:

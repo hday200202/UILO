@@ -11,6 +11,8 @@
 ## Functions
 
 - [`isShortcutModifier(bool ctrl, bool gui)`](#isshortcutmodifier)
+- [`shortcutLetter(char32_t symbol)`](#shortcutletter)
+- [`steadyMillis()`](#steadymillis)
 
 ---
 
@@ -38,3 +40,31 @@ isShortcutModifier(bool ctrl, bool gui)
 **Returns** — bool
 
 Whether the modifier held is the one that means "this is an editing shortcut" -- copy, cut, paste, select-all. On macOS Command and Control are accepted interchangeably, since a Mac user reaches for Command and a user coming from anywhere else reaches for Control. Elsewhere only Control counts: Super is the window manager's key, not the application's.
+
+---
+
+### shortcutLetter
+
+```cpp
+shortcutLetter(char32_t symbol)
+```
+
+**Parameters**
+
+- `char32_t symbol -- the layout's character for a key`
+
+**Returns** — char32_t -- the lower-case letter, or 0 when it is not one
+
+The letter a shortcut key means. Shortcuts are matched on the layout's character rather than the physical key, so Ctrl+Z is the key labelled Z on AZERTY and Dvorak too -- and on the shifted form, so Ctrl+Shift+Z is still a Z.
+
+---
+
+### steadyMillis
+
+```cpp
+steadyMillis()
+```
+
+**Returns** — uint64_t
+
+A monotonic millisecond clock, for double-click windows and the like. Only differences between two readings mean anything.

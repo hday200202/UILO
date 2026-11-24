@@ -1,5 +1,12 @@
 # Building a UILO app for iOS
 
+> **Out of date.** This guide was written when UILO rendered through bgfx and
+> SDL directly. UILO now renders through VALO (Vulkan via MoltenVK on Apple
+> platforms, or VALO's software backend), so everything below about bgfx,
+> `shaderc`, shader profiles, `CAMetalLayer` and SDL calls in `Renderer.cpp` no
+> longer applies. The notes on `MacStubs.cpp`, the run loop and touch input are
+> still a reasonable starting point. Rewriting this is tracked in TODO.txt.
+
 ## Read this first
 
 **I have not built this.** This machine has only the Command Line Tools, no iOS
