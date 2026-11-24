@@ -7,7 +7,14 @@ else()
     project(UILO LANGUAGES C CXX)
 endif()
 
-set(CMAKE_CXX_STANDARD 26)
+# C++26. CMake has no C++26 flag for MSVC yet; its newest MSVC dialect is 23,
+# which it spells /std:c++latest -- MSVC's own newest mode, carrying whatever
+# C++26 it implements. Move MSVC to 26 once CMake learns a flag for it.
+if(MSVC)
+    set(CMAKE_CXX_STANDARD 23)
+else()
+    set(CMAKE_CXX_STANDARD 26)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

@@ -331,7 +331,12 @@ say "done -> bin/@NAME@"
 const char* kCMakeLists = R"CM(cmake_minimum_required(VERSION 3.25)
 project(@NAME@ LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 26)
+# C++26. CMake has no C++26 flag for MSVC yet; 23 there means /std:c++latest.
+if(MSVC)
+    set(CMAKE_CXX_STANDARD 23)
+else()
+    set(CMAKE_CXX_STANDARD 26)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # UILO is vendored under ext/ by build.sh, which also provisions UILO's own
