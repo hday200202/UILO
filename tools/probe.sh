@@ -55,7 +55,7 @@ PY
 # Link line: whatever an example links against.
 LIBS="$(grep -m1 'LINK_LIBRARIES = ' "$NINJA" | sed 's/.*LINK_LIBRARIES = //')"
 
-clang++ -std=c++20 -O1 $INCS "$SRC" $LIBS -o "$OUT/${NAME}_probe" || exit 1
+clang++ -std=c++26 -O1 $INCS "$SRC" $LIBS -o "$OUT/${NAME}_probe" || exit 1
 
 case "${2:-}" in
     --baseline)

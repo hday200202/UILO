@@ -81,7 +81,7 @@ def main() -> int:
                 continue
             src = os.path.join(scratch, f'block_{i}.cpp')
             open(src, 'w').write(wrap(code))
-            r = subprocess.run(['clang++', '-std=c++20', '-fsyntax-only', *incs, src],
+            r = subprocess.run(['clang++', '-std=c++26', '-fsyntax-only', *incs, src],
                                capture_output=True, text=True)
             if r.returncode == 0:
                 print(f'  line {line:4d}: OK')

@@ -9,7 +9,7 @@
       scrollable path, pinned children, resizers in both paths, percent and
       fixed mixes, every alignment bucket, and degenerate slots.
     - Not wired into CMake. Build it against the static lib, e.g.
-          clang++ -std=c++20 -I include -I include/elements \
+          clang++ -std=c++26 -I include -I include/elements \
               tools/layout_probe.cpp lib/libuilo.a <platform libs> -o layout_probe
       See TODO.txt, Phase 2, for how it is meant to be used.
 */

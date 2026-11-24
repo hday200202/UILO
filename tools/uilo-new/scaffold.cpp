@@ -328,10 +328,10 @@ say "done -> bin/@NAME@"
 [[ $DO_RUN -eq 1 ]] && exec ./bin/@NAME@
 )SH";
 
-const char* kCMakeLists = R"CM(cmake_minimum_required(VERSION 3.20)
+const char* kCMakeLists = R"CM(cmake_minimum_required(VERSION 3.25)
 project(@NAME@ LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # UILO is vendored under ext/ by build.sh, which also provisions UILO's own
@@ -351,7 +351,7 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src
 
 add_executable(@NAME@ ${APP_SOURCES})
 
-# uilo carries its own include directories, C++20 requirement and link
+# uilo carries its own include directories, C++26 requirement and link
 # libraries as PUBLIC usage requirements, so this one line is the whole of it.
 target_link_libraries(@NAME@ PRIVATE uilo)
 

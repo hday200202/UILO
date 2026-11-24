@@ -2,7 +2,7 @@
 
 # UILO
 
-A lightweight, modern C++20 UI library with fast, hardware-accelerated rendering powered by **VALO** (Vulkan, with a software fallback) and **SDL3**.
+A lightweight, modern C++26 UI library with fast, hardware-accelerated rendering powered by **VALO** (Vulkan, with a software fallback) and **SDL3**.
 
 ## Overview
 
@@ -33,7 +33,7 @@ Elements are created with lowercase factory functions and configured with two ob
 - **Windows:** Visual Studio 2022 build tools. Run `./build.sh` from Git Bash --
   it drives MSVC through CMake's Visual Studio generator, so there is no `.bat`
   or `.ps1` to run instead.
-- **All platforms:** CMake 3.20+, Python 3, and Git (dependencies are cloned)
+- **All platforms:** CMake 3.25+, Python 3, and Git (dependencies are cloned)
 
 ### Quick Start
 

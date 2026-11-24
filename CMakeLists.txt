@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.25)
 # Enable OBJCXX upfront so SDL3's subdirectory can use it on macOS (Ninja + OBJCXX
 # requires the language to be declared in the parent project, not deferred).
 if(APPLE)
@@ -7,7 +7,7 @@ else()
     project(UILO LANGUAGES C CXX)
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
