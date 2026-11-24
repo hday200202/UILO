@@ -47,7 +47,7 @@ UILO_CLEAN_EXT=1 ./build.sh # Force rebuild of dependencies
 
 The build script:
 
-- Clones VALO into `ext/VALO/`, which fetches SDL3, a few header-only libraries and the Vulkan SDK into `ext/VALO/ext/` (one-time)
+- Clones VALO into `ext/VALO/` and fetches/fast-forwards `main` on every build, including `deps`. Updates preserve local edits and stop on conflicts or unpublished commits. VALO fetches SDL3, a few header-only libraries and the Vulkan SDK into `ext/VALO/ext/` as needed.
 - Builds SDL3 once into `.sdl3build/`, cached across clean builds
 - Configures and builds UILO and VALO via CMake, compiling the UI shader to SPIR-V
 - Outputs binaries to `build/{Release,Debug}-{static,dynamic}/`

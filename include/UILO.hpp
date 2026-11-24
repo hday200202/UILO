@@ -118,6 +118,7 @@ public:
     // calendar escapes the container it belongs to.
     Element* addPopupBackdrop(Element* e);
     void     removePopupBackdrop(Element* e);
+    const std::vector<Element*>& getPopupBackdrops() const { return m_backdrops; }
 
     void setCurrInteractible(Interactible* i);
     Interactible* getCurrInteractible() const { return m_currInteractible; }

@@ -51,9 +51,9 @@ else
 fi
 
 # VALO tracks main: UILO and VALO are developed together, so UILO always
-# builds against the latest VALO. Set VALO_REF to build against another ref.
+# builds against the latest commit on main.
 VALO_REPO="https://github.com/hday200202/VALO.git"
-VALO_REF="${VALO_REF:-main}"
+VALO_REF="main"
 
 BUILD_DIR="build/${MODE}-${LINK_TAG}"
 if [[ $DO_CLEAN -eq 1 ]]; then
@@ -101,6 +101,30 @@ clone_if_missing() {
     exit 1
 }
 
+# Update without resetting local edits or silently discarding unpublished commits.
+update_valo() {
+    local dir="$EXT/VALO"
+    echo "[UILO] updating VALO main"
+    if [[ "$(git -C "$dir" rev-parse --is-shallow-repository)" == true ]]; then
+        git -C "$dir" fetch --unshallow origin
+    fi
+    git -C "$dir" fetch origin '+refs/heads/main:refs/remotes/origin/main'
+    if ! git -C "$dir" merge-base --is-ancestor HEAD origin/main; then
+        echo "[UILO] error: VALO has unpublished commits; preserve or merge them before updating ext/VALO" >&2
+        exit 1
+    fi
+    if git -C "$dir" show-ref --verify --quiet refs/heads/main; then
+        git -C "$dir" checkout main
+    else
+        git -C "$dir" checkout --track -b main origin/main
+    fi
+    git -C "$dir" merge --ff-only origin/main
+    if [[ "$(git -C "$dir" rev-parse HEAD)" != "$(git -C "$dir" rev-parse origin/main)" ]]; then
+        echo "[UILO] error: VALO main has unpublished commits; resolve ext/VALO before building" >&2
+        exit 1
+    fi
+}
+
 # VALO's examples/ holds over 500 MB of models and textures for its own demo
 # programs, none of which UILO builds.
 VALO_SPARSE=('/*' '!/examples/')
@@ -126,6 +150,7 @@ vs_generator() {
 # builds it from there. Without curl or network access the Vulkan SDK cannot be
 # fetched, and VALO then builds its software renderer only.
 clone_if_missing VALO "$VALO_REPO" "$VALO_REF" "${VALO_SPARSE[@]}"
+update_valo
 echo "[UILO] fetching VALO's dependencies"
 bash "$EXT/VALO/build.sh" deps
 
